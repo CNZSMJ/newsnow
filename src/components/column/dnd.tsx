@@ -14,6 +14,7 @@ import { useSortable } from "../common/dnd/useSortable"
 import { OverlayScrollbar } from "../common/overlay-scrollbar"
 import type { ItemsProps } from "./card"
 import { CardWrapper } from "./card"
+import { useAutoRefresh } from "~/hooks/useAutoRefresh"
 import { currentSourcesAtom } from "~/atoms"
 
 const AnimationDuration = 200
@@ -22,6 +23,7 @@ export function Dnd() {
   const [items, setItems] = useAtom(currentSourcesAtom)
   const [parent] = useAutoAnimate({ duration: AnimationDuration })
   useEntireQuery(items)
+  useAutoRefresh(items)
   const { width } = useWindowSize()
   const minWidth = useMemo(() => {
     // double padding = 32
@@ -142,7 +144,7 @@ function CardOverlay({ id }: { id: SourceID }) {
           <div
             className={$("w-8 h-8 rounded-full bg-cover")}
             style={{
-              backgroundImage: `url(/icons/${id.split("-")[0]}.png)`,
+              backgroundImage: `url(/icons/${id.split("-")[0]}.png), url(/icons/default.png)`,
             }}
           />
           <span className="flex flex-col">

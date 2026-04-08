@@ -57,7 +57,7 @@
     "column": "finance",
     "home": "https://mktnews.net",
     "color": "indigo",
-    "interval": 120000,
+    "interval": 60000,
     "title": "快讯"
   },
   "mktnews-flash": {
@@ -65,7 +65,7 @@
     "column": "finance",
     "home": "https://mktnews.net",
     "color": "indigo",
-    "interval": 120000,
+    "interval": 60000,
     "title": "快讯"
   },
   "wallstreetcn": {
@@ -75,7 +75,7 @@
     "column": "finance",
     "home": "https://wallstreetcn.com/",
     "color": "blue",
-    "interval": 300000,
+    "interval": 60000,
     "title": "快讯"
   },
   "wallstreetcn-quick": {
@@ -84,7 +84,7 @@
     "column": "finance",
     "home": "https://wallstreetcn.com/",
     "color": "blue",
-    "interval": 300000,
+    "interval": 60000,
     "title": "快讯"
   },
   "wallstreetcn-news": {
@@ -223,7 +223,7 @@
     "column": "finance",
     "home": "https://www.cls.cn",
     "color": "red",
-    "interval": 300000,
+    "interval": 60000,
     "title": "电报"
   },
   "cls-telegraph": {
@@ -232,7 +232,7 @@
     "column": "finance",
     "home": "https://www.cls.cn",
     "color": "red",
-    "interval": 300000,
+    "interval": 60000,
     "title": "电报"
   },
   "cls-depth": {
@@ -278,7 +278,7 @@
     "column": "finance",
     "home": "https://www.gelonghui.com",
     "color": "blue",
-    "interval": 120000
+    "interval": 60000
   },
   "fastbull": {
     "redirect": "fastbull-express",
@@ -287,7 +287,7 @@
     "column": "finance",
     "home": "https://www.fastbull.cn",
     "color": "emerald",
-    "interval": 120000,
+    "interval": 60000,
     "title": "快讯"
   },
   "fastbull-express": {
@@ -296,7 +296,7 @@
     "column": "finance",
     "home": "https://www.fastbull.cn",
     "color": "emerald",
-    "interval": 120000,
+    "interval": 60000,
     "title": "快讯"
   },
   "fastbull-news": {
@@ -306,6 +306,736 @@
     "color": "emerald",
     "interval": 1800000,
     "title": "头条"
+  },
+  "eastmoney": {
+    "redirect": "eastmoney-7x24",
+    "name": "东方财富",
+    "type": "realtime",
+    "column": "finance",
+    "home": "https://kuaixun.eastmoney.com/",
+    "color": "orange",
+    "interval": 60000,
+    "title": "7x24"
+  },
+  "eastmoney-7x24": {
+    "name": "东方财富",
+    "type": "realtime",
+    "column": "finance",
+    "home": "https://kuaixun.eastmoney.com/",
+    "color": "orange",
+    "interval": 60000,
+    "title": "7x24"
+  },
+  "sina": {
+    "redirect": "sina-7x24",
+    "name": "新浪财经",
+    "type": "realtime",
+    "column": "finance",
+    "home": "https://finance.sina.com.cn/7x24/",
+    "color": "red",
+    "interval": 60000,
+    "title": "7x24"
+  },
+  "sina-7x24": {
+    "name": "新浪财经",
+    "type": "realtime",
+    "column": "finance",
+    "home": "https://finance.sina.com.cn/7x24/",
+    "color": "red",
+    "interval": 60000,
+    "title": "7x24"
+  },
+  "pbc": {
+    "redirect": "pbc-news",
+    "name": "人民银行",
+    "column": "finance",
+    "home": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
+    "color": "amber",
+    "interval": 600000,
+    "title": "新闻发布"
+  },
+  "pbc-news": {
+    "name": "人民银行",
+    "column": "finance",
+    "home": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
+    "color": "amber",
+    "interval": 600000,
+    "title": "新闻发布"
+  },
+  "safe": {
+    "redirect": "safe-latest",
+    "name": "外汇局",
+    "column": "finance",
+    "home": "https://www.safe.gov.cn/",
+    "color": "cyan",
+    "interval": 600000,
+    "title": "外汇动态"
+  },
+  "safe-latest": {
+    "name": "外汇局",
+    "column": "finance",
+    "home": "https://www.safe.gov.cn/",
+    "color": "cyan",
+    "interval": 600000,
+    "title": "外汇动态"
+  },
+  "csrc": {
+    "redirect": "csrc-policy",
+    "name": "证监会",
+    "column": "finance",
+    "home": "https://www.csrc.gov.cn",
+    "color": "amber",
+    "interval": 600000,
+    "title": "政策解读"
+  },
+  "csrc-policy": {
+    "name": "证监会",
+    "column": "finance",
+    "home": "https://www.csrc.gov.cn",
+    "color": "amber",
+    "interval": 600000,
+    "title": "政策解读"
+  },
+  "csrc-press": {
+    "name": "证监会",
+    "column": "finance",
+    "home": "https://www.csrc.gov.cn",
+    "color": "amber",
+    "interval": 600000,
+    "title": "新闻发布会"
+  },
+  "hkexnews": {
+    "redirect": "hkexnews-latest",
+    "name": "披露易",
+    "column": "finance",
+    "home": "https://www.hkexnews.hk",
+    "color": "red",
+    "interval": 300000,
+    "title": "最新公告"
+  },
+  "hkexnews-latest": {
+    "name": "披露易",
+    "column": "finance",
+    "home": "https://www.hkexnews.hk",
+    "color": "red",
+    "interval": 300000,
+    "title": "最新公告"
+  },
+  "hkexnews-results": {
+    "name": "披露易",
+    "column": "finance",
+    "home": "https://www.hkexnews.hk",
+    "color": "red",
+    "interval": 300000,
+    "title": "业绩公告"
+  },
+  "hkexnews-halt": {
+    "name": "披露易",
+    "column": "finance",
+    "home": "https://www.hkexnews.hk",
+    "color": "red",
+    "interval": 60000,
+    "title": "停复牌"
+  },
+  "sse": {
+    "redirect": "sse-latest",
+    "name": "上交所",
+    "column": "finance",
+    "home": "https://www.sse.com.cn",
+    "color": "blue",
+    "interval": 300000,
+    "title": "最新公告"
+  },
+  "sse-latest": {
+    "name": "上交所",
+    "column": "finance",
+    "home": "https://www.sse.com.cn",
+    "color": "blue",
+    "interval": 300000,
+    "title": "最新公告"
+  },
+  "szse": {
+    "redirect": "szse-news",
+    "name": "深交所",
+    "column": "finance",
+    "home": "https://www.szse.cn/index/index.html",
+    "color": "sky",
+    "interval": 600000,
+    "title": "交易所要闻"
+  },
+  "szse-news": {
+    "name": "深交所",
+    "column": "finance",
+    "home": "https://www.szse.cn/index/index.html",
+    "color": "sky",
+    "interval": 600000,
+    "title": "交易所要闻"
+  },
+  "cninfo": {
+    "redirect": "cninfo-szse",
+    "name": "巨潮资讯",
+    "column": "finance",
+    "home": "https://www.cninfo.com.cn",
+    "color": "indigo",
+    "interval": 300000,
+    "title": "深市公告"
+  },
+  "cninfo-szse": {
+    "name": "巨潮资讯",
+    "column": "finance",
+    "home": "https://www.cninfo.com.cn",
+    "color": "indigo",
+    "interval": 300000,
+    "title": "深市公告"
+  },
+  "cninfo-sse": {
+    "name": "巨潮资讯",
+    "column": "finance",
+    "home": "https://www.cninfo.com.cn",
+    "color": "indigo",
+    "interval": 300000,
+    "title": "沪市公告"
+  },
+  "cninfo-hk-main": {
+    "name": "巨潮资讯",
+    "column": "finance",
+    "home": "https://www.cninfo.com.cn",
+    "color": "indigo",
+    "interval": 300000,
+    "title": "港主板公告"
+  },
+  "cninfo-hk-gem": {
+    "name": "巨潮资讯",
+    "column": "finance",
+    "home": "https://www.cninfo.com.cn",
+    "color": "indigo",
+    "interval": 300000,
+    "title": "港创业板公告"
+  },
+  "cninfo-hk-disclosure": {
+    "name": "巨潮资讯",
+    "column": "finance",
+    "home": "https://www.cninfo.com.cn",
+    "color": "indigo",
+    "interval": 300000,
+    "title": "港股股本变动"
+  },
+  "miit": {
+    "redirect": "miit-industry",
+    "name": "工信部",
+    "column": "industry",
+    "home": "https://www.miit.gov.cn/xwdt/gxdt/sjdt/index.html",
+    "tags": [
+      "semiconductor",
+      "photovoltaic",
+      "new-energy-vehicle",
+      "ai-computing",
+      "steel",
+      "non-ferrous",
+      "chemical"
+    ],
+    "color": "sky",
+    "interval": 600000,
+    "title": "司局动态"
+  },
+  "miit-industry": {
+    "name": "工信部",
+    "column": "industry",
+    "home": "https://www.miit.gov.cn/xwdt/gxdt/sjdt/index.html",
+    "tags": [
+      "semiconductor",
+      "photovoltaic",
+      "new-energy-vehicle",
+      "ai-computing",
+      "steel",
+      "non-ferrous",
+      "chemical"
+    ],
+    "color": "sky",
+    "interval": 600000,
+    "title": "司局动态"
+  },
+  "ndrc": {
+    "redirect": "ndrc-industry",
+    "name": "发改委",
+    "column": "industry",
+    "home": "https://www.ndrc.gov.cn/xwdt/dt/sjdt/",
+    "tags": [
+      "semiconductor",
+      "photovoltaic",
+      "new-energy-vehicle",
+      "medicine",
+      "ai-computing",
+      "steel",
+      "non-ferrous",
+      "chemical"
+    ],
+    "color": "emerald",
+    "interval": 600000,
+    "title": "司局动态"
+  },
+  "ndrc-industry": {
+    "name": "发改委",
+    "column": "industry",
+    "home": "https://www.ndrc.gov.cn/xwdt/dt/sjdt/",
+    "tags": [
+      "semiconductor",
+      "photovoltaic",
+      "new-energy-vehicle",
+      "medicine",
+      "ai-computing",
+      "steel",
+      "non-ferrous",
+      "chemical"
+    ],
+    "color": "emerald",
+    "interval": 600000,
+    "title": "司局动态"
+  },
+  "stats": {
+    "redirect": "stats-industry",
+    "name": "统计局",
+    "column": "industry",
+    "home": "https://www.stats.gov.cn/sj/zxfb/",
+    "tags": [
+      "semiconductor",
+      "photovoltaic",
+      "new-energy-vehicle",
+      "medicine",
+      "ai-computing",
+      "steel",
+      "non-ferrous",
+      "chemical"
+    ],
+    "color": "teal",
+    "interval": 1800000,
+    "title": "数据发布"
+  },
+  "stats-industry": {
+    "name": "统计局",
+    "column": "industry",
+    "home": "https://www.stats.gov.cn/sj/zxfb/",
+    "tags": [
+      "semiconductor",
+      "photovoltaic",
+      "new-energy-vehicle",
+      "medicine",
+      "ai-computing",
+      "steel",
+      "non-ferrous",
+      "chemical"
+    ],
+    "color": "teal",
+    "interval": 1800000,
+    "title": "数据发布"
+  },
+  "nea": {
+    "redirect": "nea-release",
+    "name": "国家能源局",
+    "column": "industry",
+    "home": "https://www.nea.gov.cn/",
+    "tags": [
+      "photovoltaic",
+      "new-energy-vehicle"
+    ],
+    "color": "amber",
+    "interval": 600000,
+    "title": "新闻发布"
+  },
+  "nea-release": {
+    "name": "国家能源局",
+    "column": "industry",
+    "home": "https://www.nea.gov.cn/",
+    "tags": [
+      "photovoltaic",
+      "new-energy-vehicle"
+    ],
+    "color": "amber",
+    "interval": 600000,
+    "title": "新闻发布"
+  },
+  "nhsa": {
+    "redirect": "nhsa-dynamic",
+    "name": "国家医保局",
+    "column": "industry",
+    "home": "https://www.nhsa.gov.cn/col/col14/index.html",
+    "tags": [
+      "medicine"
+    ],
+    "color": "cyan",
+    "interval": 600000,
+    "title": "医保动态"
+  },
+  "nhsa-dynamic": {
+    "name": "国家医保局",
+    "column": "industry",
+    "home": "https://www.nhsa.gov.cn/col/col14/index.html",
+    "tags": [
+      "medicine"
+    ],
+    "color": "cyan",
+    "interval": 600000,
+    "title": "医保动态"
+  },
+  "chinaisa": {
+    "redirect": "chinaisa-stats",
+    "name": "钢铁工业协会",
+    "column": "industry",
+    "home": "https://www.chinaisa.org.cn/gxportal/xfgl/portal/index.html",
+    "tags": [
+      "steel"
+    ],
+    "color": "gray",
+    "interval": 1800000,
+    "title": "统计发布"
+  },
+  "chinaisa-stats": {
+    "name": "钢铁工业协会",
+    "column": "industry",
+    "home": "https://www.chinaisa.org.cn/gxportal/xfgl/portal/index.html",
+    "tags": [
+      "steel"
+    ],
+    "color": "gray",
+    "interval": 1800000,
+    "title": "统计发布"
+  },
+  "chinaisa-analysis": {
+    "name": "钢铁工业协会",
+    "column": "industry",
+    "home": "https://www.chinaisa.org.cn/gxportal/xfgl/portal/index.html",
+    "tags": [
+      "steel"
+    ],
+    "color": "gray",
+    "interval": 1800000,
+    "title": "行业分析"
+  },
+  "chinapv": {
+    "redirect": "chinapv-policy",
+    "name": "光伏行业协会",
+    "column": "industry",
+    "home": "https://www.chinapv.org.cn/StaticPage/association_list28_1.html",
+    "tags": [
+      "photovoltaic"
+    ],
+    "color": "lime",
+    "interval": 1800000,
+    "title": "政策法规"
+  },
+  "chinapv-policy": {
+    "name": "光伏行业协会",
+    "column": "industry",
+    "home": "https://www.chinapv.org.cn/StaticPage/association_list28_1.html",
+    "tags": [
+      "photovoltaic"
+    ],
+    "color": "lime",
+    "interval": 1800000,
+    "title": "政策法规"
+  },
+  "chinania": {
+    "redirect": "chinania-stats",
+    "name": "有色工业网",
+    "column": "industry",
+    "home": "https://www.chinania.org.cn/",
+    "tags": [
+      "non-ferrous"
+    ],
+    "color": "orange",
+    "interval": 1800000,
+    "title": "行业统计"
+  },
+  "chinania-stats": {
+    "name": "有色工业网",
+    "column": "industry",
+    "home": "https://www.chinania.org.cn/",
+    "tags": [
+      "non-ferrous"
+    ],
+    "color": "orange",
+    "interval": 1800000,
+    "title": "行业统计"
+  },
+  "chinania-policy": {
+    "name": "有色工业网",
+    "column": "industry",
+    "home": "https://www.chinania.org.cn/",
+    "tags": [
+      "non-ferrous"
+    ],
+    "color": "orange",
+    "interval": 1800000,
+    "title": "政策法规"
+  },
+  "chinania-news": {
+    "name": "有色工业网",
+    "column": "industry",
+    "home": "https://www.chinania.org.cn/",
+    "tags": [
+      "non-ferrous"
+    ],
+    "color": "orange",
+    "interval": 1800000,
+    "title": "行业新闻"
+  },
+  "semi": {
+    "redirect": "semi-semiconductor",
+    "name": "SEMI",
+    "column": "industry",
+    "home": "https://www.semi.org.cn/",
+    "tags": [
+      "semiconductor"
+    ],
+    "color": "blue",
+    "interval": 1800000,
+    "title": "半导体"
+  },
+  "semi-semiconductor": {
+    "name": "SEMI",
+    "column": "industry",
+    "home": "https://www.semi.org.cn/",
+    "tags": [
+      "semiconductor"
+    ],
+    "color": "blue",
+    "interval": 1800000,
+    "title": "半导体"
+  },
+  "semi-data": {
+    "name": "SEMI",
+    "column": "industry",
+    "home": "https://www.semi.org.cn/",
+    "tags": [
+      "semiconductor",
+      "ai-computing"
+    ],
+    "color": "blue",
+    "interval": 1800000,
+    "title": "SEMI数据"
+  },
+  "cnchemicals": {
+    "redirect": "cnchemicals-industry",
+    "name": "CCM",
+    "column": "industry",
+    "home": "https://www.cnchemicals.com/news",
+    "tags": [
+      "chemical"
+    ],
+    "color": "emerald",
+    "interval": 1800000,
+    "title": "化工资讯"
+  },
+  "cnchemicals-industry": {
+    "name": "CCM",
+    "column": "industry",
+    "home": "https://www.cnchemicals.com/news",
+    "tags": [
+      "chemical"
+    ],
+    "color": "emerald",
+    "interval": 1800000,
+    "title": "化工资讯"
+  },
+  "caam": {
+    "redirect": "caam-nev-stats",
+    "name": "中汽协",
+    "column": "industry",
+    "home": "http://www.caam.org.cn/tjsj",
+    "tags": [
+      "new-energy-vehicle"
+    ],
+    "color": "red",
+    "interval": 1800000,
+    "title": "新能源汽车统计"
+  },
+  "caam-nev-stats": {
+    "name": "中汽协",
+    "column": "industry",
+    "home": "http://www.caam.org.cn/tjsj",
+    "tags": [
+      "new-energy-vehicle"
+    ],
+    "color": "red",
+    "interval": 1800000,
+    "title": "新能源汽车统计"
+  },
+  "caam-nev-policy": {
+    "name": "中汽协",
+    "column": "industry",
+    "home": "http://www.caam.org.cn/tjsj",
+    "tags": [
+      "new-energy-vehicle"
+    ],
+    "color": "red",
+    "interval": 1800000,
+    "title": "新能源汽车政策"
+  },
+  "caam-nev-news": {
+    "name": "中汽协",
+    "column": "industry",
+    "home": "http://www.caam.org.cn/tjsj",
+    "tags": [
+      "new-energy-vehicle"
+    ],
+    "color": "red",
+    "interval": 600000,
+    "title": "新能源汽车行业新闻"
+  },
+  "cde": {
+    "redirect": "cde-news",
+    "name": "药审中心",
+    "column": "industry",
+    "home": "https://www.cde.org.cn",
+    "tags": [
+      "medicine"
+    ],
+    "color": "rose",
+    "interval": 600000,
+    "title": "滚动新闻"
+  },
+  "cde-news": {
+    "name": "药审中心",
+    "column": "industry",
+    "home": "https://www.cde.org.cn",
+    "tags": [
+      "medicine"
+    ],
+    "color": "rose",
+    "interval": 600000,
+    "title": "滚动新闻"
+  },
+  "cde-policy": {
+    "name": "药审中心",
+    "column": "industry",
+    "home": "https://www.cde.org.cn",
+    "tags": [
+      "medicine"
+    ],
+    "color": "rose",
+    "interval": 1800000,
+    "title": "法律法规"
+  },
+  "cde-rules": {
+    "name": "药审中心",
+    "column": "industry",
+    "home": "https://www.cde.org.cn",
+    "tags": [
+      "medicine"
+    ],
+    "color": "rose",
+    "interval": 1800000,
+    "title": "中心制度"
+  },
+  "caict": {
+    "redirect": "caict-ai-news",
+    "name": "信通院",
+    "column": "industry",
+    "home": "https://gma.caict.ac.cn/plat/news",
+    "tags": [
+      "ai-computing"
+    ],
+    "color": "blue",
+    "interval": 1800000,
+    "title": "算力/AI资讯"
+  },
+  "caict-ai-news": {
+    "name": "信通院",
+    "column": "industry",
+    "home": "https://gma.caict.ac.cn/plat/news",
+    "tags": [
+      "ai-computing"
+    ],
+    "color": "blue",
+    "interval": 1800000,
+    "title": "算力/AI资讯"
+  },
+  "caict-ai-reports": {
+    "name": "信通院",
+    "column": "industry",
+    "home": "https://gma.caict.ac.cn/plat/news",
+    "tags": [
+      "ai-computing"
+    ],
+    "color": "blue",
+    "interval": 1800000,
+    "title": "算力/AI报告"
+  },
+  "gov": {
+    "redirect": "gov-latest",
+    "name": "中国政府网",
+    "column": "industry",
+    "home": "https://www.gov.cn/yaowen/liebiao/",
+    "color": "red",
+    "interval": 1800000,
+    "title": "国务院要闻"
+  },
+  "gov-latest": {
+    "name": "中国政府网",
+    "column": "industry",
+    "home": "https://www.gov.cn/yaowen/liebiao/",
+    "color": "red",
+    "interval": 1800000,
+    "title": "国务院要闻"
+  },
+  "sasac": {
+    "redirect": "sasac-latest",
+    "name": "国资委",
+    "column": "industry",
+    "home": "http://www.sasac.gov.cn/n2588025/n2588119/index.html",
+    "color": "slate",
+    "interval": 600000,
+    "title": "国资动态"
+  },
+  "sasac-latest": {
+    "name": "国资委",
+    "column": "industry",
+    "home": "http://www.sasac.gov.cn/n2588025/n2588119/index.html",
+    "color": "slate",
+    "interval": 600000,
+    "title": "国资动态"
+  },
+  "mof": {
+    "redirect": "mof-news",
+    "name": "财政部",
+    "column": "industry",
+    "home": "https://www.mof.gov.cn/zhengwuxinxi/caizhengxinwen/",
+    "color": "emerald",
+    "interval": 1800000,
+    "title": "财政新闻"
+  },
+  "mof-news": {
+    "name": "财政部",
+    "column": "industry",
+    "home": "https://www.mof.gov.cn/zhengwuxinxi/caizhengxinwen/",
+    "color": "emerald",
+    "interval": 1800000,
+    "title": "财政新闻"
+  },
+  "mofcom": {
+    "redirect": "mofcom-release",
+    "name": "商务部",
+    "column": "industry",
+    "home": "https://www.mofcom.gov.cn/",
+    "color": "blue",
+    "interval": 600000,
+    "title": "日常新闻发布"
+  },
+  "mofcom-release": {
+    "name": "商务部",
+    "column": "industry",
+    "home": "https://www.mofcom.gov.cn/",
+    "color": "blue",
+    "interval": 600000,
+    "title": "日常新闻发布"
+  },
+  "mofcom-spokesperson": {
+    "name": "商务部",
+    "column": "industry",
+    "home": "https://www.mofcom.gov.cn/",
+    "color": "blue",
+    "interval": 600000,
+    "title": "发言人谈话"
   },
   "solidot": {
     "name": "Solidot",
@@ -411,7 +1141,7 @@
     "column": "finance",
     "home": "https://www.jin10.com",
     "color": "blue",
-    "interval": 600000
+    "interval": 60000
   },
   "baidu": {
     "name": "百度热搜",

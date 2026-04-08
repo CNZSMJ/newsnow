@@ -3,8 +3,11 @@ import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion, useInView } from "framer-motion"
 import { useWindowSize } from "react-use"
 import { forwardRef, useImperativeHandle } from "react"
+import { industries } from "@shared/industry"
 import { OverlayScrollbar } from "../common/overlay-scrollbar"
+import { ultraFastSourceIds } from "@shared/realtime"
 import { safeParseString } from "~/utils"
+import { autoRefreshSources } from "~/utils/data"
 
 export interface ItemsProps extends React.HTMLAttributes<HTMLDivElement> {
   id: SourceID
@@ -52,17 +55,22 @@ export const CardWrapper = forwardRef<HTMLElement, ItemsProps>(({ id, isDragging
 
 function NewsCard({ id, setHandleRef }: NewsCardProps) {
   const { refresh } = useRefetch()
+  const isUltraFast = ultraFastSourceIds.includes(id)
+  const sourceTags = (sources[id].tags ?? []).map(tag => industries[tag])
   const { data, isFetching, isError } = useQuery({
     queryKey: ["source", id],
     queryFn: async ({ queryKey }) => {
       const id = queryKey[1] as SourceID
       let url = `/s?id=${id}`
       const headers: Record<string, any> = {}
+      const autoRefresh = autoRefreshSources.has(id)
       if (refetchSources.has(id)) {
         url = `/s?id=${id}&latest`
         const jwt = safeParseString(localStorage.getItem("jwt"))
         if (jwt) headers.Authorization = `Bearer ${jwt}`
         refetchSources.delete(id)
+      } else if (autoRefresh) {
+        autoRefreshSources.delete(id)
       } else if (cacheSources.has(id)) {
         // wait animation
         await delay(200)
@@ -114,7 +122,7 @@ function NewsCard({ id, setHandleRef }: NewsCardProps) {
             href={sources[id].home}
             title={sources[id].desc}
             style={{
-              backgroundImage: `url(/icons/${id.split("-")[0]}.png)`,
+              backgroundImage: `url(/icons/${id.split("-")[0]}.png), url(/icons/default.png)`,
             }}
           />
           <span className="flex flex-col">
@@ -125,9 +133,26 @@ function NewsCard({ id, setHandleRef }: NewsCardProps) {
               >
                 {sources[id].name}
               </span>
+              {isUltraFast && (
+                <span className={$("text-xs font-mono px-1.5 py-0.5 rounded bg-base bg-op-70!", `color-${sources[id].color}`)}>
+                  1m
+                </span>
+              )}
               {sources[id]?.title && <span className={$("text-sm", `color-${sources[id].color} bg-base op-80 bg-op-50! px-1 rounded`)}>{sources[id].title}</span>}
             </span>
             <span className="text-xs op-70"><UpdatedTime isError={isError} updatedTime={data?.updatedTime} /></span>
+            {!!sourceTags.length && (
+              <span className="flex items-center gap-1 mt-1 flex-wrap">
+                {sourceTags.slice(0, 4).map(tag => (
+                  <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-base bg-op-55! op-80">
+                    {tag}
+                  </span>
+                ))}
+                {sourceTags.length > 4 && (
+                  <span className="text-[10px] op-60">+{sourceTags.length - 4}</span>
+                )}
+              </span>
+            )}
           </span>
         </div>
         <div className={$("flex gap-2 text-lg", `color-${sources[id].color}`)}>

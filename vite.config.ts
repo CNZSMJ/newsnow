@@ -27,6 +27,9 @@ export default defineConfig({
     }),
     unimport.vite({
       dirs: ["src/hooks", "shared", "src/utils", "src/atoms"],
+      dirsScanOptions: {
+        fileFilter: file => !file.endsWith("/shared/dir.ts") && !file.endsWith("\\shared\\dir.ts"),
+      },
       presets: ["react", {
         from: "jotai",
         imports: ["atom", "useAtom", "useAtomValue", "useSetAtom"],

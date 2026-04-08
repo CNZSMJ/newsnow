@@ -104,7 +104,8 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "dayjs": "patches/dayjs.patch"
+      "dayjs": "patches/dayjs.patch",
+      "vite-plugin-with-nitro@0.0.3": "patches/vite-plugin-with-nitro@0.0.3.patch"
     },
     "onlyBuiltDependencies": [
       "@napi-rs/pinyin",

@@ -1,4 +1,5 @@
 import { sources } from "./sources"
+import { getIndustryGroupRank, getIndustryGroupLabel } from "./industry"
 import { typeSafeObjectEntries, typeSafeObjectFromEntries } from "./type.util"
 import type { ColumnID, HiddenColumnID, Metadata, SourceID } from "./types"
 
@@ -11,6 +12,9 @@ export const columns = {
   },
   tech: {
     zh: "科技",
+  },
+  industry: {
+    zh: "产业",
   },
   finance: {
     zh: "财经",
@@ -26,7 +30,7 @@ export const columns = {
   },
 } as const
 
-export const fixedColumnIds = ["focus", "hottest", "realtime"] as const satisfies Partial<ColumnID>[]
+export const fixedColumnIds = ["focus", "industry", "hottest", "realtime"] as const satisfies Partial<ColumnID>[]
 export const hiddenColumns = Object.keys(columns).filter(id => !fixedColumnIds.includes(id as any)) as HiddenColumnID[]
 
 export const metadata: Metadata = typeSafeObjectFromEntries(typeSafeObjectEntries(columns).map(([k, v]) => {
@@ -49,7 +53,22 @@ export const metadata: Metadata = typeSafeObjectFromEntries(typeSafeObjectEntrie
     default:
       return [k, {
         name: v.zh,
-        sources: typeSafeObjectEntries(sources).filter(([, v]) => v.column === k && !v.redirect).map(([k]) => k),
+        sources: typeSafeObjectEntries(sources)
+          .filter(([, v]) => v.column === k && !v.redirect)
+          .sort(([, a], [, b]) => {
+            if (k !== "industry") return 0
+            const rankA = getIndustryGroupRank(a.tags)
+            const rankB = getIndustryGroupRank(b.tags)
+            if (rankA !== rankB) return rankA - rankB
+            const groupA = getIndustryGroupLabel(a.tags)
+            const groupB = getIndustryGroupLabel(b.tags)
+            if (groupA !== groupB) return groupA < groupB ? -1 : 1
+            const titleA = a.title ?? a.name
+            const titleB = b.title ?? b.name
+            if (titleA !== titleB) return titleA < titleB ? -1 : 1
+            return a.name < b.name ? -1 : 1
+          })
+          .map(([k]) => k),
       }]
   }
 }))

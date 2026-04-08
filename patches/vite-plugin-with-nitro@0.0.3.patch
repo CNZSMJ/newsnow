@@ -1,0 +1,37 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -107,7 +107,8 @@ function nitro(nitroOptions) {
+       const nitro2 = await nitropack.createNitro(devConfig);
+       const server = nitropack.createDevServer(nitro2);
+       await nitropack.build(nitro2);
+-      viteServer.middlewares.use(apiPrefix, h3.toNodeListener(server.app));
++      const projectH3 = require(require.resolve("h3", { paths: [workspaceRoot] }));
++      viteServer.middlewares.use(apiPrefix, projectH3.toNodeListener(server.app));
+       viteServer.httpServer?.once("listening", () => {
+         const { host, port } = viteServer.config.server;
+         process__default.env.NITRO_HOST = host ? String(host) : "localhost";
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,9 +1,9 @@
+ import { resolve, dirname, relative, join } from 'node:path';
+ import { platform } from 'node:os';
++import { createRequire } from 'node:module';
+ import process from 'node:process';
+ import { fileURLToPath } from 'node:url';
+ import { createNitro, createDevServer, build, prepare, copyPublicAssets, prerender } from 'nitropack';
+-import { toNodeListener } from 'h3';
+ import { normalizePath } from 'vite';
+ import defu from 'defu';
+ import { createConsola } from 'consola';
+@@ -99,7 +99,8 @@ function nitro(nitroOptions) {
+       const nitro2 = await createNitro(devConfig);
+       const server = createDevServer(nitro2);
+       await build(nitro2);
+-      viteServer.middlewares.use(apiPrefix, toNodeListener(server.app));
++      const projectRequire = createRequire(resolve(workspaceRoot, "package.json"));
++      viteServer.middlewares.use(apiPrefix, projectRequire("h3").toNodeListener(server.app));
+       viteServer.httpServer?.once("listening", () => {
+         const { host, port } = viteServer.config.server;
+         process.env.NITRO_HOST = host ? String(host) : "localhost";

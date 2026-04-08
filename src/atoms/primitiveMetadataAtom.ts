@@ -35,6 +35,7 @@ function createPrimitiveMetadataAtom(
 const initialMetadata = typeSafeObjectFromEntries(typeSafeObjectEntries(metadata)
   .filter(([id]) => fixedColumnIds.includes(id as any))
   .map(([id, val]) => [id, val.sources] as [FixedColumnID, SourceID[]]))
+
 export function preprocessMetadata(target: PrimitiveMetadata) {
   return {
     data: {

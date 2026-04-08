@@ -1,10 +1,12 @@
 import process from "node:process"
 import { Interval } from "./consts"
+import { allIndustryTags } from "./industry"
 import { typeSafeObjectFromEntries } from "./type.util"
 import type { OriginSource, Source, SourceID } from "./types"
 
 const Time = {
   Test: 1,
+  UltraFast: 60 * 1000,
   Realtime: 2 * 60 * 1000,
   Fast: 5 * 60 * 1000,
   Default: Interval, // 10min
@@ -62,7 +64,7 @@ export const originSources = {
     column: "finance",
     home: "https://mktnews.net",
     color: "indigo",
-    interval: Time.Realtime,
+    interval: Time.UltraFast,
     sub: {
       flash: {
         title: "快讯",
@@ -77,7 +79,7 @@ export const originSources = {
     sub: {
       quick: {
         type: "realtime",
-        interval: Time.Fast,
+        interval: Time.UltraFast,
         title: "快讯",
       },
       news: {
@@ -193,7 +195,7 @@ export const originSources = {
     sub: {
       telegraph: {
         title: "电报",
-        interval: Time.Fast,
+        interval: Time.UltraFast,
         type: "realtime",
       },
       depth: {
@@ -224,7 +226,7 @@ export const originSources = {
     title: "事件",
     column: "finance",
     type: "realtime",
-    interval: Time.Realtime,
+    interval: Time.UltraFast,
     home: "https://www.gelonghui.com",
   },
   "fastbull": {
@@ -236,11 +238,432 @@ export const originSources = {
       express: {
         title: "快讯",
         type: "realtime",
-        interval: Time.Realtime,
+        interval: Time.UltraFast,
       },
       news: {
         title: "头条",
         interval: Time.Common,
+      },
+    },
+  },
+  "eastmoney": {
+    name: "东方财富",
+    color: "orange",
+    column: "finance",
+    home: "https://kuaixun.eastmoney.com/",
+    sub: {
+      "7x24": {
+        title: "7x24",
+        type: "realtime",
+        interval: Time.UltraFast,
+      },
+    },
+  },
+  "sina": {
+    name: "新浪财经",
+    color: "red",
+    column: "finance",
+    home: "https://finance.sina.com.cn/7x24/",
+    sub: {
+      "7x24": {
+        title: "7x24",
+        type: "realtime",
+        interval: Time.UltraFast,
+      },
+    },
+  },
+  "pbc": {
+    name: "人民银行",
+    color: "amber",
+    column: "finance",
+    home: "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
+    sub: {
+      news: {
+        title: "新闻发布",
+        interval: Time.Default,
+      },
+    },
+  },
+  "safe": {
+    name: "外汇局",
+    color: "cyan",
+    column: "finance",
+    home: "https://www.safe.gov.cn/",
+    sub: {
+      latest: {
+        title: "外汇动态",
+        interval: Time.Default,
+      },
+    },
+  },
+  "csrc": {
+    name: "证监会",
+    color: "amber",
+    column: "finance",
+    home: "https://www.csrc.gov.cn",
+    sub: {
+      policy: {
+        title: "政策解读",
+        interval: Time.Default,
+      },
+      press: {
+        title: "新闻发布会",
+        interval: Time.Default,
+      },
+    },
+  },
+  "hkexnews": {
+    name: "披露易",
+    color: "red",
+    column: "finance",
+    home: "https://www.hkexnews.hk",
+    sub: {
+      latest: {
+        title: "最新公告",
+        interval: Time.Fast,
+      },
+      results: {
+        title: "业绩公告",
+        interval: Time.Fast,
+      },
+      halt: {
+        title: "停复牌",
+        interval: Time.UltraFast,
+      },
+    },
+  },
+  "sse": {
+    name: "上交所",
+    color: "blue",
+    column: "finance",
+    home: "https://www.sse.com.cn",
+    sub: {
+      latest: {
+        title: "最新公告",
+        interval: Time.Fast,
+      },
+    },
+  },
+  "szse": {
+    name: "深交所",
+    color: "sky",
+    column: "finance",
+    home: "https://www.szse.cn/index/index.html",
+    sub: {
+      news: {
+        title: "交易所要闻",
+        interval: Time.Default,
+      },
+    },
+  },
+  "cninfo": {
+    name: "巨潮资讯",
+    color: "indigo",
+    column: "finance",
+    home: "https://www.cninfo.com.cn",
+    sub: {
+      szse: {
+        title: "深市公告",
+        interval: Time.Fast,
+      },
+      sse: {
+        title: "沪市公告",
+        interval: Time.Fast,
+      },
+      "hk-main": {
+        title: "港主板公告",
+        interval: Time.Fast,
+      },
+      "hk-gem": {
+        title: "港创业板公告",
+        interval: Time.Fast,
+      },
+      "hk-disclosure": {
+        title: "港股股本变动",
+        interval: Time.Fast,
+      },
+    },
+  },
+  "miit": {
+    name: "工信部",
+    color: "sky",
+    column: "industry",
+    home: "https://www.miit.gov.cn/xwdt/gxdt/sjdt/index.html",
+    sub: {
+      industry: {
+        title: "司局动态",
+        interval: Time.Default,
+        tags: [
+          "semiconductor",
+          "photovoltaic",
+          "new-energy-vehicle",
+          "ai-computing",
+          "steel",
+          "non-ferrous",
+          "chemical",
+        ],
+      },
+    },
+  },
+  "ndrc": {
+    name: "发改委",
+    color: "emerald",
+    column: "industry",
+    home: "https://www.ndrc.gov.cn/xwdt/dt/sjdt/",
+    sub: {
+      industry: {
+        title: "司局动态",
+        interval: Time.Default,
+        tags: [
+          "semiconductor",
+          "photovoltaic",
+          "new-energy-vehicle",
+          "medicine",
+          "ai-computing",
+          "steel",
+          "non-ferrous",
+          "chemical",
+        ],
+      },
+    },
+  },
+  "stats": {
+    name: "统计局",
+    color: "teal",
+    column: "industry",
+    home: "https://www.stats.gov.cn/sj/zxfb/",
+    sub: {
+      industry: {
+        title: "数据发布",
+        interval: Time.Common,
+        tags: allIndustryTags,
+      },
+    },
+  },
+  "nea": {
+    name: "国家能源局",
+    color: "amber",
+    column: "industry",
+    home: "https://www.nea.gov.cn/",
+    sub: {
+      release: {
+        title: "新闻发布",
+        interval: Time.Default,
+        tags: ["photovoltaic", "new-energy-vehicle"],
+      },
+    },
+  },
+  "nhsa": {
+    name: "国家医保局",
+    color: "cyan",
+    column: "industry",
+    home: "https://www.nhsa.gov.cn/col/col14/index.html",
+    sub: {
+      dynamic: {
+        title: "医保动态",
+        interval: Time.Default,
+        tags: ["medicine"],
+      },
+    },
+  },
+  "chinaisa": {
+    name: "钢铁工业协会",
+    color: "gray",
+    column: "industry",
+    home: "https://www.chinaisa.org.cn/gxportal/xfgl/portal/index.html",
+    sub: {
+      stats: {
+        title: "统计发布",
+        interval: Time.Common,
+        tags: ["steel"],
+      },
+      analysis: {
+        title: "行业分析",
+        interval: Time.Common,
+        tags: ["steel"],
+      },
+    },
+  },
+  "chinapv": {
+    name: "光伏行业协会",
+    color: "lime",
+    column: "industry",
+    home: "https://www.chinapv.org.cn/StaticPage/association_list28_1.html",
+    sub: {
+      policy: {
+        title: "政策法规",
+        interval: Time.Common,
+        tags: ["photovoltaic"],
+      },
+    },
+  },
+  "chinania": {
+    name: "有色工业网",
+    color: "orange",
+    column: "industry",
+    home: "https://www.chinania.org.cn/",
+    sub: {
+      stats: {
+        title: "行业统计",
+        interval: Time.Common,
+        tags: ["non-ferrous"],
+      },
+      policy: {
+        title: "政策法规",
+        interval: Time.Common,
+        tags: ["non-ferrous"],
+      },
+      news: {
+        title: "行业新闻",
+        interval: Time.Common,
+        tags: ["non-ferrous"],
+      },
+    },
+  },
+  "semi": {
+    name: "SEMI",
+    color: "blue",
+    column: "industry",
+    home: "https://www.semi.org.cn/",
+    sub: {
+      semiconductor: {
+        title: "半导体",
+        interval: Time.Common,
+        tags: ["semiconductor"],
+      },
+      data: {
+        title: "SEMI数据",
+        interval: Time.Common,
+        tags: ["semiconductor", "ai-computing"],
+      },
+    },
+  },
+  "cnchemicals": {
+    name: "CCM",
+    color: "emerald",
+    column: "industry",
+    home: "https://www.cnchemicals.com/news",
+    sub: {
+      industry: {
+        title: "化工资讯",
+        interval: Time.Common,
+        tags: ["chemical"],
+      },
+    },
+  },
+  "caam": {
+    name: "中汽协",
+    color: "red",
+    column: "industry",
+    home: "http://www.caam.org.cn/tjsj",
+    sub: {
+      "nev-stats": {
+        title: "新能源汽车统计",
+        interval: Time.Common,
+        tags: ["new-energy-vehicle"],
+      },
+      "nev-policy": {
+        title: "新能源汽车政策",
+        interval: Time.Common,
+        tags: ["new-energy-vehicle"],
+      },
+      "nev-news": {
+        title: "新能源汽车行业新闻",
+        interval: Time.Default,
+        tags: ["new-energy-vehicle"],
+      },
+    },
+  },
+  "cde": {
+    name: "药审中心",
+    color: "rose",
+    column: "industry",
+    home: "https://www.cde.org.cn",
+    sub: {
+      news: {
+        title: "滚动新闻",
+        interval: Time.Default,
+        tags: ["medicine"],
+      },
+      policy: {
+        title: "法律法规",
+        interval: Time.Common,
+        tags: ["medicine"],
+      },
+      rules: {
+        title: "中心制度",
+        interval: Time.Common,
+        tags: ["medicine"],
+      },
+    },
+  },
+  "caict": {
+    name: "信通院",
+    color: "blue",
+    column: "industry",
+    home: "https://gma.caict.ac.cn/plat/news",
+    sub: {
+      "ai-news": {
+        title: "算力/AI资讯",
+        interval: Time.Common,
+        tags: ["ai-computing"],
+      },
+      "ai-reports": {
+        title: "算力/AI报告",
+        interval: Time.Common,
+        tags: ["ai-computing"],
+      },
+    },
+  },
+  "gov": {
+    name: "中国政府网",
+    color: "red",
+    column: "industry",
+    home: "https://www.gov.cn/yaowen/liebiao/",
+    sub: {
+      latest: {
+        title: "国务院要闻",
+        interval: Time.Common,
+      },
+    },
+  },
+  "sasac": {
+    name: "国资委",
+    color: "slate",
+    column: "industry",
+    home: "http://www.sasac.gov.cn/n2588025/n2588119/index.html",
+    sub: {
+      latest: {
+        title: "国资动态",
+        interval: Time.Default,
+      },
+    },
+  },
+  "mof": {
+    name: "财政部",
+    color: "emerald",
+    column: "industry",
+    home: "https://www.mof.gov.cn/zhengwuxinxi/caizhengxinwen/",
+    sub: {
+      news: {
+        title: "财政新闻",
+        interval: Time.Common,
+      },
+    },
+  },
+  "mofcom": {
+    name: "商务部",
+    color: "blue",
+    column: "industry",
+    home: "https://www.mofcom.gov.cn/",
+    sub: {
+      release: {
+        title: "日常新闻发布",
+        interval: Time.Default,
+      },
+      spokesperson: {
+        title: "发言人谈话",
+        interval: Time.Default,
       },
     },
   },
@@ -324,6 +747,7 @@ export const originSources = {
     column: "finance",
     color: "blue",
     type: "realtime",
+    interval: Time.UltraFast,
     home: "https://www.jin10.com",
   },
   "baidu": {
@@ -496,6 +920,7 @@ export function genSources() {
       desc: source.desc,
       column: source.column,
       home: source.home,
+      tags: source.tags,
       color: source.color ?? "primary",
       interval: source.interval ?? Time.Default,
     }
