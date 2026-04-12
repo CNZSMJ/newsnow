@@ -17,13 +17,25 @@ interface CNInfoResponse {
 
 const cninfoURL = "https://www.cninfo.com.cn/new/disclosure"
 const cninfoHeaders = {
-  Referer: "https://www.cninfo.com.cn/new/commonUrl?url=disclosure/list/notice",
+  "Referer": "https://www.cninfo.com.cn/new/commonUrl?url=disclosure/list/notice",
   "X-Requested-With": "XMLHttpRequest",
 }
 
 function flattenAnnouncements(res: CNInfoResponse) {
   if (res.announcements?.length) return res.announcements
   return (res.classifiedAnnouncements ?? []).flat()
+}
+
+function toAnnouncementRaw(item: CNInfoAnnouncement) {
+  return {
+    announcementId: item.announcementId,
+    secCode: item.secCode,
+    secName: item.secName,
+    announcementTitle: item.announcementTitle,
+    announcementTime: item.announcementTime,
+    adjunctUrl: item.adjunctUrl,
+    announcementTypeName: item.announcementTypeName ?? undefined,
+  }
 }
 
 function createCNInfoSource(column: string) {
@@ -46,6 +58,7 @@ function createCNInfoSource(column: string) {
       pubDate: item.announcementTime,
       extra: {
         info: [item.secCode, item.announcementTypeName].filter(Boolean).join(" · ") || undefined,
+        raw: toAnnouncementRaw(item),
       },
     }))
   })
@@ -86,6 +99,7 @@ const hkDisclosureSource = defineSource(async () => {
     pubDate: item.announcementTime,
     extra: {
       info: item.secCode || undefined,
+      raw: toAnnouncementRaw(item),
     },
   }))
 })

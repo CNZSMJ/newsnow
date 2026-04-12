@@ -94,6 +94,10 @@ pnpm dev
 
 你可能想要添加数据源，请关注 `shared/sources` `server/sources`，项目类型完备，结构简单，请自行探索。
 
+### 架构文档
+
+- 投资事件引擎系统化升级方案：[docs/investment-event-engine-upgrade-plan.md](docs/investment-event-engine-upgrade-plan.md)
+
 ## 路线图
 - 添加 **多语言支持**（英语、中文，更多语言即将推出）
 - 改进 **个性化选项**（基于分类的新闻、保存的偏好设置）

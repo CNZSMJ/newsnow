@@ -61,11 +61,11 @@ function NewsCard({ id, setHandleRef }: NewsCardProps) {
     queryKey: ["source", id],
     queryFn: async ({ queryKey }) => {
       const id = queryKey[1] as SourceID
-      let url = `/s?id=${id}`
+      let url = `s?id=${id}`
       const headers: Record<string, any> = {}
       const autoRefresh = autoRefreshSources.has(id)
       if (refetchSources.has(id)) {
-        url = `/s?id=${id}&latest`
+        url = `s?id=${id}&latest`
         const jwt = safeParseString(localStorage.getItem("jwt"))
         if (jwt) headers.Authorization = `Bearer ${jwt}`
         refetchSources.delete(id)

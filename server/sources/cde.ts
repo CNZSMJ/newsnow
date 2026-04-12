@@ -1,10 +1,15 @@
 import * as cheerio from "cheerio"
+import type { NewsItem } from "@shared/types"
 import { defineSource } from "#/utils/source"
 
 const baseUrl = "https://www.cde.org.cn"
 
-function uniqueById(items: { id: string | number }[]) {
+function uniqueById<T extends NewsItem>(items: T[]) {
   return [...new Map(items.map(item => [String(item.id), item])).values()]
+}
+
+function isNewsItem(item: NewsItem | undefined): item is NewsItem {
+  return Boolean(item)
 }
 
 function createRollSource() {
@@ -27,7 +32,7 @@ function createRollSource() {
         url: new URL(href, baseUrl).toString(),
         pubDate: pubDate || undefined,
       }
-    }).get().filter(Boolean)
+    }).get().filter(isNewsItem)
 
     return uniqueById(items)
   })
@@ -53,7 +58,7 @@ function createTabSource(tab: "law" | "rules") {
         url: new URL(href, baseUrl).toString(),
         pubDate: pubDate || undefined,
       }
-    }).get().filter(Boolean)
+    }).get().filter(isNewsItem)
 
     return uniqueById(items)
   })

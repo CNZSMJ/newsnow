@@ -1,6 +1,6 @@
 import type { SourceID } from "./types"
 
-export const ultraFastSourceIds = [
+export const ultraFastSourceIds: readonly SourceID[] = [
   "mktnews-flash",
   "wallstreetcn-quick",
   "cls-telegraph",
@@ -8,4 +8,4 @@ export const ultraFastSourceIds = [
   "fastbull-express",
   "jin10",
   "hkexnews-halt",
-] as const satisfies SourceID[]
+]

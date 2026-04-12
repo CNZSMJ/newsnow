@@ -14,6 +14,96 @@ const Time = {
   Slow: 60 * 60 * 1000,
 }
 
+const profile = {
+  mediaFastFeed: {
+    sourceKind: "media_fast_feed",
+    defaultEventType: "news",
+    authorityLevel: "media",
+    parserFamily: "media_fast",
+    assetClasses: ["equity", "rates", "fx", "commodity", "credit", "fund"],
+    markets: ["A", "HK", "CN_rates", "CN_macro", "global_macro"],
+  } as const,
+  officialRateFixing: {
+    sourceKind: "official_rate_fixing",
+    defaultEventType: "macro",
+    defaultEventSubType: "rate_fixing",
+    authorityLevel: "official",
+    parserFamily: "macro_rate",
+    assetClasses: ["rates"],
+    markets: ["CN_rates", "CN_macro"],
+  } as const,
+  officialCentralBankOperation: {
+    sourceKind: "official_central_bank_operation",
+    defaultEventType: "policy",
+    defaultEventSubType: "monetary_policy",
+    authorityLevel: "official",
+    parserFamily: "central_bank_operation",
+    assetClasses: ["rates", "fx", "credit"],
+    markets: ["CN_rates", "CN_macro"],
+  } as const,
+  officialPolicyNotice: {
+    sourceKind: "official_policy_notice",
+    defaultEventType: "policy",
+    authorityLevel: "official",
+    parserFamily: "policy",
+    assetClasses: ["equity", "rates", "fx", "commodity", "credit", "fund"],
+    markets: ["A", "HK", "CN_rates", "CN_macro", "global_macro"],
+  } as const,
+  officialMacroRelease: {
+    sourceKind: "official_macro_release",
+    defaultEventType: "macro",
+    defaultEventSubType: "macro_data",
+    authorityLevel: "official",
+    parserFamily: "macro_release",
+    assetClasses: ["equity", "rates", "fx", "commodity", "credit", "fund"],
+    markets: ["CN_macro", "CN_rates", "A", "HK"],
+  } as const,
+  exchangeDisclosure: {
+    sourceKind: "exchange_disclosure",
+    defaultEventType: "announcement",
+    authorityLevel: "exchange",
+    parserFamily: "exchange_announcement",
+    assetClasses: ["equity", "fund"],
+    markets: ["A", "HK"],
+  } as const,
+  industryStatRelease: {
+    sourceKind: "industry_stat_release",
+    defaultEventType: "industry",
+    defaultEventSubType: "industry_data",
+    authorityLevel: "association",
+    parserFamily: "industry_stat",
+    assetClasses: ["equity", "commodity"],
+    markets: ["A", "HK", "CN_macro"],
+  } as const,
+  industryReportRelease: {
+    sourceKind: "industry_report_release",
+    defaultEventType: "industry",
+    defaultEventSubType: "industry_data",
+    authorityLevel: "association",
+    parserFamily: "industry_report",
+    assetClasses: ["equity", "commodity"],
+    markets: ["A", "HK", "CN_macro"],
+  } as const,
+  industryNewsFeed: {
+    sourceKind: "industry_news_feed",
+    defaultEventType: "industry",
+    defaultEventSubType: "industry_news",
+    authorityLevel: "association",
+    parserFamily: "industry_news",
+    assetClasses: ["equity", "commodity"],
+    markets: ["A", "HK", "CN_macro"],
+  } as const,
+  industryPolicyNotice: {
+    sourceKind: "industry_policy_notice",
+    defaultEventType: "policy",
+    defaultEventSubType: "industrial_policy",
+    authorityLevel: "association",
+    parserFamily: "policy",
+    assetClasses: ["equity", "commodity"],
+    markets: ["A", "HK", "CN_macro"],
+  } as const,
+}
+
 export const originSources = {
   "v2ex": {
     name: "V2EX",
@@ -65,9 +155,11 @@ export const originSources = {
     home: "https://mktnews.net",
     color: "indigo",
     interval: Time.UltraFast,
+    eventProfile: profile.mediaFastFeed,
     sub: {
       flash: {
         title: "快讯",
+        eventProfile: profile.mediaFastFeed,
       },
     },
   },
@@ -81,15 +173,18 @@ export const originSources = {
         type: "realtime",
         interval: Time.UltraFast,
         title: "快讯",
+        eventProfile: profile.mediaFastFeed,
       },
       news: {
         title: "最新",
         interval: Time.Common,
+        eventProfile: profile.mediaFastFeed,
       },
       hot: {
         title: "最热",
         type: "hottest",
         interval: Time.Common,
+        eventProfile: profile.mediaFastFeed,
       },
     },
   },
@@ -192,18 +287,22 @@ export const originSources = {
     color: "red",
     column: "finance",
     home: "https://www.cls.cn",
+    eventProfile: profile.mediaFastFeed,
     sub: {
       telegraph: {
         title: "电报",
         interval: Time.UltraFast,
         type: "realtime",
+        eventProfile: profile.mediaFastFeed,
       },
       depth: {
         title: "深度",
+        eventProfile: profile.mediaFastFeed,
       },
       hot: {
         title: "热门",
         type: "hottest",
+        eventProfile: profile.mediaFastFeed,
       },
     },
   },
@@ -228,21 +327,25 @@ export const originSources = {
     type: "realtime",
     interval: Time.UltraFast,
     home: "https://www.gelonghui.com",
+    eventProfile: profile.mediaFastFeed,
   },
   "fastbull": {
     name: "法布财经",
     color: "emerald",
     home: "https://www.fastbull.cn",
     column: "finance",
+    eventProfile: profile.mediaFastFeed,
     sub: {
       express: {
         title: "快讯",
         type: "realtime",
         interval: Time.UltraFast,
+        eventProfile: profile.mediaFastFeed,
       },
       news: {
         title: "头条",
         interval: Time.Common,
+        eventProfile: profile.mediaFastFeed,
       },
     },
   },
@@ -251,11 +354,13 @@ export const originSources = {
     color: "orange",
     column: "finance",
     home: "https://kuaixun.eastmoney.com/",
+    eventProfile: profile.mediaFastFeed,
     sub: {
       "7x24": {
         title: "7x24",
         type: "realtime",
         interval: Time.UltraFast,
+        eventProfile: profile.mediaFastFeed,
       },
     },
   },
@@ -264,11 +369,48 @@ export const originSources = {
     color: "red",
     column: "finance",
     home: "https://finance.sina.com.cn/7x24/",
+    eventProfile: profile.mediaFastFeed,
     sub: {
       "7x24": {
         title: "7x24",
         type: "realtime",
         interval: Time.UltraFast,
+        eventProfile: profile.mediaFastFeed,
+      },
+    },
+  },
+  "chinamoney": {
+    name: "中国货币网",
+    color: "sky",
+    column: "finance",
+    home: "https://www.chinamoney.com.cn/chinese/bkshibor/",
+    sub: {
+      shibor: {
+        title: "Shibor",
+        interval: Time.Fast,
+        home: "https://www.chinamoney.com.cn/chinese/bkshibor/",
+        eventProfile: profile.officialRateFixing,
+      },
+      fdr007: {
+        title: "FDR007",
+        desc: "官方银银间7天回购定盘利率，基于DR007交易样本编制",
+        interval: Time.Fast,
+        home: "https://www.chinamoney.com.cn/chinese/bkfrr/",
+        eventProfile: profile.officialRateFixing,
+      },
+      fr007: {
+        title: "FR007",
+        desc: "官方7天回购定盘利率",
+        interval: Time.Fast,
+        home: "https://www.chinamoney.com.cn/chinese/bkfrr/",
+        eventProfile: profile.officialRateFixing,
+      },
+      lpr: {
+        title: "LPR",
+        desc: "官方贷款市场报价利率",
+        interval: Time.Common,
+        home: "https://www.chinamoney.com.cn/chinese/bklpr/",
+        eventProfile: profile.officialRateFixing,
       },
     },
   },
@@ -277,10 +419,24 @@ export const originSources = {
     color: "amber",
     column: "finance",
     home: "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       news: {
         title: "新闻发布",
         interval: Time.Default,
+        eventProfile: profile.officialPolicyNotice,
+      },
+      omo: {
+        title: "公开市场操作",
+        interval: Time.Fast,
+        home: "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125431/125475/index.html",
+        eventProfile: profile.officialCentralBankOperation,
+      },
+      mlf: {
+        title: "MLF",
+        interval: Time.Default,
+        home: "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125437/125446/125873/index.html",
+        eventProfile: profile.officialCentralBankOperation,
       },
     },
   },
@@ -289,10 +445,12 @@ export const originSources = {
     color: "cyan",
     column: "finance",
     home: "https://www.safe.gov.cn/",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       latest: {
         title: "外汇动态",
         interval: Time.Default,
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -301,14 +459,17 @@ export const originSources = {
     color: "amber",
     column: "finance",
     home: "https://www.csrc.gov.cn",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       policy: {
         title: "政策解读",
         interval: Time.Default,
+        eventProfile: profile.officialPolicyNotice,
       },
       press: {
         title: "新闻发布会",
         interval: Time.Default,
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -321,14 +482,23 @@ export const originSources = {
       latest: {
         title: "最新公告",
         interval: Time.Fast,
+        eventProfile: profile.exchangeDisclosure,
       },
       results: {
         title: "业绩公告",
         interval: Time.Fast,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          defaultEventSubType: "earnings",
+        },
       },
       halt: {
         title: "停复牌",
         interval: Time.UltraFast,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          defaultEventSubType: "listing_status",
+        },
       },
     },
   },
@@ -341,6 +511,7 @@ export const originSources = {
       latest: {
         title: "最新公告",
         interval: Time.Fast,
+        eventProfile: profile.exchangeDisclosure,
       },
     },
   },
@@ -362,25 +533,33 @@ export const originSources = {
     column: "finance",
     home: "https://www.cninfo.com.cn",
     sub: {
-      szse: {
+      "szse": {
         title: "深市公告",
         interval: Time.Fast,
+        eventProfile: profile.exchangeDisclosure,
       },
-      sse: {
+      "sse": {
         title: "沪市公告",
         interval: Time.Fast,
+        eventProfile: profile.exchangeDisclosure,
       },
       "hk-main": {
         title: "港主板公告",
         interval: Time.Fast,
+        eventProfile: profile.exchangeDisclosure,
       },
       "hk-gem": {
         title: "港创业板公告",
         interval: Time.Fast,
+        eventProfile: profile.exchangeDisclosure,
       },
       "hk-disclosure": {
         title: "港股股本变动",
         interval: Time.Fast,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          defaultEventSubType: "shareholding_change",
+        },
       },
     },
   },
@@ -389,6 +568,7 @@ export const originSources = {
     color: "sky",
     column: "industry",
     home: "https://www.miit.gov.cn/xwdt/gxdt/sjdt/index.html",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       industry: {
         title: "司局动态",
@@ -402,6 +582,7 @@ export const originSources = {
           "non-ferrous",
           "chemical",
         ],
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -410,6 +591,7 @@ export const originSources = {
     color: "emerald",
     column: "industry",
     home: "https://www.ndrc.gov.cn/xwdt/dt/sjdt/",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       industry: {
         title: "司局动态",
@@ -424,6 +606,7 @@ export const originSources = {
           "non-ferrous",
           "chemical",
         ],
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -432,11 +615,13 @@ export const originSources = {
     color: "teal",
     column: "industry",
     home: "https://www.stats.gov.cn/sj/zxfb/",
+    eventProfile: profile.officialMacroRelease,
     sub: {
       industry: {
         title: "数据发布",
         interval: Time.Common,
         tags: allIndustryTags,
+        eventProfile: profile.officialMacroRelease,
       },
     },
   },
@@ -445,11 +630,13 @@ export const originSources = {
     color: "amber",
     column: "industry",
     home: "https://www.nea.gov.cn/",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       release: {
         title: "新闻发布",
         interval: Time.Default,
         tags: ["photovoltaic", "new-energy-vehicle"],
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -458,11 +645,13 @@ export const originSources = {
     color: "cyan",
     column: "industry",
     home: "https://www.nhsa.gov.cn/col/col14/index.html",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       dynamic: {
         title: "医保动态",
         interval: Time.Default,
         tags: ["medicine"],
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -476,11 +665,13 @@ export const originSources = {
         title: "统计发布",
         interval: Time.Common,
         tags: ["steel"],
+        eventProfile: profile.industryStatRelease,
       },
       analysis: {
         title: "行业分析",
         interval: Time.Common,
         tags: ["steel"],
+        eventProfile: profile.industryNewsFeed,
       },
     },
   },
@@ -494,6 +685,7 @@ export const originSources = {
         title: "政策法规",
         interval: Time.Common,
         tags: ["photovoltaic"],
+        eventProfile: profile.industryPolicyNotice,
       },
     },
   },
@@ -507,16 +699,19 @@ export const originSources = {
         title: "行业统计",
         interval: Time.Common,
         tags: ["non-ferrous"],
+        eventProfile: profile.industryStatRelease,
       },
       policy: {
         title: "政策法规",
         interval: Time.Common,
         tags: ["non-ferrous"],
+        eventProfile: profile.industryPolicyNotice,
       },
       news: {
         title: "行业新闻",
         interval: Time.Common,
         tags: ["non-ferrous"],
+        eventProfile: profile.industryNewsFeed,
       },
     },
   },
@@ -530,11 +725,13 @@ export const originSources = {
         title: "半导体",
         interval: Time.Common,
         tags: ["semiconductor"],
+        eventProfile: profile.industryNewsFeed,
       },
       data: {
         title: "SEMI数据",
         interval: Time.Common,
         tags: ["semiconductor", "ai-computing"],
+        eventProfile: profile.industryStatRelease,
       },
     },
   },
@@ -548,6 +745,7 @@ export const originSources = {
         title: "化工资讯",
         interval: Time.Common,
         tags: ["chemical"],
+        eventProfile: profile.industryNewsFeed,
       },
     },
   },
@@ -561,16 +759,19 @@ export const originSources = {
         title: "新能源汽车统计",
         interval: Time.Common,
         tags: ["new-energy-vehicle"],
+        eventProfile: profile.industryStatRelease,
       },
       "nev-policy": {
         title: "新能源汽车政策",
         interval: Time.Common,
         tags: ["new-energy-vehicle"],
+        eventProfile: profile.industryPolicyNotice,
       },
       "nev-news": {
         title: "新能源汽车行业新闻",
         interval: Time.Default,
         tags: ["new-energy-vehicle"],
+        eventProfile: profile.industryNewsFeed,
       },
     },
   },
@@ -584,16 +785,19 @@ export const originSources = {
         title: "滚动新闻",
         interval: Time.Default,
         tags: ["medicine"],
+        eventProfile: profile.officialPolicyNotice,
       },
       policy: {
         title: "法律法规",
         interval: Time.Common,
         tags: ["medicine"],
+        eventProfile: profile.officialPolicyNotice,
       },
       rules: {
         title: "中心制度",
         interval: Time.Common,
         tags: ["medicine"],
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -607,11 +811,13 @@ export const originSources = {
         title: "算力/AI资讯",
         interval: Time.Common,
         tags: ["ai-computing"],
+        eventProfile: profile.industryNewsFeed,
       },
       "ai-reports": {
         title: "算力/AI报告",
         interval: Time.Common,
         tags: ["ai-computing"],
+        eventProfile: profile.industryReportRelease,
       },
     },
   },
@@ -620,10 +826,12 @@ export const originSources = {
     color: "red",
     column: "industry",
     home: "https://www.gov.cn/yaowen/liebiao/",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       latest: {
         title: "国务院要闻",
         interval: Time.Common,
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -632,10 +840,12 @@ export const originSources = {
     color: "slate",
     column: "industry",
     home: "http://www.sasac.gov.cn/n2588025/n2588119/index.html",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       latest: {
         title: "国资动态",
         interval: Time.Default,
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -644,10 +854,12 @@ export const originSources = {
     color: "emerald",
     column: "industry",
     home: "https://www.mof.gov.cn/zhengwuxinxi/caizhengxinwen/",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       news: {
         title: "财政新闻",
         interval: Time.Common,
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -656,14 +868,17 @@ export const originSources = {
     color: "blue",
     column: "industry",
     home: "https://www.mofcom.gov.cn/",
+    eventProfile: profile.officialPolicyNotice,
     sub: {
       release: {
         title: "日常新闻发布",
         interval: Time.Default,
+        eventProfile: profile.officialPolicyNotice,
       },
       spokesperson: {
         title: "发言人谈话",
         interval: Time.Default,
+        eventProfile: profile.officialPolicyNotice,
       },
     },
   },
@@ -749,6 +964,7 @@ export const originSources = {
     type: "realtime",
     interval: Time.UltraFast,
     home: "https://www.jin10.com",
+    eventProfile: profile.mediaFastFeed,
   },
   "baidu": {
     name: "百度热搜",
@@ -921,6 +1137,7 @@ export function genSources() {
       column: source.column,
       home: source.home,
       tags: source.tags,
+      eventProfile: source.eventProfile,
       color: source.color ?? "primary",
       interval: source.interval ?? Time.Default,
     }

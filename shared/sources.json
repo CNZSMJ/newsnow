@@ -56,6 +56,27 @@
     "name": "MKTNews",
     "column": "finance",
     "home": "https://mktnews.net",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "indigo",
     "interval": 60000,
     "title": "快讯"
@@ -64,6 +85,27 @@
     "name": "MKTNews",
     "column": "finance",
     "home": "https://mktnews.net",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "indigo",
     "interval": 60000,
     "title": "快讯"
@@ -74,6 +116,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://wallstreetcn.com/",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 60000,
     "title": "快讯"
@@ -83,6 +146,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://wallstreetcn.com/",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 60000,
     "title": "快讯"
@@ -91,6 +175,27 @@
     "name": "华尔街见闻",
     "column": "finance",
     "home": "https://wallstreetcn.com/",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 1800000,
     "title": "最新"
@@ -100,6 +205,27 @@
     "type": "hottest",
     "column": "finance",
     "home": "https://wallstreetcn.com/",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 1800000,
     "title": "最热"
@@ -222,6 +348,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://www.cls.cn",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "red",
     "interval": 60000,
     "title": "电报"
@@ -231,6 +378,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://www.cls.cn",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "red",
     "interval": 60000,
     "title": "电报"
@@ -239,6 +407,27 @@
     "name": "财联社",
     "column": "finance",
     "home": "https://www.cls.cn",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "red",
     "interval": 600000,
     "title": "深度"
@@ -248,6 +437,27 @@
     "type": "hottest",
     "column": "finance",
     "home": "https://www.cls.cn",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "red",
     "interval": 600000,
     "title": "热门"
@@ -277,6 +487,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://www.gelonghui.com",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 60000
   },
@@ -286,6 +517,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://www.fastbull.cn",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 60000,
     "title": "快讯"
@@ -295,6 +547,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://www.fastbull.cn",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 60000,
     "title": "快讯"
@@ -303,6 +576,27 @@
     "name": "法布财经",
     "column": "finance",
     "home": "https://www.fastbull.cn",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 1800000,
     "title": "头条"
@@ -313,6 +607,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://kuaixun.eastmoney.com/",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "orange",
     "interval": 60000,
     "title": "7x24"
@@ -322,6 +637,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://kuaixun.eastmoney.com/",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "orange",
     "interval": 60000,
     "title": "7x24"
@@ -332,6 +668,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://finance.sina.com.cn/7x24/",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "red",
     "interval": 60000,
     "title": "7x24"
@@ -341,15 +698,171 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://finance.sina.com.cn/7x24/",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "red",
     "interval": 60000,
     "title": "7x24"
+  },
+  "chinamoney": {
+    "redirect": "chinamoney-shibor",
+    "name": "中国货币网",
+    "column": "finance",
+    "home": "https://www.chinamoney.com.cn/chinese/bkshibor/",
+    "eventProfile": {
+      "sourceKind": "official_rate_fixing",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "rate_fixing",
+      "authorityLevel": "official",
+      "parserFamily": "macro_rate",
+      "assetClasses": [
+        "rates"
+      ],
+      "markets": [
+        "CN_rates",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 300000,
+    "title": "Shibor"
+  },
+  "chinamoney-shibor": {
+    "name": "中国货币网",
+    "column": "finance",
+    "home": "https://www.chinamoney.com.cn/chinese/bkshibor/",
+    "eventProfile": {
+      "sourceKind": "official_rate_fixing",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "rate_fixing",
+      "authorityLevel": "official",
+      "parserFamily": "macro_rate",
+      "assetClasses": [
+        "rates"
+      ],
+      "markets": [
+        "CN_rates",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 300000,
+    "title": "Shibor"
+  },
+  "chinamoney-fdr007": {
+    "name": "中国货币网",
+    "desc": "官方银银间7天回购定盘利率，基于DR007交易样本编制",
+    "column": "finance",
+    "home": "https://www.chinamoney.com.cn/chinese/bkfrr/",
+    "eventProfile": {
+      "sourceKind": "official_rate_fixing",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "rate_fixing",
+      "authorityLevel": "official",
+      "parserFamily": "macro_rate",
+      "assetClasses": [
+        "rates"
+      ],
+      "markets": [
+        "CN_rates",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 300000,
+    "title": "FDR007"
+  },
+  "chinamoney-fr007": {
+    "name": "中国货币网",
+    "desc": "官方7天回购定盘利率",
+    "column": "finance",
+    "home": "https://www.chinamoney.com.cn/chinese/bkfrr/",
+    "eventProfile": {
+      "sourceKind": "official_rate_fixing",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "rate_fixing",
+      "authorityLevel": "official",
+      "parserFamily": "macro_rate",
+      "assetClasses": [
+        "rates"
+      ],
+      "markets": [
+        "CN_rates",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 300000,
+    "title": "FR007"
+  },
+  "chinamoney-lpr": {
+    "name": "中国货币网",
+    "desc": "官方贷款市场报价利率",
+    "column": "finance",
+    "home": "https://www.chinamoney.com.cn/chinese/bklpr/",
+    "eventProfile": {
+      "sourceKind": "official_rate_fixing",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "rate_fixing",
+      "authorityLevel": "official",
+      "parserFamily": "macro_rate",
+      "assetClasses": [
+        "rates"
+      ],
+      "markets": [
+        "CN_rates",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 1800000,
+    "title": "LPR"
   },
   "pbc": {
     "redirect": "pbc-news",
     "name": "人民银行",
     "column": "finance",
     "home": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "amber",
     "interval": 600000,
     "title": "新闻发布"
@@ -358,15 +871,105 @@
     "name": "人民银行",
     "column": "finance",
     "home": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "amber",
     "interval": 600000,
     "title": "新闻发布"
+  },
+  "pbc-omo": {
+    "name": "人民银行",
+    "column": "finance",
+    "home": "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125431/125475/index.html",
+    "eventProfile": {
+      "sourceKind": "official_central_bank_operation",
+      "defaultEventType": "policy",
+      "defaultEventSubType": "monetary_policy",
+      "authorityLevel": "official",
+      "parserFamily": "central_bank_operation",
+      "assetClasses": [
+        "rates",
+        "fx",
+        "credit"
+      ],
+      "markets": [
+        "CN_rates",
+        "CN_macro"
+      ]
+    },
+    "color": "amber",
+    "interval": 300000,
+    "title": "公开市场操作"
+  },
+  "pbc-mlf": {
+    "name": "人民银行",
+    "column": "finance",
+    "home": "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125437/125446/125873/index.html",
+    "eventProfile": {
+      "sourceKind": "official_central_bank_operation",
+      "defaultEventType": "policy",
+      "defaultEventSubType": "monetary_policy",
+      "authorityLevel": "official",
+      "parserFamily": "central_bank_operation",
+      "assetClasses": [
+        "rates",
+        "fx",
+        "credit"
+      ],
+      "markets": [
+        "CN_rates",
+        "CN_macro"
+      ]
+    },
+    "color": "amber",
+    "interval": 600000,
+    "title": "MLF"
   },
   "safe": {
     "redirect": "safe-latest",
     "name": "外汇局",
     "column": "finance",
     "home": "https://www.safe.gov.cn/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "cyan",
     "interval": 600000,
     "title": "外汇动态"
@@ -375,6 +978,27 @@
     "name": "外汇局",
     "column": "finance",
     "home": "https://www.safe.gov.cn/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "cyan",
     "interval": 600000,
     "title": "外汇动态"
@@ -384,6 +1008,27 @@
     "name": "证监会",
     "column": "finance",
     "home": "https://www.csrc.gov.cn",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "amber",
     "interval": 600000,
     "title": "政策解读"
@@ -392,6 +1037,27 @@
     "name": "证监会",
     "column": "finance",
     "home": "https://www.csrc.gov.cn",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "amber",
     "interval": 600000,
     "title": "政策解读"
@@ -400,6 +1066,27 @@
     "name": "证监会",
     "column": "finance",
     "home": "https://www.csrc.gov.cn",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "amber",
     "interval": 600000,
     "title": "新闻发布会"
@@ -409,6 +1096,20 @@
     "name": "披露易",
     "column": "finance",
     "home": "https://www.hkexnews.hk",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "red",
     "interval": 300000,
     "title": "最新公告"
@@ -417,6 +1118,20 @@
     "name": "披露易",
     "column": "finance",
     "home": "https://www.hkexnews.hk",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "red",
     "interval": 300000,
     "title": "最新公告"
@@ -425,6 +1140,21 @@
     "name": "披露易",
     "column": "finance",
     "home": "https://www.hkexnews.hk",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ],
+      "defaultEventSubType": "earnings"
+    },
     "color": "red",
     "interval": 300000,
     "title": "业绩公告"
@@ -433,6 +1163,21 @@
     "name": "披露易",
     "column": "finance",
     "home": "https://www.hkexnews.hk",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ],
+      "defaultEventSubType": "listing_status"
+    },
     "color": "red",
     "interval": 60000,
     "title": "停复牌"
@@ -442,6 +1187,20 @@
     "name": "上交所",
     "column": "finance",
     "home": "https://www.sse.com.cn",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "blue",
     "interval": 300000,
     "title": "最新公告"
@@ -450,6 +1209,20 @@
     "name": "上交所",
     "column": "finance",
     "home": "https://www.sse.com.cn",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "blue",
     "interval": 300000,
     "title": "最新公告"
@@ -476,6 +1249,20 @@
     "name": "巨潮资讯",
     "column": "finance",
     "home": "https://www.cninfo.com.cn",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "indigo",
     "interval": 300000,
     "title": "深市公告"
@@ -484,6 +1271,20 @@
     "name": "巨潮资讯",
     "column": "finance",
     "home": "https://www.cninfo.com.cn",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "indigo",
     "interval": 300000,
     "title": "深市公告"
@@ -492,6 +1293,20 @@
     "name": "巨潮资讯",
     "column": "finance",
     "home": "https://www.cninfo.com.cn",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "indigo",
     "interval": 300000,
     "title": "沪市公告"
@@ -500,6 +1315,20 @@
     "name": "巨潮资讯",
     "column": "finance",
     "home": "https://www.cninfo.com.cn",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "indigo",
     "interval": 300000,
     "title": "港主板公告"
@@ -508,6 +1337,20 @@
     "name": "巨潮资讯",
     "column": "finance",
     "home": "https://www.cninfo.com.cn",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "indigo",
     "interval": 300000,
     "title": "港创业板公告"
@@ -516,6 +1359,21 @@
     "name": "巨潮资讯",
     "column": "finance",
     "home": "https://www.cninfo.com.cn",
+    "eventProfile": {
+      "sourceKind": "exchange_disclosure",
+      "defaultEventType": "announcement",
+      "authorityLevel": "exchange",
+      "parserFamily": "exchange_announcement",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ],
+      "defaultEventSubType": "shareholding_change"
+    },
     "color": "indigo",
     "interval": 300000,
     "title": "港股股本变动"
@@ -534,6 +1392,27 @@
       "non-ferrous",
       "chemical"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "sky",
     "interval": 600000,
     "title": "司局动态"
@@ -551,6 +1430,27 @@
       "non-ferrous",
       "chemical"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "sky",
     "interval": 600000,
     "title": "司局动态"
@@ -570,6 +1470,27 @@
       "non-ferrous",
       "chemical"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 600000,
     "title": "司局动态"
@@ -588,6 +1509,27 @@
       "non-ferrous",
       "chemical"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 600000,
     "title": "司局动态"
@@ -607,6 +1549,27 @@
       "non-ferrous",
       "chemical"
     ],
+    "eventProfile": {
+      "sourceKind": "official_macro_release",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "macro_data",
+      "authorityLevel": "official",
+      "parserFamily": "macro_release",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "CN_macro",
+        "CN_rates",
+        "A",
+        "HK"
+      ]
+    },
     "color": "teal",
     "interval": 1800000,
     "title": "数据发布"
@@ -625,6 +1588,27 @@
       "non-ferrous",
       "chemical"
     ],
+    "eventProfile": {
+      "sourceKind": "official_macro_release",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "macro_data",
+      "authorityLevel": "official",
+      "parserFamily": "macro_release",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "CN_macro",
+        "CN_rates",
+        "A",
+        "HK"
+      ]
+    },
     "color": "teal",
     "interval": 1800000,
     "title": "数据发布"
@@ -638,6 +1622,27 @@
       "photovoltaic",
       "new-energy-vehicle"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "amber",
     "interval": 600000,
     "title": "新闻发布"
@@ -650,6 +1655,27 @@
       "photovoltaic",
       "new-energy-vehicle"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "amber",
     "interval": 600000,
     "title": "新闻发布"
@@ -662,6 +1688,27 @@
     "tags": [
       "medicine"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "cyan",
     "interval": 600000,
     "title": "医保动态"
@@ -673,6 +1720,27 @@
     "tags": [
       "medicine"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "cyan",
     "interval": 600000,
     "title": "医保动态"
@@ -685,6 +1753,22 @@
     "tags": [
       "steel"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "gray",
     "interval": 1800000,
     "title": "统计发布"
@@ -696,6 +1780,22 @@
     "tags": [
       "steel"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "gray",
     "interval": 1800000,
     "title": "统计发布"
@@ -707,6 +1807,22 @@
     "tags": [
       "steel"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "gray",
     "interval": 1800000,
     "title": "行业分析"
@@ -719,6 +1835,22 @@
     "tags": [
       "photovoltaic"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_policy_notice",
+      "defaultEventType": "policy",
+      "defaultEventSubType": "industrial_policy",
+      "authorityLevel": "association",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "lime",
     "interval": 1800000,
     "title": "政策法规"
@@ -730,6 +1862,22 @@
     "tags": [
       "photovoltaic"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_policy_notice",
+      "defaultEventType": "policy",
+      "defaultEventSubType": "industrial_policy",
+      "authorityLevel": "association",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "lime",
     "interval": 1800000,
     "title": "政策法规"
@@ -742,6 +1890,22 @@
     "tags": [
       "non-ferrous"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "orange",
     "interval": 1800000,
     "title": "行业统计"
@@ -753,6 +1917,22 @@
     "tags": [
       "non-ferrous"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "orange",
     "interval": 1800000,
     "title": "行业统计"
@@ -764,6 +1944,22 @@
     "tags": [
       "non-ferrous"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_policy_notice",
+      "defaultEventType": "policy",
+      "defaultEventSubType": "industrial_policy",
+      "authorityLevel": "association",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "orange",
     "interval": 1800000,
     "title": "政策法规"
@@ -775,6 +1971,22 @@
     "tags": [
       "non-ferrous"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "orange",
     "interval": 1800000,
     "title": "行业新闻"
@@ -787,6 +1999,22 @@
     "tags": [
       "semiconductor"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "blue",
     "interval": 1800000,
     "title": "半导体"
@@ -798,6 +2026,22 @@
     "tags": [
       "semiconductor"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "blue",
     "interval": 1800000,
     "title": "半导体"
@@ -810,6 +2054,22 @@
       "semiconductor",
       "ai-computing"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "blue",
     "interval": 1800000,
     "title": "SEMI数据"
@@ -822,6 +2082,22 @@
     "tags": [
       "chemical"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 1800000,
     "title": "化工资讯"
@@ -833,6 +2109,22 @@
     "tags": [
       "chemical"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 1800000,
     "title": "化工资讯"
@@ -845,6 +2137,22 @@
     "tags": [
       "new-energy-vehicle"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "red",
     "interval": 1800000,
     "title": "新能源汽车统计"
@@ -856,6 +2164,22 @@
     "tags": [
       "new-energy-vehicle"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "red",
     "interval": 1800000,
     "title": "新能源汽车统计"
@@ -867,6 +2191,22 @@
     "tags": [
       "new-energy-vehicle"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_policy_notice",
+      "defaultEventType": "policy",
+      "defaultEventSubType": "industrial_policy",
+      "authorityLevel": "association",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "red",
     "interval": 1800000,
     "title": "新能源汽车政策"
@@ -878,6 +2218,22 @@
     "tags": [
       "new-energy-vehicle"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "red",
     "interval": 600000,
     "title": "新能源汽车行业新闻"
@@ -890,6 +2246,27 @@
     "tags": [
       "medicine"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "rose",
     "interval": 600000,
     "title": "滚动新闻"
@@ -901,6 +2278,27 @@
     "tags": [
       "medicine"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "rose",
     "interval": 600000,
     "title": "滚动新闻"
@@ -912,6 +2310,27 @@
     "tags": [
       "medicine"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "rose",
     "interval": 1800000,
     "title": "法律法规"
@@ -923,6 +2342,27 @@
     "tags": [
       "medicine"
     ],
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "rose",
     "interval": 1800000,
     "title": "中心制度"
@@ -935,6 +2375,22 @@
     "tags": [
       "ai-computing"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "blue",
     "interval": 1800000,
     "title": "算力/AI资讯"
@@ -946,6 +2402,22 @@
     "tags": [
       "ai-computing"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "blue",
     "interval": 1800000,
     "title": "算力/AI资讯"
@@ -957,6 +2429,22 @@
     "tags": [
       "ai-computing"
     ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
     "color": "blue",
     "interval": 1800000,
     "title": "算力/AI报告"
@@ -966,6 +2454,27 @@
     "name": "中国政府网",
     "column": "industry",
     "home": "https://www.gov.cn/yaowen/liebiao/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "red",
     "interval": 1800000,
     "title": "国务院要闻"
@@ -974,6 +2483,27 @@
     "name": "中国政府网",
     "column": "industry",
     "home": "https://www.gov.cn/yaowen/liebiao/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "red",
     "interval": 1800000,
     "title": "国务院要闻"
@@ -983,6 +2513,27 @@
     "name": "国资委",
     "column": "industry",
     "home": "http://www.sasac.gov.cn/n2588025/n2588119/index.html",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "slate",
     "interval": 600000,
     "title": "国资动态"
@@ -991,6 +2542,27 @@
     "name": "国资委",
     "column": "industry",
     "home": "http://www.sasac.gov.cn/n2588025/n2588119/index.html",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "slate",
     "interval": 600000,
     "title": "国资动态"
@@ -1000,6 +2572,27 @@
     "name": "财政部",
     "column": "industry",
     "home": "https://www.mof.gov.cn/zhengwuxinxi/caizhengxinwen/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 1800000,
     "title": "财政新闻"
@@ -1008,6 +2601,27 @@
     "name": "财政部",
     "column": "industry",
     "home": "https://www.mof.gov.cn/zhengwuxinxi/caizhengxinwen/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "emerald",
     "interval": 1800000,
     "title": "财政新闻"
@@ -1017,6 +2631,27 @@
     "name": "商务部",
     "column": "industry",
     "home": "https://www.mofcom.gov.cn/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 600000,
     "title": "日常新闻发布"
@@ -1025,6 +2660,27 @@
     "name": "商务部",
     "column": "industry",
     "home": "https://www.mofcom.gov.cn/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 600000,
     "title": "日常新闻发布"
@@ -1033,6 +2689,27 @@
     "name": "商务部",
     "column": "industry",
     "home": "https://www.mofcom.gov.cn/",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 600000,
     "title": "发言人谈话"
@@ -1140,6 +2817,27 @@
     "type": "realtime",
     "column": "finance",
     "home": "https://www.jin10.com",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "news",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_rates",
+        "CN_macro",
+        "global_macro"
+      ]
+    },
     "color": "blue",
     "interval": 60000
   },

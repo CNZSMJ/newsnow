@@ -13,7 +13,7 @@ const enableLoginAtom = atomWithStorage<{
 })
 
 enableLoginAtom.onMount = (set) => {
-  myFetch("/enable-login").then((r) => {
+  myFetch("enable-login").then((r) => {
     set(r)
   }).catch((e) => {
     if (e.statusCode === 506) {

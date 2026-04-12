@@ -1,0 +1,1013 @@
+import type {
+  EventDetail,
+  EventEntityLink,
+  EventEvidence,
+  EventFact,
+  EventLifecycleState,
+  EventRecord,
+  InvestmentActionBucket,
+  InvestmentEntityRef,
+  InvestmentEventBrief,
+  InvestmentEventDetail,
+  InvestmentEventEvidence,
+  InvestmentEventFact,
+  InvestmentEventFamily,
+  InvestmentScoreInsight,
+  InvestmentTimelineEntry,
+} from "@shared/types"
+import type { DirectionalView, EventSourceKind } from "@shared/event-profile"
+import { industries } from "@shared/industry"
+import sources from "@shared/sources"
+
+export function getInvestmentEventFamily(event: Pick<EventRecord, "eventType" | "eventSubType" | "sourceKind">): InvestmentEventFamily {
+  if (event.sourceKind === "media_fast_feed" && event.eventType === "policy")
+    return "policy_signal"
+  if (event.eventSubType === "analysis_signal")
+    return "media_interpretation"
+  if (event.sourceKind === "media_fast_feed" && event.eventType === "announcement")
+    return "disclosure_signal"
+  if (event.sourceKind === "industry_report_release")
+    return "industry_report"
+  if (event.eventSubType === "rate_fixing" || event.eventSubType === "monetary_policy")
+    return "rates_liquidity"
+  if (event.eventSubType === "macro_data")
+    return "macro_print"
+  if (event.eventType === "policy" || event.eventSubType === "trade_policy" || event.eventSubType === "industrial_policy" || event.eventSubType === "regulation")
+    return "policy"
+  if (event.eventSubType === "earnings")
+    return "earnings"
+  if (event.eventSubType === "financing")
+    return "financing"
+  if (event.eventSubType === "listing_status")
+    return "trading_status"
+  if (event.eventType === "market_move")
+    return "market_move"
+  if (event.eventSubType === "industry_data")
+    return "industry_data"
+  if (event.eventSubType === "industry_news" || event.sourceKind === "industry_news_feed")
+    return "industry_news"
+  if (event.sourceKind === "media_fast_feed" && (event.eventSubType === "contract" || event.eventSubType === "other"))
+    return "rumor_clarification"
+  if (["buyback", "dividend", "shareholding_change", "management_change", "contract"].includes(event.eventSubType))
+    return "corporate_action"
+  return "general_news"
+}
+
+export function matchesInvestmentEventFamily(
+  event: Pick<EventRecord, "eventType" | "eventSubType" | "sourceKind"> | Pick<InvestmentEventBrief, "eventFamily">,
+  family?: InvestmentEventFamily,
+) {
+  if (!family) return true
+  if ("eventFamily" in event) return event.eventFamily === family
+  return getInvestmentEventFamily(event) === family
+}
+
+function mapEntityType(entityType: EventEntityLink["entityType"]): InvestmentEntityRef["entityType"] {
+  switch (entityType) {
+    case "stock":
+      return "security"
+    case "index":
+      return "market"
+    case "industry":
+      return "industry"
+    case "company":
+      return "issuer"
+    case "topic":
+      return "topic"
+    default:
+      return "topic"
+  }
+}
+
+function mapEntityTypeLabel(entityType: InvestmentEntityRef["entityType"]) {
+  switch (entityType) {
+    case "security":
+      return "交易标的"
+    case "issuer":
+      return "公司主体"
+    case "market":
+      return "影响市场"
+    case "industry":
+      return "产业赛道"
+    case "institution":
+      return "发布机构"
+    default:
+      return "主题标签"
+  }
+}
+
+function inferPrimaryEntityType(event: Pick<EventRecord, "eventType" | "sourceKind">, label: string): InvestmentEntityRef["entityType"] {
+  const institutionPattern = /(?:[部委局署会院行司厅]|中心|协会|信通院|中汽协|药审中心|中国货币网|人民银行|央行)$/
+  if (institutionPattern.test(label)) return "institution"
+  const industryMatch = Object.entries(industries).find(([, name]) => name === label)
+  if (industryMatch) return "industry"
+  if (event.eventType === "policy" || event.sourceKind === "official_policy_notice" || event.sourceKind === "official_macro_release")
+    return "institution"
+  return "issuer"
+}
+
+function inferMarketFromCode(code?: string) {
+  if (!code) return undefined
+  const normalized = code.toLowerCase()
+  if (normalized.startsWith("sh") || normalized.startsWith("sz") || normalized.startsWith("bj"))
+    return "A"
+  if (normalized.startsWith("hk"))
+    return "HK"
+  return undefined
+}
+
+function toInvestmentEntity(entity: EventEntityLink): InvestmentEntityRef {
+  const code = entity.fullCode || entity.code || undefined
+  const entityType = mapEntityType(entity.entityType)
+  const label = industries[entity.entityName as keyof typeof industries] ?? entity.entityName
+  return {
+    entityId: code || entity.entityName,
+    label,
+    entityType,
+    entityTypeLabel: mapEntityTypeLabel(entityType),
+    code,
+    market: inferMarketFromCode(code),
+  }
+}
+
+function dedupeEntities(entities: InvestmentEntityRef[]) {
+  const seen = new Set<string>()
+  return entities.filter((entity) => {
+    const key = `${entity.entityType}|${entity.entityId}|${entity.label}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function collapseDisplayEntities(entities: InvestmentEntityRef[]) {
+  const priority: Record<InvestmentEntityRef["entityType"], number> = {
+    security: 6,
+    issuer: 5,
+    industry: 4,
+    market: 3,
+    institution: 2,
+    topic: 1,
+  }
+
+  const bestByLabel = new Map<string, InvestmentEntityRef>()
+  for (const entity of entities) {
+    const existing = bestByLabel.get(entity.label)
+    if (!existing || priority[entity.entityType] > priority[existing.entityType]) {
+      bestByLabel.set(entity.label, entity)
+    }
+  }
+
+  return Array.from(bestByLabel.values())
+}
+
+export function formatAffectedMarketLabel(value: string) {
+  switch (value) {
+    case "A":
+      return "A股"
+    case "HK":
+      return "港股"
+    case "CN_rates":
+      return "中国资金面"
+    case "CN_macro":
+      return "中国宏观"
+    case "global_macro":
+      return "全球宏观"
+    default:
+      return value
+  }
+}
+
+export function getInvestmentEventFamilyLabel(value: InvestmentEventFamily) {
+  switch (value) {
+    case "rates_liquidity": return "资金与利率"
+    case "macro_print": return "宏观数据"
+    case "policy": return "政策"
+    case "policy_signal": return "政策线索"
+    case "media_interpretation": return "媒体解读"
+    case "earnings": return "业绩"
+    case "financing": return "融资"
+    case "corporate_action": return "公司动作"
+    case "disclosure_signal": return "公告线索"
+    case "trading_status": return "交易状态"
+    case "industry_data": return "产业数据"
+    case "industry_report": return "行业报告"
+    case "industry_news": return "行业动态"
+    case "rumor_clarification": return "传闻澄清"
+    case "market_move": return "盘口异动"
+    default: return "一般资讯"
+  }
+}
+
+export function getInvestmentActionLabel(value: InvestmentActionBucket) {
+  switch (value) {
+    case "actionable": return "优先处理"
+    case "watch": return "重点观察"
+    default: return "降噪处理"
+  }
+}
+
+export function getDirectionalViewLabel(value: DirectionalView) {
+  switch (value) {
+    case "positive": return "偏正向"
+    case "negative": return "偏负向"
+    case "neutral": return "中性"
+    case "mixed": return "混合"
+    default: return "方向待定"
+  }
+}
+
+export function getTradableNowLabel(value: InvestmentEventBrief["tradableNow"]) {
+  switch (value) {
+    case "yes": return "可交易"
+    case "watch": return "先观察"
+    default: return "暂不交易"
+  }
+}
+
+function deriveActionReason(_event: EventRecord, eventFamily: InvestmentEventFamily, actionBucket: InvestmentActionBucket, whatToWatchNext: string[]) {
+  if (actionBucket === "actionable") {
+    if (eventFamily === "rates_liquidity")
+      return "高权威资金/利率信号已经落地，短线对资金面和利率资产更有直接交易意义。"
+    if (eventFamily === "policy")
+      return "政策变化具备较高权威和重要性，值得优先纳入盘前或盘中判断。"
+    if (["earnings", "financing", "trading_status", "market_move"].includes(eventFamily))
+      return "事件重要性和可交易性都较高，适合优先进入交易或风险处置队列。"
+    return "当前事件兼具时效性、重要性和执行价值，适合优先处理。"
+  }
+
+  if (actionBucket === "watch") {
+    if (whatToWatchNext.length)
+      return `当前更适合作为观察信号，下一步重点确认：${whatToWatchNext[0]}。`
+    if (eventFamily === "industry_news")
+      return "当前更像主题催化或行业动向，适合观察而非直接交易。"
+    if (eventFamily === "media_interpretation")
+      return "当前更像媒体梳理或选股线索，必须等待更高权威证据确认。"
+    return "当前事件已有投资意义，但还缺少足够确认，先观察更稳妥。"
+  }
+
+  return "当前更像背景信息或弱线索，不宜优先占用交易注意力。"
+}
+
+function getAuthorityLevelLabel(value: string) {
+  switch (value) {
+    case "official": return "官方"
+    case "exchange": return "交易所"
+    case "association": return "协会/行业组织"
+    case "media": return "媒体"
+    default: return "来源待补充"
+  }
+}
+
+function getExtractionStatusLabel(value: InvestmentEventEvidence["extractionStatus"]) {
+  switch (value) {
+    case "ready": return "已结构化"
+    case "degraded": return "降级结构化"
+    case "failed": return "结构化失败"
+    default: return "旧证据（未回填）"
+  }
+}
+
+function getFactDirectionLabel(value: NonNullable<InvestmentEventFact["direction"]>) {
+  switch (value) {
+    case "up": return "上行/改善"
+    case "down": return "下行/走弱"
+    case "flat": return "持平"
+    default: return "方向待定"
+  }
+}
+
+function parseFactValue(value?: string | null) {
+  if (value === undefined || value === null || value === "") return null
+  if (value === "true") return true
+  if (value === "false") return false
+  const n = Number(value)
+  return Number.isFinite(n) ? n : value
+}
+
+function parseFactDelta(value?: string | null) {
+  const parsed = parseFactValue(value)
+  return typeof parsed === "boolean" ? value ?? null : parsed
+}
+
+function formatFactLabel(fact: EventFact) {
+  switch (fact.factType) {
+    case "macro_rate":
+      return `${fact.metricName} 利率`
+    case "central_bank_operation":
+      return `${fact.metricName.toUpperCase()} 操作`
+    case "exchange_announcement":
+      return "交易所公告"
+    case "policy_notice":
+      return "政策发布"
+    case "industry_release":
+      return "产业数据发布"
+    case "industry_news":
+      return "行业动态"
+    case "media_fast_signal":
+      return "快讯线索"
+    default:
+      return fact.metricName || fact.factType
+  }
+}
+
+function getFactValueLabels(fact: EventFact) {
+  if (fact.factType === "media_fast_signal") {
+    if (fact.unit === "%") {
+      return {
+        valueLabel: "文中提及幅度",
+        previousValueLabel: undefined,
+        deltaLabel: undefined,
+      }
+    }
+
+    if (fact.unit === "CNY_100M") {
+      return {
+        valueLabel: "文中提及规模",
+        previousValueLabel: undefined,
+        deltaLabel: undefined,
+      }
+    }
+
+    return {
+      valueLabel: "文中提及数值",
+      previousValueLabel: undefined,
+      deltaLabel: undefined,
+    }
+  }
+
+  return {
+    valueLabel: "当前值",
+    previousValueLabel: "前值",
+    deltaLabel: "变化",
+  }
+}
+
+function formatFactSummary(fact: EventFact) {
+  switch (fact.factType) {
+    case "policy_notice":
+      return "正式政策/监管文件已进入事件引擎，重点在于后续执行口径、时间点和影响范围。"
+    case "industry_release":
+      return "这是事件型产业数据发布，更适合用来确认景气方向，再结合价格、销量或订单数据判断强度。"
+    case "industry_report":
+      return "这是行业报告型事实，更适合做中期研究和赛道比较，不宜单独当作短线触发器。"
+    case "industry_news":
+      return "这是行业动态型事实，更像主题催化线索，需要后续硬数据或公司公告确认。"
+    case "exchange_announcement":
+      return "这是一条交易所/法定披露事实，重点在于公告类型、关键条款和后续正式文件。"
+    case "media_fast_signal":
+      if (fact.unit === "%")
+        return "快讯正文提到了一个幅度型数字，这更像市场情绪或题材线索，不等同于公司正式经营数据。"
+      if (fact.unit === "CNY_100M")
+        return "快讯正文提到了一个规模型数字，需等待正式公告或更高权威来源确认。"
+      return "这是媒体快讯里抽出的线索型事实，适合作为早期观察，不足以单独支撑强交易结论。"
+    default:
+      return undefined
+  }
+}
+
+function toInvestmentFact(fact: EventFact, entities: Map<string, InvestmentEntityRef>): InvestmentEventFact {
+  const valueLabels = getFactValueLabels(fact)
+  return {
+    factType: fact.factType,
+    label: formatFactLabel(fact),
+    metricName: fact.factType === "media_fast_signal" ? undefined : (fact.metricName || undefined),
+    summary: formatFactSummary(fact),
+    valueLabel: valueLabels.valueLabel,
+    previousValueLabel: valueLabels.previousValueLabel,
+    deltaLabel: valueLabels.deltaLabel,
+    value: parseFactValue(fact.value),
+    previousValue: parseFactValue(fact.previousValue),
+    delta: parseFactDelta(fact.delta),
+    unit: fact.unit ?? null,
+    direction: (fact.direction as InvestmentEventFact["direction"]) ?? null,
+    directionLabel: fact.direction ? getFactDirectionLabel(fact.direction as NonNullable<InvestmentEventFact["direction"]>) : null,
+    effectiveAt: fact.effectiveAt ?? null,
+    confidence: fact.confidence,
+    entity: fact.entityId ? (entities.get(fact.entityId) ?? null) : null,
+    evidenceId: fact.evidenceId ?? null,
+  }
+}
+
+function toInvestmentEvidence(evidence: EventEvidence, sourceKind?: EventSourceKind): InvestmentEventEvidence {
+  const extractionStatus = evidence.extractionStatus
+    ? evidence.extractionStatus === "unknown"
+      ? "legacy"
+      : (evidence.extractionStatus as InvestmentEventEvidence["extractionStatus"])
+    : "legacy"
+  return {
+    evidenceId: evidence.rawId,
+    sourceId: evidence.sourceId,
+    sourceName: evidence.sourceName || evidence.sourceId,
+    sourceTitle: evidence.sourceTitle,
+    authorityLevel: evidence.authorityLevel || "unknown",
+    authorityLabel: getAuthorityLevelLabel(evidence.authorityLevel || "unknown"),
+    sourceKind,
+    title: evidence.title,
+    summary: evidence.summary,
+    url: evidence.url,
+    publishedAt: evidence.publishedAt,
+    extractionStatus,
+    extractionStatusLabel: getExtractionStatusLabel(extractionStatus),
+  }
+}
+
+function deriveTradableNow(tradabilityScore: number | undefined, family?: InvestmentEventFamily): InvestmentEventBrief["tradableNow"] {
+  if (family === "media_interpretation" && (tradabilityScore ?? 0) >= 30) return "watch"
+  if ((tradabilityScore ?? 0) >= 70) return "yes"
+  if ((tradabilityScore ?? 0) >= 40) return "watch"
+  return "no"
+}
+
+function deriveWhatHappened(event: Pick<EventRecord, "title" | "summary" | "eventSubType" | "sourceKind">, family: InvestmentEventFamily) {
+  switch (family) {
+    case "rates_liquidity":
+      return `利率/资金指标更新：${event.title}`
+    case "macro_print":
+      return `宏观数据更新：${event.title}`
+    case "policy":
+      return `政策发布：${event.title}`
+    case "policy_signal":
+      return `政策线索：${event.title}`
+    case "media_interpretation":
+      return `媒体解读：${event.title}`
+    case "earnings":
+      return `业绩披露：${event.title}`
+    case "financing":
+      return `融资事项更新：${event.title}`
+    case "trading_status":
+      return `交易状态变化：${event.title}`
+    case "disclosure_signal":
+      return `公告线索：${event.title}`
+    case "industry_data":
+      return `产业数据更新：${event.title}`
+    case "industry_report":
+      return `行业报告发布：${event.title}`
+    case "industry_news":
+      return `行业动态：${event.title}`
+    case "rumor_clarification":
+      if (/回应|辟谣|澄清/.test(event.title))
+        return `公司就市场传闻作出回应：${event.title}`
+      return `快讯线索更新：${event.title}`
+    case "market_move":
+      return `市场异动：${event.title}`
+    case "corporate_action":
+      return `公司动作更新：${event.title}`
+    default:
+      return event.summary || event.title
+  }
+}
+
+function deriveWhoIsAffected(entities: InvestmentEntityRef[], affectedMarkets: string[]) {
+  const labels = entities
+    .map((item) => {
+      switch (item.entityType) {
+        case "security":
+          return `交易标的：${item.label}`
+        case "issuer":
+          return `公司主体：${item.label}`
+        case "industry":
+          return `产业赛道：${item.label}`
+        case "market":
+          return `影响市场：${item.label}`
+        case "institution":
+          return `发布机构：${item.label}`
+        default:
+          return `主题标签：${item.label}`
+      }
+    })
+    .filter(Boolean)
+    .slice(0, 4)
+  if (labels.length)
+    return Array.from(new Set(labels))
+  return Array.from(new Set(affectedMarkets.map(market => `影响市场：${formatAffectedMarketLabel(market)}`))).slice(0, 3)
+}
+
+function derivePrimarySubject(entities: InvestmentEntityRef[], affectedMarkets: string[]) {
+  const preferredEntityTypes: InvestmentEntityRef["entityType"][] = ["security", "issuer", "industry", "market", "institution", "topic"]
+  for (const entityType of preferredEntityTypes) {
+    const match = entities.find(item => item.entityType === entityType)
+    if (match) return match
+  }
+
+  if (affectedMarkets.length) {
+    const market = affectedMarkets[0]
+    return {
+      entityId: market,
+      label: formatAffectedMarketLabel(market),
+      entityType: "market" as const,
+      entityTypeLabel: mapEntityTypeLabel("market"),
+      market,
+    }
+  }
+
+  return undefined
+}
+
+function deriveSubjectSummary(primarySubject: InvestmentEntityRef | undefined, whoIsAffected: string[], affectedMarketLabels: string[], publisherInstitution?: string) {
+  if (primarySubject) {
+    if (primarySubject.entityType === "market")
+      return `影响市场：${primarySubject.label}`
+    if (primarySubject.entityType === "industry")
+      return `核心赛道：${primarySubject.label}`
+    return `核心主体：${primarySubject.label}`
+  }
+
+  if (whoIsAffected.length)
+    return `影响对象：${whoIsAffected.slice(0, 3).join(" / ")}`
+
+  if (affectedMarketLabels.length)
+    return `影响市场：${affectedMarketLabels.slice(0, 2).join(" / ")}`
+
+  if (publisherInstitution)
+    return `发布机构：${publisherInstitution}`
+
+  return "主体待补充"
+}
+
+function deriveActionBucket(event: Pick<
+  EventRecord,
+  "tradabilityScore" | "materialityScore" | "authorityScore" | "directionalConfidence"
+>, family: InvestmentEventFamily): InvestmentActionBucket {
+  const tradability = event.tradabilityScore ?? 0
+  const materiality = event.materialityScore ?? 0
+  const authority = event.authorityScore ?? 0
+  const directionalConfidence = event.directionalConfidence ?? 0
+
+  const structurallyActionable = new Set<InvestmentEventFamily>([
+    "rates_liquidity",
+    "macro_print",
+    "policy",
+    "earnings",
+    "financing",
+    "trading_status",
+    "market_move",
+    "corporate_action",
+  ])
+
+  if (
+    tradability >= 70
+    && materiality >= 60
+    && authority >= 60
+    && (directionalConfidence >= 35 || structurallyActionable.has(family))
+  ) {
+    return "actionable"
+  }
+
+  if (
+    tradability >= 40
+    || materiality >= 50
+    || authority >= 75
+    || family === "media_interpretation"
+    || structurallyActionable.has(family)
+  ) {
+    return "watch"
+  }
+
+  return "noise"
+}
+
+function toScoreInsight(
+  score: number | undefined,
+  kind: "materiality" | "tradability" | "authority" | "confidence",
+): InvestmentScoreInsight {
+  const value = score ?? 0
+
+  if (kind === "materiality") {
+    if (value >= 80) return { band: "高", note: "足以明显改变市场或主体预期，通常应优先处理。" }
+    if (value >= 65) return { band: "中高", note: "具备明确影响，通常值得尽快纳入判断。" }
+    if (value >= 50) return { band: "中等", note: "有投资意义，但通常需要结合更多证据确认。" }
+    if (value >= 35) return { band: "中低", note: "更像辅助线索，单独不足以驱动交易。" }
+    return { band: "低", note: "更多是背景信息或弱线索。" }
+  }
+
+  if (kind === "tradability") {
+    if (value >= 80) return { band: "高", note: "可以直接进入交易或风控优先队列。" }
+    if (value >= 65) return { band: "中高", note: "具备较强执行价值，适合围绕确认项准备交易。" }
+    if (value >= 50) return { band: "中等", note: "适合纳入观察和盘中跟踪，但不一定立即交易。" }
+    if (value >= 35) return { band: "中低", note: "更像题材或情绪线索，通常先观察更稳妥。" }
+    return { band: "低", note: "不宜优先占用交易注意力。" }
+  }
+
+  if (kind === "authority") {
+    if (value >= 85) return { band: "高", note: "官方、交易所或法定披露级别，通常可作为一手依据。" }
+    if (value >= 70) return { band: "中高", note: "行业组织或高权威机构来源，可信度较高，但仍需结合上下文。" }
+    if (value >= 55) return { band: "中等", note: "主流媒体或快讯来源，可作为早期线索，但不能替代一手公告。" }
+    if (value >= 40) return { band: "中低", note: "来源参考价值有限，适合辅助观察。" }
+    return { band: "低", note: "不足以单独支撑投资判断。" }
+  }
+
+  if (value >= 75) return { band: "高", note: "方向较清晰，可直接用于排序和观察重点。" }
+  if (value >= 55) return { band: "中等", note: "已有方向倾向，但仍需新的事实确认。" }
+  if (value >= 35) return { band: "中低", note: "仅形成初步判断，先观察更稳妥。" }
+  return { band: "低", note: "方向仍不稳定，不宜据此做强结论。" }
+}
+
+function isGenericImpactLine(line: string, family: InvestmentEventFamily) {
+  if (!line) return true
+  const trimmed = line.trim()
+  if (!trimmed) return true
+  if (trimmed.startsWith("当前信号偏")) return true
+  if (trimmed === "快讯提供了新增交易线索") return true
+  if (trimmed.startsWith("当前更适合作为跟踪线索")) return true
+  if (family === "industry_news" && trimmed.startsWith("行业动态：")) return true
+  if (family === "industry_data" && trimmed.startsWith("产业数据发布：")) return true
+  if (family === "industry_report" && trimmed.startsWith("行业报告发布：")) return true
+  return false
+}
+
+function selectWhyItMatters(event: Pick<EventRecord, "impactSummary" | "summary" | "eventType" | "eventSubType" | "title">, family: InvestmentEventFamily) {
+  const impactLines = (event.impactSummary ?? []).filter(line => !isGenericImpactLine(line, family))
+  return impactLines[0] ?? event.summary ?? fallbackWhyItMatters(event, family)
+}
+
+function deriveThesis(brief: InvestmentEventBrief) {
+  const actionablePrefix = brief.actionBucket === "actionable"
+    ? "就当前信息看，它已经具备进入交易或风控优先队列的条件。"
+    : brief.actionBucket === "watch"
+      ? "就当前信息看，它更适合作为观察和确认线索。"
+      : "就当前信息看，它更像背景信息，不宜优先交易。"
+  const nextWatch = brief.whatToWatchNext[0] ? `下一步优先确认：${brief.whatToWatchNext[0]}` : ""
+  return [actionablePrefix, nextWatch].filter(Boolean).join(" ")
+}
+
+function fallbackWhyItMatters(event: Pick<EventRecord, "eventType" | "eventSubType" | "title">, family: InvestmentEventFamily) {
+  const lowerTitle = event.title.toLowerCase()
+  switch (family) {
+    case "rates_liquidity":
+      return "这类事件直接影响资金面、利率预期和利率资产定价。"
+    case "macro_print":
+      return "这类宏观数据会改变增长、通胀和政策预期。"
+    case "policy":
+      if (event.eventSubType === "monetary_policy")
+        return "这类货币政策事件会直接改变流动性、利率预期和资金价格。"
+      if (event.eventSubType === "trade_policy")
+        return "这类贸易政策事件更容易影响出口链、关税预期和跨市场风险偏好。"
+      return "这类政策事件会通过监管、补贴、税收或准入规则影响资产定价。"
+    case "policy_signal":
+      return "这类媒体政策线索更适合用来提前感知政策方向，但必须等待正式文件或权威口径确认。"
+    case "media_interpretation":
+      return "这类媒体解读更适合作为公司或赛道线索来源，关键在于后续是否出现正式披露、经营数据或高权威催化。"
+    case "earnings":
+      if (/业绩预告|快报|预增|预减/.test(event.title))
+        return "这类业绩预告会先修正市场盈利预期，关键在于实际结果能否兑现。"
+      if (/年报|半年报|季报|中期报告|一季度报告|三季度报告/.test(event.title))
+        return "这类定期报告会直接影响盈利、估值和后续指引判断。"
+      return "这类业绩事件直接影响个股盈利预期和估值定价。"
+    case "financing":
+      if (/可转债/.test(event.title))
+        return "可转债融资会同时影响融资成本、潜在转股稀释和交易预期。"
+      if (/配股|定增|向特定对象发行|非公开发行/.test(event.title))
+        return "股权融资事件的关键是规模、价格折让和稀释压力。"
+      if (/ipo|首次公开发行|招股/.test(lowerTitle))
+        return "IPO/发行文件更偏一级市场和流动性分流影响，需看发行节奏与估值。"
+      return "这类融资事件需要结合规模、价格和稀释影响判断。"
+    case "trading_status":
+      if (/复牌|恢復買賣|恢复买卖/.test(event.title))
+        return "复牌事件会恢复价格发现，关键在于复牌原因是否带来预期重估。"
+      if (/停牌|暫停買賣|暂停买卖/.test(event.title))
+        return "停牌事件会中断价格发现，关键在于停牌原因和后续安排。"
+      return "这类交易状态事件直接影响交易可达性和价格发现。"
+    case "disclosure_signal":
+      return "这类媒体公告线索可能提前反映经营或披露方向，但需要正式公告或公司口径确认。"
+    case "industry_data":
+      return "这类产业数据适合用来验证景气度与周期变化。"
+    case "industry_report":
+      return "这类行业报告更适合做中期研究、景气验证和赛道比较，不宜直接当成短线触发器。"
+    case "industry_news":
+      return "这类行业动态更像主题催化线索，需要后续硬数据确认。"
+    case "rumor_clarification":
+      return "这类传闻澄清主要作用在于修正预期，需后续经营数据验证。"
+    case "market_move":
+      if (/纳入.*指数|成分股|纳斯达克100|msci|沪深300|中证1000/.test(event.title))
+        return "指数纳入/调出更偏被动资金、主题情绪和板块扩散线索，短线交易价值高于中长期基本面含义。"
+      return "这类盘口异动时效高，但持续性要结合成交和扩散判断。"
+    case "corporate_action":
+      if (event.eventSubType === "buyback")
+        return "回购更偏股东回报和股价支撑，关键在规模、价格区间和执行力度。"
+      if (event.eventSubType === "dividend")
+        return "分红事件更偏现金回报预期，关键在分红率、持续性和经营现金流支持。"
+      if (event.eventSubType === "shareholding_change")
+        return "股东持股变化更偏筹码与信号意义，需看规模、方向和是否持续。"
+      if (event.eventSubType === "management_change")
+        return "管理层变动会改变治理和战略预期，需看岗位级别和后续经营节奏。"
+      return "这类公司动作会影响股东回报、资本结构或经营预期。"
+    default:
+      return event.title
+  }
+}
+
+function deriveWhatToWatchNext(event: Pick<EventRecord, "eventSubType" | "title">, family: InvestmentEventFamily, direction: DirectionalView): string[] {
+  switch (family) {
+    case "rates_liquidity":
+      return ["关注后续资金利率与债券收益率变化", "观察央行后续操作是否延续同方向"]
+    case "macro_print":
+      return ["核对分项数据是否支持主结论", "观察政策预期与市场定价是否同步变化"]
+    case "policy":
+      return ["跟踪正式文件、细则和执行口径", "观察影响是否扩散到产业链和资本开支"]
+    case "policy_signal":
+      return ["等待正式政策文件、监管公告或权威媒体确认", "观察市场是否开始围绕该政策方向定价"]
+    case "media_interpretation":
+      return ["确认文中提到的主体、产能、订单或利润口径是否有正式来源支撑", "观察是否出现交易所公告、公司公告或后续高权威催化"]
+    case "earnings":
+      return ["核对收入、利润、毛利率与市场预期差", "观察业绩会口径、指引和后续一致预期修正"]
+    case "financing":
+      if (/可转债/.test(event.title))
+        return ["关注发行规模、转股价和摊薄压力", "观察条款设计是否改变股债性价比"]
+      if (/配股|定增|向特定对象发行|非公开发行/.test(event.title))
+        return ["关注融资规模、发行价格和折价幅度", "观察募集资金用途是否改变成长预期"]
+      return ["关注融资规模、价格、稀释影响和募集用途", "观察市场承接与后续交易行为"]
+    case "trading_status":
+      return ["确认停复牌原因、监管要求及后续安排", "观察复牌后价格发现、流动性和是否触发补跌/补涨"]
+    case "disclosure_signal":
+      return ["等待交易所公告、公司公告或投资者问答确认", "观察相关主体和板块是否出现同步交易行为"]
+    case "industry_data":
+      return ["继续跟踪后续月度/季度数据", "确认价格、订单、库存是否共振"]
+    case "industry_report":
+      return ["核对报告中的关键假设是否有后续数据支持", "观察报告结论是否能传导到订单、盈利或资本开支"]
+    case "industry_news":
+      return ["观察是否传导到订单、价格、产能或补贴链条", "等待销量、产量、订单等硬数据确认"]
+    case "rumor_clarification":
+      return ["观察后续公告和经营数据是否验证澄清口径", "观察市场是否继续交易该传闻"]
+    case "market_move":
+      return ["确认是否有更高权威来源跟进", "观察成交额、扩散和后续公告"]
+    case "corporate_action":
+      if (event.eventSubType === "buyback")
+        return ["跟踪回购进度、执行价格区间和实际回购金额", "观察回购是否改变市场对底部区间的判断"]
+      if (event.eventSubType === "dividend")
+        return ["确认分红率、派息节奏和是否超预期", "观察现金流与后续分红可持续性"]
+      if (event.eventSubType === "shareholding_change")
+        return ["确认增减持规模、均价和是否继续进行", "观察筹码供给变化是否影响股价弹性"]
+      return ["跟踪执行节奏和正式公告细节", "观察市场对公司动作的再定价"]
+    default:
+      return direction === "unknown"
+        ? ["等待更高权威证据确认方向"]
+        : ["继续观察后续证据是否强化当前方向"]
+  }
+}
+
+function deriveRiskOfMisread(event: Pick<EventRecord, "authorityScore" | "evidenceCount" | "degraded" | "sourceKind" | "directionalConfidence" | "eventSubType">, family: InvestmentEventFamily): string[] {
+  const risks: string[] = []
+  if ((event.authorityScore ?? 0) < 70) risks.push("来源权威度有限，结论需二次验证")
+  if ((event.evidenceCount ?? 0) <= 1) risks.push("当前证据仍偏少，容易受单条口径影响")
+  if (event.degraded) risks.push("当前事件经过降级处理，部分结构化字段可能不完整")
+  if (event.sourceKind === "media_fast_feed") risks.push("媒体快讯时效高但误读风险也更高")
+  if ((event.directionalConfidence ?? 0) < 40) risks.push("方向性置信度偏低，更适合先观察")
+  if (family === "rumor_clarification") risks.push("澄清口径不等于经营改善，仍需订单、交付或财务数据验证")
+  if (family === "policy_signal") risks.push("媒体政策线索不等于正式政策落地，执行口径和时间点可能变化")
+  if (family === "media_interpretation") risks.push("媒体解读常混合旧线索、历史涨跌幅和机构观点，不能直接当成新增催化")
+  if (family === "financing") risks.push("融资类公告如果关键条款未披露完整，实际影响可能与标题差异较大")
+  if (family === "disclosure_signal") risks.push("快讯中的公告线索可能早于正式披露，细节和影响强度常会发生变化")
+  if (family === "trading_status") risks.push("停复牌本身不直接代表基本面变化，需区分交易安排与经营变化")
+  if (family === "industry_news") risks.push("行业动态更像主题催化，未必能稳定传导到盈利和现金流")
+  if (family === "industry_report") risks.push("研究结论依赖假设条件，不能替代后续经营、订单和财务数据验证")
+  if (event.eventSubType === "shareholding_change") risks.push("股东持股变化需要区分战略安排、被动减持和真实基本面信号")
+  return risks
+}
+
+function summarizeTimelineState(state: EventLifecycleState) {
+  switch (state) {
+    case "detected":
+      return "首次识别"
+    case "updated":
+      return "事件信息更新"
+    case "confirmed":
+      return "事件确认"
+    case "resolved":
+      return "事件结束"
+    default:
+      return state
+  }
+}
+
+function summarizeTimelineLabel(entry: Pick<EventTimelineEntry, "stateTo" | "reason">) {
+  if (entry.reason === "canonical_identity_merge")
+    return "重复事件归并"
+  return summarizeTimelineState(entry.stateTo)
+}
+
+function summarizeTimelineReason(reason?: string, metadata?: Record<string, unknown>) {
+  const sourceId = typeof metadata?.sourceId === "string" ? metadata.sourceId : undefined
+  const sourceName = sourceId ? sources[sourceId as keyof typeof sources]?.name ?? sourceId : undefined
+  const mergedEventTitle = typeof metadata?.mergedEventTitle === "string" ? metadata.mergedEventTitle : undefined
+  const mergedEventId = typeof metadata?.mergedEventId === "string" ? metadata.mergedEventId : undefined
+  const changedFields = Array.isArray(metadata?.changedFields)
+    ? metadata.changedFields.filter(field => typeof field === "string") as string[]
+    : []
+  const changedLabel = changedFields.length
+    ? changedFields.join("、")
+    : "投资解读、评分或标签"
+
+  switch (reason) {
+    case "new_event":
+      return sourceName ? `首次由 ${sourceName} 识别到该事件` : "系统首次识别到该事件"
+    case "event_snapshot_changed":
+      return sourceName ? `来自 ${sourceName} 的新证据刷新了${changedLabel}` : `${changedLabel}发生变化`
+    case "authoritative_source_confirmation":
+      return sourceName ? `${sourceName} 作为更高权威来源加入，事件可信度提升` : "更高权威来源加入，事件可信度提升"
+    case "multi_source_confirmation":
+      return sourceName ? `新增 ${sourceName} 证据，事件从单一来源转为多源确认` : "事件已转为多源确认"
+    case "canonical_identity_merge":
+      return mergedEventTitle
+        ? `系统将重复事件《${mergedEventTitle}》归并到当前事件`
+        : mergedEventId
+          ? `系统将一条历史重复事件归并到当前事件（原记录已清理）`
+          : "系统将一条重复事件归并到当前事件"
+    default:
+      return undefined
+  }
+}
+
+function compressTimeline(entries: InvestmentTimelineEntry[]) {
+  const merged: InvestmentTimelineEntry[] = []
+
+  for (const entry of entries) {
+    const prev = merged[merged.length - 1]
+    if (
+      prev
+      && prev.label === entry.label
+      && prev.label === "重复事件归并"
+    ) {
+      const existingTitle = prev.relatedEventTitle
+        ? prev.relatedEventTitle.split("；").map(item => item.trim()).filter(Boolean)
+        : []
+      const incomingTitle = entry.relatedEventTitle
+        ? entry.relatedEventTitle.split("；").map(item => item.trim()).filter(Boolean)
+        : []
+      const titles = Array.from(new Set([...existingTitle, ...incomingTitle])).filter(Boolean)
+      prev.relatedEventTitle = titles.join("；")
+      prev.note = titles.length
+        ? `系统将 ${titles.length} 条重复事件归并到当前事件：${titles.join("；")}`
+        : "系统将多条重复事件归并到当前事件"
+      if (!prev.relatedEventUrl) prev.relatedEventUrl = entry.relatedEventUrl
+      continue
+    }
+
+    if (
+      prev
+      && prev.label === entry.label
+      && prev.note === entry.note
+      && prev.sourceName === entry.sourceName
+    ) {
+      continue
+    }
+
+    merged.push(entry)
+  }
+
+  return merged
+}
+
+export function projectInvestmentEventBrief(event: EventRecord): InvestmentEventBrief {
+  const eventFamily = getInvestmentEventFamily(event)
+  const actionBucket = deriveActionBucket(event, eventFamily)
+  const signalDirection = event.directionalView ?? "unknown"
+  const tradableNow = deriveTradableNow(event.tradabilityScore, eventFamily)
+  const whatToWatchNext = deriveWhatToWatchNext(event, eventFamily, event.directionalView ?? "unknown")
+  const primaryEntityType = event.primaryEntityName ? inferPrimaryEntityType(event, event.primaryEntityName) : undefined
+  const affectedEntities = dedupeEntities([
+    ...(event.primaryEntityName
+      ? [{
+          entityId: event.primaryEntityName,
+          label: event.primaryEntityName,
+          entityType: primaryEntityType!,
+          entityTypeLabel: mapEntityTypeLabel(primaryEntityType!),
+        }]
+      : []),
+    ...event.topicTags.map(tag => ({
+      entityId: tag,
+      label: industries[tag],
+      entityType: "industry" as const,
+      entityTypeLabel: mapEntityTypeLabel("industry"),
+    })),
+  ]).slice(0, 6)
+
+  const whyItMatters = selectWhyItMatters(event, eventFamily)
+  const affectedMarketLabels = event.affectedMarkets.map(formatAffectedMarketLabel)
+  const primarySubject = derivePrimarySubject(affectedEntities, event.affectedMarkets)
+  const whoIsAffected = deriveWhoIsAffected(affectedEntities, event.affectedMarkets)
+  const publisherInstitution = event.sourceIds[0] ? sources[event.sourceIds[0]]?.name : undefined
+
+  return {
+    eventId: event.eventId,
+    title: event.title,
+    summary: event.summary,
+    eventFamily,
+    eventFamilyLabel: getInvestmentEventFamilyLabel(eventFamily),
+    actionBucket,
+    actionLabel: getInvestmentActionLabel(actionBucket),
+    actionReason: deriveActionReason(event, eventFamily, actionBucket, whatToWatchNext),
+    whatHappened: deriveWhatHappened(event, eventFamily),
+    whoIsAffected,
+    signalDirection,
+    signalDirectionLabel: getDirectionalViewLabel(signalDirection),
+    signalConfidence: event.directionalConfidence ?? 0,
+    signalConfidenceInsight: toScoreInsight(event.directionalConfidence, "confidence"),
+    materialityScore: event.materialityScore ?? 0,
+    materialityInsight: toScoreInsight(event.materialityScore, "materiality"),
+    tradabilityScore: event.tradabilityScore ?? 0,
+    tradabilityInsight: toScoreInsight(event.tradabilityScore, "tradability"),
+    authorityScore: event.authorityScore ?? 0,
+    authorityInsight: toScoreInsight(event.authorityScore, "authority"),
+    affectedMarkets: event.affectedMarkets,
+    affectedMarketLabels,
+    affectedEntities,
+    primarySubject,
+    subjectSummary: deriveSubjectSummary(primarySubject, whoIsAffected, affectedMarketLabels, publisherInstitution),
+    publisherInstitution,
+    whyItMatters,
+    tradableNow,
+    tradableNowLabel: getTradableNowLabel(tradableNow),
+    whatToWatchNext,
+    riskOfMisread: deriveRiskOfMisread(event, eventFamily),
+    latestLifecycleState: event.latestLifecycleState,
+    latestLifecycleAt: event.latestLifecycleAt,
+    canonicalUrl: event.canonicalUrl,
+    relatedTopics: event.topicTags,
+    sourceSummary: {
+      primarySourceId: event.sourceIds[0],
+      primarySourceName: publisherInstitution,
+      sourceKinds: event.sourceKind ? [event.sourceKind] : [],
+    },
+    publishedAt: event.publishedAt,
+  }
+}
+
+export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEventDetail {
+  const entities = collapseDisplayEntities(dedupeEntities(detail.entities.map(toInvestmentEntity)))
+  const entityMap = new Map<string, InvestmentEntityRef>()
+  for (const entity of entities) {
+    entityMap.set(entity.entityId, entity)
+  }
+
+  const brief = projectInvestmentEventBrief({
+    ...detail,
+    primaryEntityName: entities[0]?.label ?? detail.primaryEntityName,
+  })
+
+  const evidence = detail.evidences
+    .filter(item => item.title || item.url)
+    .map(item => toInvestmentEvidence(item, detail.sourceKind))
+
+  const sourceKinds = detail.sourceKind ? [detail.sourceKind] : []
+  const primaryEvidence = evidence[0]
+  const projectedEntities = entities.length ? entities.slice(0, 8) : brief.affectedEntities
+  const publisherInstitution = primaryEvidence?.sourceName ?? brief.publisherInstitution ?? brief.sourceSummary.primarySourceName
+  const affectedMarketLabels = detail.affectedMarkets.map(formatAffectedMarketLabel)
+  const whoIsAffected = deriveWhoIsAffected(projectedEntities, detail.affectedMarkets)
+  const primarySubject = derivePrimarySubject(projectedEntities, detail.affectedMarkets) ?? brief.primarySubject
+
+  return {
+    ...brief,
+    affectedEntities: projectedEntities,
+    primarySubject,
+    whoIsAffected,
+    affectedMarketLabels,
+    subjectSummary: deriveSubjectSummary(primarySubject, whoIsAffected, affectedMarketLabels, publisherInstitution),
+    publisherInstitution,
+    sourceSummary: {
+      primarySourceId: primaryEvidence?.sourceId ?? brief.sourceSummary.primarySourceId,
+      primarySourceName: publisherInstitution ?? brief.sourceSummary.primarySourceName,
+      sourceKinds,
+    },
+    thesis: deriveThesis(brief),
+    keyFacts: detail.facts.map(fact => toInvestmentFact(fact, entityMap)),
+    evidence,
+    timelineSummary: compressTimeline(detail.timeline
+      .map((entry): InvestmentTimelineEntry => ({
+        timelineId: entry.timelineId,
+        changedAt: entry.changedAt,
+        state: entry.stateTo,
+        label: summarizeTimelineLabel(entry),
+        sourceName: typeof entry.metadata?.sourceId === "string" ? (sources[entry.metadata.sourceId as keyof typeof sources]?.name ?? entry.metadata.sourceId) : undefined,
+        note: summarizeTimelineReason(entry.reason, entry.metadata),
+        relatedEventId: typeof entry.metadata?.mergedEventId === "string" ? entry.metadata.mergedEventId : undefined,
+        relatedEventTitle: typeof entry.metadata?.mergedEventTitle === "string"
+          ? entry.metadata.mergedEventTitle
+          : typeof entry.metadata?.mergedEventId === "string"
+            ? "历史归并事件（原记录已清理）"
+            : undefined,
+        relatedEventUrl: typeof entry.metadata?.mergedEventUrl === "string" ? entry.metadata.mergedEventUrl : undefined,
+      })),
+    ),
+    relatedTopics: detail.topicTags,
+  }
+}
+
+export function getInvestmentRelatedSectionDisplayLabel(
+  context: "entity" | "topic" | "market" | "family",
+  label: string,
+) {
+  switch (context) {
+    case "entity":
+      return `同主体相关事件 · ${label}`
+    case "topic":
+      return `同赛道相关事件 · ${industries[label as keyof typeof industries] ?? label}`
+    case "market":
+      return `同市场相关事件 · ${formatAffectedMarketLabel(label)}`
+    case "family":
+      return `同类事件 · ${label}`
+    default:
+      return label
+  }
+}

@@ -109,6 +109,10 @@ Refer to `shared/sources` and `server/sources` directories. The project provides
 
 For detailed instructions on how to add new sources, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+### Architecture Notes
+
+- Investment event engine upgrade plan: [docs/investment-event-engine-upgrade-plan.md](docs/investment-event-engine-upgrade-plan.md)
+
 ## Roadmap
 
 - Add **multi-language support** (English, Chinese, more to come).

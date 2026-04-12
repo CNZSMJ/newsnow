@@ -29,6 +29,23 @@ function formatHKEXDate(item: HKEXItem) {
   return `${item.relY}-${item.relM}-${item.relD} ${item.relTime}`
 }
 
+function toHKEXRaw(item: HKEXItem) {
+  return {
+    newsId: item.newsId,
+    title: item.title,
+    category: item.sTxt,
+    webPath: item.webPath,
+    relD: item.relD,
+    relM: item.relM,
+    relY: item.relY,
+    relTime: item.relTime,
+    stock: item.stock?.map(stock => ({
+      sc: stock.sc,
+      sn: stock.sn,
+    })),
+  }
+}
+
 export default defineSource({
   "hkexnews-latest": defineSource(async () => {
     const res = await myFetch<HKEXResponse>("https://www.hkexnews.hk/ncms/script/eds/homecat0_c.json")
@@ -39,6 +56,7 @@ export default defineSource({
       pubDate: formatHKEXDate(item),
       extra: {
         info: item.stock?.[0] ? `${item.stock[0].sc} · ${item.sTxt}` : item.sTxt,
+        raw: toHKEXRaw(item),
       },
     }))
   }),
@@ -51,6 +69,7 @@ export default defineSource({
       pubDate: formatHKEXDate(item),
       extra: {
         info: item.stock?.[0] ? `${item.stock[0].sc} · ${item.sTxt}` : item.sTxt,
+        raw: toHKEXRaw(item),
       },
     }))
   }),
@@ -63,6 +82,7 @@ export default defineSource({
       pubDate: formatHKEXDate(item),
       extra: {
         info: item.stock?.[0] ? `${item.stock[0].sc} · ${item.sTxt}` : item.sTxt,
+        raw: toHKEXRaw(item),
       },
     }))
   }),

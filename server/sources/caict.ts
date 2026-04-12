@@ -1,11 +1,16 @@
 import * as cheerio from "cheerio"
+import type { NewsItem } from "@shared/types"
 import { defineSource } from "#/utils/source"
 
 const baseUrl = "https://gma.caict.ac.cn"
 const aiKeywords = /算力|AI|人工智能|云计算|终端智能体|智能体|大模型|智算|AI WAN|绿色算力|算力中心|蓝皮书|专题报告/
 
-function uniqueById(items: { id: string | number }[]) {
+function uniqueById<T extends NewsItem>(items: T[]) {
   return [...new Map(items.map(item => [String(item.id), item])).values()]
+}
+
+function isNewsItem(item: NewsItem | undefined): item is NewsItem {
+  return Boolean(item)
 }
 
 function createNewsSource() {
@@ -28,7 +33,7 @@ function createNewsSource() {
         url: new URL(href, baseUrl).toString(),
         pubDate: pubDate || undefined,
       }
-    }).get().filter(Boolean)
+    }).get().filter(isNewsItem)
 
     return uniqueById(items)
   })
@@ -54,7 +59,7 @@ function createReportSource() {
         url: href,
         pubDate: pubDate || undefined,
       }
-    }).get().filter(Boolean)
+    }).get().filter(isNewsItem)
 
     return uniqueById(items)
   })

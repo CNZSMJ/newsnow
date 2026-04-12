@@ -1,15 +1,51 @@
 import process from "node:process"
 import { jwtVerify } from "jose"
 
+function isPublicApi(pathname: string, method: string) {
+  if ([
+    "/api/s",
+    "/api/proxy",
+    "/api/latest",
+    "/api/mcp",
+    "/api/watchlists",
+    "/api/investment-watchlists",
+    "/api/ops/events/status",
+    "/api/investment-events/latest",
+    "/api/investment-events/search",
+    "/api/investment-events/entity",
+  ].some(prefix => pathname.startsWith(prefix))) {
+    return true
+  }
+
+  if (method === "GET" && pathname.startsWith("/api/investment-events/")) {
+    return true
+  }
+
+  if (method === "GET" && pathname.startsWith("/api/investment-watchlists/")) {
+    return true
+  }
+
+  return false
+}
+
+function shouldResolveJwt(pathname: string) {
+  return [
+    "/api/s",
+    "/api/me",
+    "/api/ops/events/refresh",
+  ].some(prefix => pathname.startsWith(prefix))
+}
+
 export default defineEventHandler(async (event) => {
   const url = getRequestURL(event)
   if (!url.pathname.startsWith("/api")) return
+  const publicApi = isPublicApi(url.pathname, event.node.req.method ?? "GET")
   if (["JWT_SECRET", "G_CLIENT_ID", "G_CLIENT_SECRET"].find(k => !process.env[k])) {
     event.context.disabledLogin = true
-    if (["/api/s", "/api/proxy", "/api/latest", "/api/mcp"].every(p => !url.pathname.startsWith(p)))
+    if (!publicApi)
       throw createError({ statusCode: 506, message: "Server not configured, disable login" })
   } else {
-    if (["/api/s", "/api/me"].find(p => url.pathname.startsWith(p))) {
+    if (shouldResolveJwt(url.pathname)) {
       const token = getHeader(event, "Authorization")?.replace(/Bearer\s*/, "")?.trim()
       if (token) {
         try {
@@ -21,11 +57,11 @@ export default defineEventHandler(async (event) => {
             }
           }
         } catch {
-          if (url.pathname.startsWith("/api/me"))
+          if (url.pathname.startsWith("/api/me") || url.pathname.startsWith("/api/ops/events/refresh"))
             throw createError({ statusCode: 401, message: "JWT verification failed" })
           else logger.warn("JWT verification failed")
         }
-      } else if (url.pathname.startsWith("/api/me")) {
+      } else if (url.pathname.startsWith("/api/me") || url.pathname.startsWith("/api/ops/events/refresh")) {
         throw createError({ statusCode: 401, message: "JWT verification failed" })
       }
     }

@@ -9,13 +9,37 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WatchlistsRouteImport } from './routes/watchlists'
+import { Route as EventsRouteImport } from './routes/events'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WatchlistsWatchlistIdRouteImport } from './routes/watchlists.$watchlistId'
+import { Route as EventsEventIdRouteImport } from './routes/events.$eventId'
 import { Route as CColumnRouteImport } from './routes/c.$column'
 
+const WatchlistsRoute = WatchlistsRouteImport.update({
+  id: '/watchlists',
+  path: '/watchlists',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsRoute = EventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const WatchlistsWatchlistIdRoute = WatchlistsWatchlistIdRouteImport.update({
+  id: '/$watchlistId',
+  path: '/$watchlistId',
+  getParentRoute: () => WatchlistsRoute,
+} as any)
+const EventsEventIdRoute = EventsEventIdRouteImport.update({
+  id: '/$eventId',
+  path: '/$eventId',
+  getParentRoute: () => EventsRoute,
 } as any)
 const CColumnRoute = CColumnRouteImport.update({
   id: '/c/$column',
@@ -25,38 +49,99 @@ const CColumnRoute = CColumnRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/events': typeof EventsRouteWithChildren
+  '/watchlists': typeof WatchlistsRouteWithChildren
   '/c/$column': typeof CColumnRoute
+  '/events/$eventId': typeof EventsEventIdRoute
+  '/watchlists/$watchlistId': typeof WatchlistsWatchlistIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/events': typeof EventsRouteWithChildren
+  '/watchlists': typeof WatchlistsRouteWithChildren
   '/c/$column': typeof CColumnRoute
+  '/events/$eventId': typeof EventsEventIdRoute
+  '/watchlists/$watchlistId': typeof WatchlistsWatchlistIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/events': typeof EventsRouteWithChildren
+  '/watchlists': typeof WatchlistsRouteWithChildren
   '/c/$column': typeof CColumnRoute
+  '/events/$eventId': typeof EventsEventIdRoute
+  '/watchlists/$watchlistId': typeof WatchlistsWatchlistIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/c/$column'
+  fullPaths:
+    | '/'
+    | '/events'
+    | '/watchlists'
+    | '/c/$column'
+    | '/events/$eventId'
+    | '/watchlists/$watchlistId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/c/$column'
-  id: '__root__' | '/' | '/c/$column'
+  to:
+    | '/'
+    | '/events'
+    | '/watchlists'
+    | '/c/$column'
+    | '/events/$eventId'
+    | '/watchlists/$watchlistId'
+  id:
+    | '__root__'
+    | '/'
+    | '/events'
+    | '/watchlists'
+    | '/c/$column'
+    | '/events/$eventId'
+    | '/watchlists/$watchlistId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EventsRoute: typeof EventsRouteWithChildren
+  WatchlistsRoute: typeof WatchlistsRouteWithChildren
   CColumnRoute: typeof CColumnRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/watchlists': {
+      id: '/watchlists'
+      path: '/watchlists'
+      fullPath: '/watchlists'
+      preLoaderRoute: typeof WatchlistsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events': {
+      id: '/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof EventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/watchlists/$watchlistId': {
+      id: '/watchlists/$watchlistId'
+      path: '/$watchlistId'
+      fullPath: '/watchlists/$watchlistId'
+      preLoaderRoute: typeof WatchlistsWatchlistIdRouteImport
+      parentRoute: typeof WatchlistsRoute
+    }
+    '/events/$eventId': {
+      id: '/events/$eventId'
+      path: '/$eventId'
+      fullPath: '/events/$eventId'
+      preLoaderRoute: typeof EventsEventIdRouteImport
+      parentRoute: typeof EventsRoute
     }
     '/c/$column': {
       id: '/c/$column'
@@ -68,8 +153,33 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface EventsRouteChildren {
+  EventsEventIdRoute: typeof EventsEventIdRoute
+}
+
+const EventsRouteChildren: EventsRouteChildren = {
+  EventsEventIdRoute: EventsEventIdRoute,
+}
+
+const EventsRouteWithChildren =
+  EventsRoute._addFileChildren(EventsRouteChildren)
+
+interface WatchlistsRouteChildren {
+  WatchlistsWatchlistIdRoute: typeof WatchlistsWatchlistIdRoute
+}
+
+const WatchlistsRouteChildren: WatchlistsRouteChildren = {
+  WatchlistsWatchlistIdRoute: WatchlistsWatchlistIdRoute,
+}
+
+const WatchlistsRouteWithChildren = WatchlistsRoute._addFileChildren(
+  WatchlistsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EventsRoute: EventsRouteWithChildren,
+  WatchlistsRoute: WatchlistsRouteWithChildren,
   CColumnRoute: CColumnRoute,
 }
 export const routeTree = rootRouteImport

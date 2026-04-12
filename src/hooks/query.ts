@@ -25,7 +25,7 @@ export function useEntireQuery(items: SourceID[]) {
     queryFn: async ({ queryKey }) => {
       const sources = queryKey[1]
       if (sources.length === 0) return null
-      const res: SourceResponse[] | undefined = await myFetch("/s/entire", {
+      const res: SourceResponse[] | undefined = await myFetch("s/entire", {
         method: "POST",
         body: {
           sources,

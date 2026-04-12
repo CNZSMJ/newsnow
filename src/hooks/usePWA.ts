@@ -26,7 +26,7 @@ export function usePWA() {
 
       if ("connection" in navigator && !navigator.onLine) return
 
-      const resp = await myFetch("/latest")
+      const resp = await myFetch("latest")
 
       if (resp.v && resp.v !== Version) {
         toaster("有更新，5 秒后自动更新", {

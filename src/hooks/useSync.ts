@@ -7,7 +7,7 @@ import { safeParseString } from "~/utils"
 async function uploadMetadata(metadata: PrimitiveMetadata) {
   const jwt = safeParseString(localStorage.getItem("jwt"))
   if (!jwt) return
-  await myFetch("/me/sync", {
+  await myFetch("me/sync", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${jwt}`,
@@ -22,7 +22,7 @@ async function uploadMetadata(metadata: PrimitiveMetadata) {
 async function downloadMetadata(): Promise<PrimitiveMetadata | undefined> {
   const jwt = safeParseString(localStorage.getItem("jwt"))
   if (!jwt) return
-  const { data, updatedTime } = await myFetch("/me/sync", {
+  const { data, updatedTime } = await myFetch("me/sync", {
     headers: {
       Authorization: `Bearer ${jwt}`,
     },

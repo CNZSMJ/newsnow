@@ -13,6 +13,17 @@ interface SSEResponse {
   publishData: SSEItem[]
 }
 
+function toSSERaw(item: SSEItem) {
+  return {
+    discloseId: item.discloseId,
+    discloseDate: item.discloseDate,
+    bulletinTitle: item.bulletinTitle,
+    bulletinUrl: item.bulletinUrl,
+    securityCode: item.securityCode,
+    securityAbbr: item.securityAbbr,
+  }
+}
+
 export default defineSource({
   "sse-latest": defineSource(async () => {
     const res = await myFetch<SSEResponse>("https://www.sse.com.cn/disclosure/listedinfo/announcement/json/stock_bulletin_publish_order.json")
@@ -23,6 +34,7 @@ export default defineSource({
       pubDate: item.discloseDate,
       extra: {
         info: item.securityCode,
+        raw: toSSERaw(item),
       },
     }))
   }),
