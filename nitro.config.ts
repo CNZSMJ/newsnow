@@ -1,8 +1,29 @@
 import process from "node:process"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
+import { config as loadEnv } from "dotenv"
 import viteNitro from "vite-plugin-with-nitro"
 import { RollopGlob } from "./tools/rollup-glob"
 import { projectDir } from "./shared/dir"
+
+loadEnv({
+  path: resolve(projectDir, ".env.server"),
+})
+
+const newsnowDataDir = resolve(projectDir, process.env.DATA_DIR || ".data")
+const localDatabaseConfig = {
+  default: {
+    connector: "better-sqlite3",
+    options: {
+      path: join(newsnowDataDir, "db.sqlite3"),
+    },
+  },
+} as const
+const localStorageConfig = {
+  data: {
+    driver: "fs",
+    base: join(newsnowDataDir, "kv"),
+  },
+} as const
 
 const nitroOption: Parameters<typeof viteNitro>[0] = {
   experimental: {
@@ -12,16 +33,6 @@ const nitroOption: Parameters<typeof viteNitro>[0] = {
     plugins: [RollopGlob()],
   },
   sourceMap: false,
-  database: {
-    default: {
-      connector: "better-sqlite3",
-    },
-  },
-  devDatabase: {
-    default: {
-      connector: "better-sqlite3",
-    },
-  },
   imports: {
     dirs: ["server/utils", "shared"],
   },
@@ -63,6 +74,11 @@ if (process.env.VERCEL) {
       connector: "bun-sqlite",
     },
   }
+} else {
+  nitroOption.database = localDatabaseConfig
+  nitroOption.devDatabase = localDatabaseConfig
+  nitroOption.storage = localStorageConfig
+  nitroOption.devStorage = localStorageConfig
 }
 
 export default function () {
