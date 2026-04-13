@@ -133,8 +133,8 @@ Do not push core event-engine responsibilities into external skill repositories 
 
 ## Reference documents
 
-- [docs/investment-event-engine-upgrade-plan.md](/Users/huangjiahao/workspace/newsnow/docs/investment-event-engine-upgrade-plan.md)
-- [docs/investment-event-agent-interface-plan.md](/Users/huangjiahao/workspace/newsnow/docs/investment-event-agent-interface-plan.md)
-- [docs/investment-event-workstreams.md](/Users/huangjiahao/workspace/newsnow/docs/investment-event-workstreams.md)
-- [docs/investment-event-delivery-board.md](/Users/huangjiahao/workspace/newsnow/docs/investment-event-delivery-board.md)
-- [docs/investment-event-engine-code-review.md](/Users/huangjiahao/workspace/newsnow/docs/investment-event-engine-code-review.md)
+- [docs/investment-event-engine-upgrade-plan.md](./docs/investment-event-engine-upgrade-plan.md)
+- [docs/investment-event-agent-interface-plan.md](./docs/investment-event-agent-interface-plan.md)
+- [docs/investment-event-workstreams.md](./docs/investment-event-workstreams.md)
+- [docs/investment-event-delivery-board.md](./docs/investment-event-delivery-board.md)
+- [docs/investment-event-engine-code-review.md](./docs/investment-event-engine-code-review.md)

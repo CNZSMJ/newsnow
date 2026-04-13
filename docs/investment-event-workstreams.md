@@ -1,7 +1,7 @@
 # Investment Event Workstreams
 
-Status: Active backlog  
-Last updated: 2026-04-12  
+Status: Active backlog
+Last updated: 2026-04-12
 Scope: long-running execution tracks for the investment event system
 
 ## 1. Purpose
@@ -10,18 +10,18 @@ This document turns the agreed architecture into an execution backlog.
 
 It exists to preserve one core rule:
 
-> the backend event engine is the single source of truth and the single source of investment semantics  
+> the backend event engine is the single source of truth and the single source of investment semantics
 > frontend investor views and agent interfaces are projections of that same truth
 
 The work is split into three sustained workstreams:
 
-1. backend unified event engine  
-2. frontend investor surface  
+1. backend unified event engine
+2. frontend investor surface
 3. agent-facing interface
 
 For active execution status, current tranche scope, and milestone tracking, see:
 
-- [docs/investment-event-delivery-board.md](/Users/huangjiahao/workspace/newsnow/docs/investment-event-delivery-board.md)
+- [docs/investment-event-delivery-board.md](./investment-event-delivery-board.md)
 
 These workstreams may progress in parallel, but they must follow one direction:
 
@@ -390,8 +390,8 @@ Done when:
 
 The default execution order is:
 
-1. Workstream A  
-2. Workstream B  
+1. Workstream A
+2. Workstream B
 3. Workstream C
 
 Reason:

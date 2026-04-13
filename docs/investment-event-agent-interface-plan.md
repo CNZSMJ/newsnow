@@ -1,29 +1,29 @@
 # Investment Event Agent Interface Plan
 
-Status: Active implementation  
-Last updated: 2026-04-12  
+Status: Active implementation
+Last updated: 2026-04-12
 Scope: define how `newsnow` event outputs should be exposed to agent systems in the broader `nexus-fi` chain
 
 Related operational handoff:
 
-- [investment-event-provider-handoff.md](/Users/huangjiahao/workspace/newsnow/docs/investment-event-provider-handoff.md)
-- [investment-event-delivery-board.md](/Users/huangjiahao/workspace/newsnow/docs/investment-event-delivery-board.md)
+- [investment-event-provider-handoff.md](./investment-event-provider-handoff.md)
+- [investment-event-delivery-board.md](./investment-event-delivery-board.md)
 
 ## 0. Current implementation status
 
 The plan is no longer theoretical. The following pieces are already implemented inside `newsnow`:
 
 - canonical backend investment projection:
-  - [`/Users/huangjiahao/workspace/newsnow/server/services/event-engine/investment-view.ts`](/Users/huangjiahao/workspace/newsnow/server/services/event-engine/investment-view.ts)
+  - [`../server/services/event-engine/investment-view.ts`](../server/services/event-engine/investment-view.ts)
 - explicit provider-facing HTTP routes:
-  - [`/Users/huangjiahao/workspace/newsnow/server/api/investment-events/latest.ts`](/Users/huangjiahao/workspace/newsnow/server/api/investment-events/latest.ts)
-  - [`/Users/huangjiahao/workspace/newsnow/server/api/investment-events/search.ts`](/Users/huangjiahao/workspace/newsnow/server/api/investment-events/search.ts)
-  - [`/Users/huangjiahao/workspace/newsnow/server/api/investment-events/entity.ts`](/Users/huangjiahao/workspace/newsnow/server/api/investment-events/entity.ts)
-  - [`/Users/huangjiahao/workspace/newsnow/server/api/investment-events/[id].ts`](/Users/huangjiahao/workspace/newsnow/server/api/investment-events/%5Bid%5D.ts)
-  - [`/Users/huangjiahao/workspace/newsnow/server/api/investment-watchlists/[id].ts`](/Users/huangjiahao/workspace/newsnow/server/api/investment-watchlists/%5Bid%5D.ts)
-  - [`/Users/huangjiahao/workspace/newsnow/server/api/investment-watchlists/[id]/events.ts`](/Users/huangjiahao/workspace/newsnow/server/api/investment-watchlists/%5Bid%5D/events.ts)
+  - [`../server/api/investment-events/latest.ts`](../server/api/investment-events/latest.ts)
+  - [`../server/api/investment-events/search.ts`](../server/api/investment-events/search.ts)
+  - [`../server/api/investment-events/entity.ts`](../server/api/investment-events/entity.ts)
+  - [`../server/api/investment-events/[id].ts`](../server/api/investment-events/%5Bid%5D.ts)
+  - [`../server/api/investment-watchlists/[id].ts`](../server/api/investment-watchlists/%5Bid%5D.ts)
+  - [`../server/api/investment-watchlists/[id]/events.ts`](../server/api/investment-watchlists/%5Bid%5D/events.ts)
 - local provider MCP now consumes those explicit routes directly, and the old public compatibility `projection=investment` event routes have been retired:
-  - [`/Users/huangjiahao/workspace/newsnow/server/mcp/server.ts`](/Users/huangjiahao/workspace/newsnow/server/mcp/server.ts)
+  - [`../server/mcp/server.ts`](../server/mcp/server.ts)
 - local MCP now exposes task-oriented scan/detail tools over that same provider contract:
   - `event_scan`
   - `event_get_detail`
@@ -37,8 +37,8 @@ This document defines the correct agent-facing interface strategy for the invest
 
 The key architectural point is:
 
-> `newsnow` is not the final public agent interface.  
-> `newsnow` is the event provider.  
+> `newsnow` is not the final public agent interface.
+> `newsnow` is the event provider.
 > `nexus-fi-mcp` is the public agent abstraction layer.
 
 This distinction matters because the system must not leak event-engine internals to agents or force skills to understand provider-specific semantics.
@@ -52,8 +52,8 @@ The goal is to ensure that:
 
 This plan assumes three distinct consumer surfaces:
 
-1. backend event engine  
-2. frontend investor experience  
+1. backend event engine
+2. frontend investor experience
 3. agent-facing interface
 
 They must not be treated as the same thing.
@@ -209,18 +209,18 @@ Current issues include:
 - event outputs are often text-assembled instead of strongly structured
 - internal event-engine terms leak into consumer surfaces
 - facts, evidence, and investment interpretation are not exposed as a coherent contract
-- some enums in [`/Users/huangjiahao/workspace/newsnow/server/mcp/server.ts`](/Users/huangjiahao/workspace/newsnow/server/mcp/server.ts) already lag behind the current event model
+- some enums in [`../server/mcp/server.ts`](../server/mcp/server.ts) already lag behind the current event model
 
 This creates two risks:
 
-1. the human UI becomes harder to interpret because it mirrors engine terminology  
+1. the human UI becomes harder to interpret because it mirrors engine terminology
 2. agents get low-level event data instead of investment-ready objects
 
 ## 5. Design principle
 
 The interface strategy must follow this rule:
 
-> `newsnow` should expose a stable provider-facing investment event projection.  
+> `newsnow` should expose a stable provider-facing investment event projection.
 > `nexus-fi-mcp` should expose the final public agent contract.
 
 This means the work should be split into two contracts, not one.
@@ -233,9 +233,9 @@ This is the payload `nexus-fi-mcp` should consume from `newsnow`.
 
 It should contain three layers:
 
-1. investment interpretation  
-2. structured facts  
-3. evidence trail  
+1. investment interpretation
+2. structured facts
+3. evidence trail
 
 ### 6.2 Public agent contract in `nexus-fi-mcp`
 
@@ -250,7 +250,7 @@ It should preserve the three layers above but normalize naming, filtering, and m
 Used for scans, watchlists, feeds, morning reports, and prioritization.
 
 ```ts
-type InvestmentEventBrief = {
+interface InvestmentEventBrief {
   eventId: string
   title: string
   eventFamily: EventFamily
@@ -294,7 +294,7 @@ type InvestmentEventDetail = InvestmentEventBrief & {
 Facts must remain first-class and auditable.
 
 ```ts
-type InvestmentEventFact = {
+interface InvestmentEventFact {
   factType: string
   label: string
   metricName?: string
@@ -315,7 +315,7 @@ type InvestmentEventFact = {
 Evidence is required so agents can cite and audit.
 
 ```ts
-type InvestmentEventEvidence = {
+interface InvestmentEventEvidence {
   evidenceId: string
   sourceId: string
   sourceName: string
@@ -334,7 +334,7 @@ type InvestmentEventEvidence = {
 Entity references must be human-readable and stable.
 
 ```ts
-type InvestmentEntityRef = {
+interface InvestmentEntityRef {
   entityId: string
   label: string
   entityType: "security" | "issuer" | "market" | "industry" | "topic" | "institution"
@@ -359,7 +359,7 @@ These tools should return normalized public objects derived from the provider co
 Example shape:
 
 ```ts
-type EventScanResult = {
+interface EventScanResult {
   items: InvestmentEventBrief[]
   meta: {
     freshnessMs: number
@@ -393,11 +393,11 @@ But they should not be the normal language used by human UI or agent-facing cont
 
 The interface must answer five practical investor questions:
 
-1. what happened  
-2. why does it matter  
-3. who or what is affected  
-4. can it be traded now, or only monitored  
-5. what must be confirmed next  
+1. what happened
+2. why does it matter
+3. who or what is affected
+4. can it be traded now, or only monitored
+5. what must be confirmed next
 
 This means the primary interpretation fields should be:
 
@@ -459,7 +459,7 @@ Provider-facing investment view should look like:
 
 Recommended module:
 
-- [`/Users/huangjiahao/workspace/newsnow/server/services/event-engine/investment-view.ts`](/Users/huangjiahao/workspace/newsnow/server/services/event-engine/investment-view.ts)
+- [`../server/services/event-engine/investment-view.ts`](../server/services/event-engine/investment-view.ts)
 
 Responsibilities:
 
@@ -470,7 +470,7 @@ Responsibilities:
 
 ### 12.2 Keep raw engine detail available behind debug mode
 
-Do not delete diagnostics.  
+Do not delete diagnostics.
 Move them behind explicit `debug=true` or internal-only endpoints.
 
 ### 12.3 Mark current `server/mcp/server.ts` as legacy provider MCP
@@ -528,8 +528,8 @@ The correct optimization target is not "make `newsnow` MCP text prettier".
 
 The correct target is:
 
-1. `newsnow` becomes a high-quality investment event provider  
-2. `nexus-fi-mcp` becomes the only stable public agent boundary  
+1. `newsnow` becomes a high-quality investment event provider
+2. `nexus-fi-mcp` becomes the only stable public agent boundary
 3. skills consume structured investment event objects, not engine internals
 
 This preserves architectural boundaries and produces outputs that are genuinely useful for investment workflows.
