@@ -131,8 +131,10 @@ start_service() {
   echo "Starting newsnow..."
   (
     cd "$ROOT_DIR"
-    nohup node --env-file .env.server "$APP_ENTRY" > "$LOG_FILE" 2>&1 &
-    echo $! > "$PID_FILE"
+    nohup node --env-file .env.server "$APP_ENTRY" </dev/null > "$LOG_FILE" 2>&1 &
+    local child_pid=$!
+    disown "$child_pid" 2>/dev/null || true
+    echo "$child_pid" > "$PID_FILE"
   )
 
   pid="$(cat "$PID_FILE")"
@@ -159,7 +161,8 @@ stop_service() {
   local pid=""
   local wrapper_pid=""
 
-  if pid="$(current_service_pid 2>/dev/null || true)"; then
+  pid="$(current_service_pid 2>/dev/null || true)"
+  if [[ -n "$pid" ]]; then
     pids+=("$pid")
   fi
 
