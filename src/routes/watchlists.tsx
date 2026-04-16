@@ -44,7 +44,7 @@ function WatchlistsListPage() {
         <div className="flex flex-col gap-3 md:(flex-row items-end justify-between)">
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.3em] text-primary/70 font-semibold">
-              Investor Watchlists
+              重点监控视图
             </p>
             <div>
               <h1 className="text-3xl font-bold leading-tight md:text-4xl">
@@ -128,7 +128,6 @@ function WatchlistCard({ item }: { item: WatchlistRecord }) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-neutral-500">
-        <span>ID：{item.watchlistId}</span>
         <span>创建于：{dayjs(item.createdAt).format("MM-DD HH:mm")}</span>
         <span>
           最近检查：

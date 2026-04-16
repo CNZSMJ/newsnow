@@ -9,6 +9,7 @@ import { getters } from "#/getters"
 import { getEventTable } from "#/database/events"
 import type { EventRow, RawItemRow } from "#/types"
 import { extractEntityLinks } from "#/services/event-engine/entity"
+import { normalizeEntityLinks, normalizeFactEntityIds, normalizePrimaryEntityName } from "#/services/event-engine/entity-normalization"
 import { extractEventFacts } from "#/services/event-engine/extractors"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
 import { buildEventIdentity, buildEventIdentityHints } from "#/services/event-engine/merger"
@@ -144,6 +145,14 @@ async function persistResolvedEvent(input: {
 }) {
   return input.eventTable.withTransaction(async () => {
     const { eventRow, facts, payload, resolved } = buildEventRow(input.sourceId, input.rawRow)
+    const normalizedEntityLinks = normalizeEntityLinks(
+      await extractEntityLinks(eventRow.event_id, input.rawRow.title, JSON.parse(eventRow.topic_tags_json), {
+        summary: eventRow.summary,
+        payload,
+      }),
+    )
+    const normalizedFacts = normalizeFactEntityIds(facts, normalizedEntityLinks)
+    eventRow.primary_entity_name = normalizePrimaryEntityName(eventRow.primary_entity_name, normalizedEntityLinks)
     const previousEvent = await input.eventTable.getEventById(eventRow.event_id)
     const eventMetric = previousEvent ? EVENT_ENGINE_METRICS.eventUpdates : EVENT_ENGINE_METRICS.eventCreates
     const eventMetricLabels = toMetricLabels({
@@ -172,20 +181,15 @@ async function persistResolvedEvent(input: {
       extraction_error: null,
       rank: input.rank,
     })
-    await input.eventTable.upsertEventFacts(facts)
+    await input.eventTable.upsertEventFacts(normalizedFacts)
     const extractorMetricLabels = toMetricLabels({
       source_id: input.sourceId,
       parser_family: resolved.profile?.parserFamily ?? "none",
-      fact_count: facts.length,
+      fact_count: normalizedFacts.length,
     })
     incrementEventEngineMetric(EVENT_ENGINE_METRICS.extractorSuccess, extractorMetricLabels)
     await input.eventTable.incrementMetric(EVENT_ENGINE_METRICS.extractorSuccess, extractorMetricLabels)
-    await input.eventTable.upsertEntityLinks(
-      await extractEntityLinks(eventRow.event_id, input.rawRow.title, JSON.parse(eventRow.topic_tags_json), {
-        summary: eventRow.summary,
-        payload,
-      }),
-    )
+    await input.eventTable.upsertEntityLinks(normalizedEntityLinks)
     await consolidateEquivalentEvents({
       eventTable: input.eventTable,
       eventRow,
@@ -201,7 +205,7 @@ async function persistResolvedEvent(input: {
     return {
       eventRow,
       resolved,
-      facts,
+      facts: normalizedFacts,
     }
   })
 }

@@ -231,7 +231,7 @@ function EventDetailPage() {
                 <div key={`${entity.entityType}-${entity.entityId}`} className="rounded-2xl bg-neutral-400/5 px-4 py-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge>{entity.entityTypeLabel}</Badge>
-                    {entity.market && <Badge tone="subtle">{entity.market === "A" ? "A股" : entity.market === "HK" ? "港股" : entity.market}</Badge>}
+                    {entity.market && <Badge tone="subtle">{formatEntityMarket(entity.market)}</Badge>}
                   </div>
                   <p className="mt-2 font-medium">{entity.label}</p>
                   {entity.code && <p className="mt-1 text-neutral-500">{entity.code}</p>}
@@ -349,7 +349,6 @@ function TimelineCard({ entry }: { entry: InvestmentTimelineEntry }) {
       {(entry.relatedEventTitle || entry.relatedEventUrl) && (
         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
           {entry.relatedEventTitle && <span>被归并事件：{entry.relatedEventTitle}</span>}
-          {entry.relatedEventId && !entry.relatedEventUrl && <span>ID：{entry.relatedEventId}</span>}
           {entry.relatedEventUrl && (
             <a
               href={entry.relatedEventUrl}
@@ -485,6 +484,7 @@ function shouldShowMetricName(fact: InvestmentEventFact) {
   if (!fact.metricName) return false
   if (fact.metricName === fact.label) return false
   if (fact.metricName.length > 28) return false
+  if (/^[a-z0-9_]+$/i.test(fact.metricName) && fact.metricName.includes("_")) return false
   return true
 }
 
@@ -500,6 +500,19 @@ function getActionReasonTitle(value: InvestmentActionBucket) {
       return "为何当前更适合先观察"
     default:
       return "为何当前不宜优先处理"
+  }
+}
+
+function formatEntityMarket(value: string) {
+  switch (value) {
+    case "A":
+      return "A股"
+    case "HK":
+      return "港股"
+    case "US":
+      return "美股"
+    default:
+      return value
   }
 }
 

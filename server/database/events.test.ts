@@ -626,6 +626,199 @@ describe("event table migration", () => {
     expect(duplicate).toBeUndefined()
   })
 
+  it("repairs duplicate stock aliases and normalizes fact entity ids", async () => {
+    const db = createTempDb("repair-entity-aliases")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertEvent({
+      event_id: "evt_alias",
+      cluster_key: "cluster_alias",
+      title: "豪威集团：关于召开2025年年度股东会的通知",
+      summary: null,
+      event_type: "announcement",
+      event_subtype: "buyback",
+      source_kind: "exchange_disclosure",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/alias",
+      primary_entity_name: "603501",
+      importance: "medium",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 30,
+      materiality_score: 60,
+      tradability_score: 50,
+      authority_score: 90,
+      freshness_score: 80,
+      surprise_score: 20,
+      affected_markets_json: JSON.stringify(["A"]),
+      impact_summary_json: JSON.stringify([]),
+      degraded: 0,
+      topic_tags_json: JSON.stringify([]),
+      last_seen_at: now,
+      status: "active",
+    })
+    await table.upsertEntityLinks([
+      {
+        event_id: "evt_alias",
+        entity_type: "company",
+        entity_name: "豪威集团",
+        code: "603501",
+        full_code: "sh603501",
+        confidence: 0.98,
+        resolver: "tdx-api-code",
+      },
+      {
+        event_id: "evt_alias",
+        entity_type: "stock",
+        entity_name: "豪威集团",
+        code: "603501",
+        full_code: "sh603501",
+        confidence: 0.98,
+        resolver: "tdx-api-code",
+      },
+      {
+        event_id: "evt_alias",
+        entity_type: "stock",
+        entity_name: "603501",
+        code: "603501",
+        full_code: "",
+        confidence: 0.75,
+        resolver: "title-regex",
+      },
+    ])
+    await table.upsertEventFacts([{
+      fact_id: "fact_alias",
+      event_id: "evt_alias",
+      evidence_id: "raw_alias",
+      fact_type: "exchange_announcement",
+      metric_name: "shareholding_change",
+      value: null,
+      unit: null,
+      previous_value: null,
+      delta: null,
+      direction: null,
+      effective_at: now,
+      entity_id: "603501",
+      confidence: 0.9,
+      payload_json: "{}",
+    }])
+
+    const result = await table.repairCanonicalEntityLinks()
+    const detail = await table.getEventDetail("evt_alias")
+    const repairedEvent = await table.getEventById("evt_alias")
+
+    expect(result.updatedEvents).toBe(1)
+    expect(result.removedEntityAliases).toBe(1)
+    expect(result.normalizedFactEntityIds).toBe(1)
+    expect(result.normalizedPrimaryEntityNames).toBe(1)
+    expect(repairedEvent?.primary_entity_name).toBe("豪威集团")
+    expect(detail?.entities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        entityType: "stock",
+        entityName: "豪威集团",
+        fullCode: "sh603501",
+      }),
+      expect.objectContaining({
+        entityType: "company",
+        entityName: "豪威集团",
+        fullCode: "sh603501",
+      }),
+    ]))
+    expect(detail?.entities.some(entity => entity.entityType === "stock" && entity.entityName === "603501")).toBe(false)
+    expect(detail?.facts[0]?.entityId).toBe("sh603501")
+  })
+
+  it("repairs exchange disclosure affected markets to the actual listing venue", async () => {
+    const db = createTempDb("market-repair")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertEvent({
+      event_id: "evt_market_repair",
+      cluster_key: "cluster_market_repair",
+      title: "春兰股份：600854_春兰股份_2025年_年度报告",
+      summary: "年度报告",
+      event_type: "announcement",
+      event_subtype: "earnings",
+      source_kind: "exchange_disclosure",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/market-repair",
+      primary_entity_name: "春兰股份",
+      importance: "high",
+      sentiment: null,
+      directional_view: "unknown",
+      directional_confidence: 32,
+      materiality_score: 82,
+      tradability_score: 72,
+      authority_score: 90,
+      freshness_score: 86,
+      surprise_score: 40,
+      affected_markets_json: JSON.stringify(["A", "HK"]),
+      impact_summary_json: JSON.stringify(["业绩公告对个股与板块定价敏感，等待具体数据进一步确认"]),
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_market_repair",
+      raw_id: "raw_market_repair",
+      source_id: "sse-latest",
+      source_item_id: "market-repair",
+      title: "春兰股份：600854_春兰股份_2025年_年度报告",
+      summary: "年度报告",
+      canonical_url: "https://example.com/market-repair",
+      published_at: now,
+      fetched_at: now,
+      source_priority: 100,
+      authority_level: "exchange",
+      parser_family: "exchange_announcement",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+    await table.upsertEventSource({
+      source_id: "sse-latest",
+      source_kind: "exchange_disclosure",
+      authority_level: "exchange",
+      parser_family: "exchange_announcement",
+      default_event_type: "announcement",
+      default_event_subtype: null,
+      asset_classes_json: JSON.stringify(["equity", "fund"]),
+      markets_json: JSON.stringify(["A", "HK"]),
+      profile_json: JSON.stringify({
+        sourceKind: "exchange_disclosure",
+        defaultEventType: "announcement",
+        authorityLevel: "exchange",
+        parserFamily: "exchange_announcement",
+        assetClasses: ["equity", "fund"],
+        markets: ["A", "HK"],
+      }),
+      updated_at: now,
+    })
+
+    const result = await table.repairExchangeDisclosureMarkets()
+    const repairedEvent = await table.getEventById("evt_market_repair")
+    const instance: any = db.getInstance()
+    const repairedSource = instance.prepare(`
+      SELECT markets_json
+      FROM event_sources
+      WHERE source_id = 'sse-latest'
+    `).get() as { markets_json: string } | undefined
+
+    expect(result.updatedEvents).toBe(1)
+    expect(result.normalizedAffectedMarkets).toBe(1)
+    expect(result.updatedSourceProfiles).toBe(1)
+    expect(repairedEvent?.affected_markets_json).toBe(JSON.stringify(["A"]))
+    expect(repairedSource?.markets_json).toBe(JSON.stringify(["A"]))
+  })
+
   it("matches Chinese industry keyword queries against canonical topic tags", async () => {
     const db = createTempDb("topic-search")
     const table = new EventTable(db as any)

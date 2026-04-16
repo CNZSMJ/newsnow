@@ -127,6 +127,194 @@ describe("investment event projection", () => {
     expect(projected.timelineSummary[0]?.note).toContain("刷新了")
   })
 
+  it("collapses duplicate security aliases into one follow-up target and keeps fact entity linkage", () => {
+    const facts: EventFact[] = [{
+      factId: "fact_alias",
+      eventId: "evt_alias",
+      evidenceId: "raw_alias",
+      factType: "exchange_announcement",
+      metricName: "shareholding_change",
+      entityId: "603501",
+      confidence: 0.9,
+      payload: {},
+    }]
+
+    const detail: EventDetail = {
+      eventId: "evt_alias",
+      title: "豪威集团：关于召开2025年年度股东会的通知",
+      summary: "股东会公告",
+      eventType: "announcement",
+      eventSubType: "buyback",
+      sourceKind: "exchange_disclosure",
+      publishedAt: Date.UTC(2026, 3, 16, 9, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 16, 9, 1, 0),
+      importance: "medium",
+      directionalView: "unknown",
+      directionalConfidence: 24,
+      materialityScore: 68,
+      tradabilityScore: 62,
+      authorityScore: 90,
+      freshnessScore: 80,
+      surpriseScore: 32,
+      affectedMarkets: ["A"],
+      impactSummary: ["股本与限售流通变化需要结合解禁规模和流通盘评估冲击"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 1,
+      sourceIds: ["sse-latest"],
+      evidences: [],
+      entities: [
+        {
+          eventId: "evt_alias",
+          entityType: "company",
+          entityName: "豪威集团",
+          code: "603501",
+          fullCode: "sh603501",
+          confidence: 0.98,
+          resolver: "tdx-api-code",
+        },
+        {
+          eventId: "evt_alias",
+          entityType: "stock",
+          entityName: "豪威集团",
+          code: "603501",
+          fullCode: "sh603501",
+          confidence: 0.98,
+          resolver: "tdx-api-code",
+        },
+        {
+          eventId: "evt_alias",
+          entityType: "stock",
+          entityName: "603501",
+          code: "603501",
+          confidence: 0.75,
+          resolver: "title-regex",
+        },
+      ],
+      facts,
+      timeline: [],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.affectedEntities).toEqual([{
+      entityId: "sh603501",
+      label: "豪威集团",
+      entityType: "security",
+      entityTypeLabel: "交易标的",
+      code: "603501",
+      market: "A",
+    }])
+    expect(projected.whoIsAffected).toEqual(["交易标的：豪威集团"])
+    expect(projected.primarySubject?.label).toBe("豪威集团")
+    expect(projected.keyFacts[0]?.label).toBe("交易所公告")
+    expect(projected.keyFacts[0]?.metricName).toBe("股东持股变动")
+    expect(projected.keyFacts[0]?.entity?.label).toBe("豪威集团")
+    expect(projected.keyFacts[0]?.entity?.code).toBe("603501")
+  })
+
+  it("cleans machine-style exchange disclosure titles across briefs, evidence, and timeline", () => {
+    const detail: EventDetail = {
+      eventId: "evt_exchange_display",
+      title: "春兰股份：600854_春兰股份_2025年_年度报告",
+      summary: "年度报告",
+      eventType: "announcement",
+      eventSubType: "earnings",
+      sourceKind: "exchange_disclosure",
+      publishedAt: Date.UTC(2026, 3, 16, 8, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 16, 8, 1, 0),
+      importance: "high",
+      directionalView: "unknown",
+      directionalConfidence: 32,
+      materialityScore: 82,
+      tradabilityScore: 72,
+      authorityScore: 90,
+      freshnessScore: 86,
+      surpriseScore: 40,
+      affectedMarkets: ["A"],
+      impactSummary: ["业绩公告对个股与板块定价敏感，等待具体数据进一步确认"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 1,
+      sourceIds: ["sse-latest"],
+      evidences: [{
+        eventId: "evt_exchange_display",
+        rawId: "raw_exchange_display",
+        sourceId: "sse-latest",
+        sourceName: "上交所",
+        sourceTitle: "最新公告",
+        title: "春兰股份：600854_春兰股份_2025年_年度报告",
+        url: "https://example.com/exchange-display",
+        summary: "年度报告",
+        publishedAt: Date.UTC(2026, 3, 16, 8, 0, 0),
+        authorityLevel: "exchange",
+        extractionStatus: "ready",
+      }],
+      entities: [{
+        eventId: "evt_exchange_display",
+        entityType: "stock",
+        entityName: "春兰股份",
+        code: "600854",
+        fullCode: "sh600854",
+        confidence: 0.98,
+        resolver: "tdx-api-code",
+      }],
+      facts: [],
+      timeline: [{
+        timelineId: "tl_exchange_display",
+        eventId: "evt_exchange_display",
+        stateTo: "updated",
+        changedAt: Date.UTC(2026, 3, 16, 8, 5, 0),
+        reason: "canonical_identity_merge",
+        metadata: {
+          mergedEventId: "evt_exchange_display_old",
+          mergedEventTitle: "春兰股份：600854_春兰股份_2025年_年度报告_摘要",
+        },
+      }],
+    }
+
+    const brief = projectInvestmentEventBrief(detail)
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(brief.title).toBe("春兰股份：2025年年度报告")
+    expect(brief.whatHappened).toContain("春兰股份：2025年年度报告")
+    expect(projected.evidence[0]?.title).toBe("春兰股份：2025年年度报告")
+    expect(projected.timelineSummary[0]?.relatedEventTitle).toBe("春兰股份：2025年年度报告摘要")
+  })
+
+  it("prefers the publishing institution when official policy titles carry generic issue subjects", () => {
+    const brief = projectInvestmentEventBrief({
+      eventId: "evt_policy_subject",
+      title: "国家税务总局 国家外汇管理局关于服务贸易等项目对外支付税务备案有关问题的补充公告",
+      summary: "政策公告",
+      eventType: "policy",
+      eventSubType: "trade_policy",
+      sourceKind: "official_policy_notice",
+      publishedAt: Date.UTC(2026, 3, 12, 15, 56, 0),
+      ingestedAt: Date.UTC(2026, 3, 12, 16, 0, 0),
+      importance: "high",
+      directionalView: "neutral",
+      directionalConfidence: 40,
+      materialityScore: 70,
+      tradabilityScore: 60,
+      authorityScore: 95,
+      freshnessScore: 72,
+      surpriseScore: 36,
+      affectedMarkets: ["A", "CN_rates"],
+      impactSummary: ["宏观/政策事件默认需要结合后续细则和市场反馈再确认方向"],
+      degraded: false,
+      primaryEntityName: "服务贸易等项目对外支付税务备案有关问题",
+      topicTags: [],
+      evidenceCount: 1,
+      sourceIds: ["safe"],
+    })
+
+    expect(brief.primarySubject?.entityType).toBe("institution")
+    expect(brief.primarySubject?.label).toBe("国家税务总局 / 国家外汇管理局")
+    expect(brief.subjectSummary).toBe("发布机构：国家税务总局 / 国家外汇管理局")
+    expect(brief.whoIsAffected).toContain("发布机构：国家税务总局 / 国家外汇管理局")
+  })
+
   it("renders canonical merges as readable timeline entries with merged event context", () => {
     const detail: EventDetail = {
       eventId: "evt_merge",
@@ -422,7 +610,7 @@ describe("investment event projection", () => {
     })
 
     expect(brief.primarySubject?.entityType).toBe("institution")
-    expect(brief.subjectSummary).toBe("核心主体：商务部")
+    expect(brief.subjectSummary).toBe("发布机构：商务部")
   })
 
   it("matches canonical event family for projected filters", () => {

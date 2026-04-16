@@ -482,13 +482,17 @@ export const originSources = {
       latest: {
         title: "最新公告",
         interval: Time.Fast,
-        eventProfile: profile.exchangeDisclosure,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          markets: ["HK"],
+        },
       },
       results: {
         title: "业绩公告",
         interval: Time.Fast,
         eventProfile: {
           ...profile.exchangeDisclosure,
+          markets: ["HK"],
           defaultEventSubType: "earnings",
         },
       },
@@ -497,6 +501,7 @@ export const originSources = {
         interval: Time.UltraFast,
         eventProfile: {
           ...profile.exchangeDisclosure,
+          markets: ["HK"],
           defaultEventSubType: "listing_status",
         },
       },
@@ -511,7 +516,10 @@ export const originSources = {
       latest: {
         title: "最新公告",
         interval: Time.Fast,
-        eventProfile: profile.exchangeDisclosure,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          markets: ["A"],
+        },
       },
     },
   },
@@ -536,28 +544,41 @@ export const originSources = {
       "szse": {
         title: "深市公告",
         interval: Time.Fast,
-        eventProfile: profile.exchangeDisclosure,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          markets: ["A"],
+        },
       },
       "sse": {
         title: "沪市公告",
         interval: Time.Fast,
-        eventProfile: profile.exchangeDisclosure,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          markets: ["A"],
+        },
       },
       "hk-main": {
         title: "港主板公告",
         interval: Time.Fast,
-        eventProfile: profile.exchangeDisclosure,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          markets: ["HK"],
+        },
       },
       "hk-gem": {
         title: "港创业板公告",
         interval: Time.Fast,
-        eventProfile: profile.exchangeDisclosure,
+        eventProfile: {
+          ...profile.exchangeDisclosure,
+          markets: ["HK"],
+        },
       },
       "hk-disclosure": {
         title: "港股股本变动",
         interval: Time.Fast,
         eventProfile: {
           ...profile.exchangeDisclosure,
+          markets: ["HK"],
           defaultEventSubType: "shareholding_change",
         },
       },

@@ -6,6 +6,8 @@ import type {
   InvestmentProviderWatchlistDetailResponse,
   InvestmentWatchlistDetail,
 } from "@shared/types"
+import { industries } from "@shared/industry"
+import type { AffectedMarket } from "@shared/event-profile"
 import dayjs from "dayjs"
 import type { ReactNode } from "react"
 import { useTitle } from "react-use"
@@ -111,7 +113,7 @@ function WatchlistDetailPage() {
         <div className="flex flex-col gap-3 md:(flex-row items-end justify-between)">
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.3em] text-primary/70 font-semibold">
-              Watchlist Workflow
+              监控清单视图
             </p>
             <div>
               <h1 className="text-3xl font-bold leading-tight md:text-4xl">
@@ -133,8 +135,8 @@ function WatchlistDetailPage() {
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
           {item.query.entities?.map(value => <Badge key={`entity-${value}`} tone="subtle">主体：{value}</Badge>)}
-          {item.query.topics?.map(value => <Badge key={`topic-${value}`} tone="subtle">赛道：{value}</Badge>)}
-          {item.query.markets?.map(value => <Badge key={`market-${value}`} tone="subtle">市场：{value}</Badge>)}
+          {item.query.topics?.map(value => <Badge key={`topic-${value}`} tone="subtle">赛道：{formatWatchlistTopic(value)}</Badge>)}
+          {item.query.markets?.map(value => <Badge key={`market-${value}`} tone="subtle">市场：{formatWatchlistMarket(value)}</Badge>)}
           {!item.query.entities?.length && !item.query.topics?.length && !item.query.markets?.length && (
             <Badge tone="subtle">默认监控</Badge>
           )}
@@ -376,4 +378,19 @@ function summariseWatchlistMarkets(items: InvestmentEventBrief[]) {
 function collectDistinctLines(lines: string[], limit: number) {
   const values = [...new Set(lines.map(item => item.trim()).filter(Boolean))]
   return values.slice(0, limit)
+}
+
+function formatWatchlistTopic(value: string) {
+  return industries[value as keyof typeof industries] ?? value
+}
+
+function formatWatchlistMarket(value: AffectedMarket) {
+  switch (value) {
+    case "A": return "A股"
+    case "HK": return "港股"
+    case "CN_rates": return "中国资金面"
+    case "CN_macro": return "中国宏观"
+    case "global_macro": return "全球宏观"
+    default: return value
+  }
 }

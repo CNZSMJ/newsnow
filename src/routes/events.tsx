@@ -203,7 +203,7 @@ function EventsListPage() {
         <div className="flex flex-col gap-3 md:(flex-row items-end justify-between)">
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.3em] text-primary/70 font-semibold">
-              Investment Event Engine
+              投资决策视图
             </p>
             <div>
               <h1 className="text-3xl font-bold leading-tight md:text-4xl">

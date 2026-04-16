@@ -17,7 +17,14 @@ import type {
 import sources from "@shared/sources"
 import type { Database } from "db0"
 import { getRows, parseJSON } from "#/database/sqlite"
+import {
+  getEntityLinkPersistenceKey,
+  normalizeEntityLinks,
+  normalizeFactEntityIds,
+  normalizePrimaryEntityName,
+} from "#/services/event-engine/entity-normalization"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
+import { getExchangeDisclosureMarkets, getSourceEventProfile } from "#/services/event-engine/profiles"
 import { resolveEventClassification } from "#/services/event-engine/resolver"
 import { inferIndustryTagsFromText } from "#/services/event-engine/text"
 import type { EntityLinkRow, EventEvidenceRow, EventFactRow, EventRow, EventSourceRow, EventTimelineRow, RawItemRow } from "#/types"
@@ -905,6 +912,203 @@ export class EventTable {
         row.confidence,
         row.resolver,
       )
+    }
+  }
+
+  async repairCanonicalEntityLinks(options?: {
+    eventIds?: string[]
+    limit?: number
+  }) {
+    const candidateEventIds = options?.eventIds?.length
+      ? options.eventIds.slice(0, options.limit ?? options.eventIds.length)
+      : getRows<{ event_id: string }>(await this.db.prepare(`
+        SELECT DISTINCT event_id
+        FROM entity_links
+        WHERE entity_type = 'stock'
+          AND (
+            COALESCE(code, '') != ''
+            OR COALESCE(full_code, '') != ''
+          )
+        ORDER BY event_id ASC
+        LIMIT ?
+      `).all(options?.limit ?? 100000)).map(row => row.event_id)
+
+    let updatedEvents = 0
+    let removedEntityAliases = 0
+    let normalizedFactEntityIds = 0
+    let normalizedPrimaryEntityNames = 0
+
+    await this.withTransaction(async () => {
+      for (const eventId of candidateEventIds) {
+        const entityLinks = getRows<EntityLinkRow>(await this.db.prepare(`
+          SELECT event_id, entity_type, entity_name, code, full_code, confidence, resolver
+          FROM entity_links
+          WHERE event_id = ?
+          ORDER BY entity_type ASC, confidence DESC, entity_name ASC
+        `).all(eventId))
+        if (!entityLinks.length) continue
+
+        const normalizedEntityLinks = normalizeEntityLinks(entityLinks)
+        const existingLinkKeys = new Set(entityLinks.map(getEntityLinkPersistenceKey))
+        const normalizedLinkKeys = new Set(normalizedEntityLinks.map(getEntityLinkPersistenceKey))
+        const entityLinksChanged = existingLinkKeys.size !== normalizedLinkKeys.size
+          || Array.from(existingLinkKeys).some(key => !normalizedLinkKeys.has(key))
+
+        const facts = getRows<EventFactRow>(await this.db.prepare(`
+          SELECT fact_id, event_id, evidence_id, fact_type, metric_name, value, unit, previous_value, delta, direction, effective_at, entity_id, confidence, payload_json
+          FROM event_facts
+          WHERE event_id = ?
+          ORDER BY fact_id ASC
+        `).all(eventId))
+        const normalizedFacts = normalizeFactEntityIds(facts, normalizedEntityLinks)
+        const factUpdates = normalizedFacts.filter((fact, index) => fact.entity_id !== facts[index]?.entity_id)
+
+        const eventRow = await this.db.prepare(`
+          SELECT primary_entity_name
+          FROM events
+          WHERE event_id = ?
+        `).get(eventId) as { primary_entity_name?: string | null } | undefined
+        const nextPrimaryEntityName = normalizePrimaryEntityName(eventRow?.primary_entity_name ?? null, normalizedEntityLinks)
+        const primaryEntityChanged = nextPrimaryEntityName !== (eventRow?.primary_entity_name ?? null)
+
+        if (!entityLinksChanged && !factUpdates.length && !primaryEntityChanged) continue
+        updatedEvents += 1
+
+        if (entityLinksChanged) {
+          removedEntityAliases += Math.max(0, entityLinks.length - normalizedEntityLinks.length)
+          await this.db.prepare(`DELETE FROM entity_links WHERE event_id = ?`).run(eventId)
+          await this.upsertEntityLinks(normalizedEntityLinks)
+        }
+
+        for (const fact of factUpdates) {
+          await this.db.prepare(`
+            UPDATE event_facts
+            SET entity_id = ?
+            WHERE fact_id = ?
+          `).run(fact.entity_id, fact.fact_id)
+        }
+        normalizedFactEntityIds += factUpdates.length
+
+        if (primaryEntityChanged) {
+          await this.db.prepare(`
+            UPDATE events
+            SET primary_entity_name = ?
+            WHERE event_id = ?
+          `).run(nextPrimaryEntityName, eventId)
+          normalizedPrimaryEntityNames += 1
+        }
+      }
+    })
+
+    return {
+      scannedEvents: candidateEventIds.length,
+      updatedEvents,
+      removedEntityAliases,
+      normalizedFactEntityIds,
+      normalizedPrimaryEntityNames,
+    }
+  }
+
+  async repairExchangeDisclosureMarkets(options?: {
+    eventIds?: string[]
+    limit?: number
+  }) {
+    const eventIds = options?.eventIds?.length
+      ? options.eventIds.slice(0, options.limit ?? options.eventIds.length)
+      : undefined
+    const placeholders = eventIds?.map(() => "?").join(", ")
+    const candidateRows = getRows<{
+      event_id: string
+      affected_markets_json: string
+      source_id?: string | null
+    }>(eventIds
+      ? await this.db.prepare(`
+        SELECT
+          e.event_id,
+          e.affected_markets_json,
+          (
+            SELECT ee.source_id
+            FROM event_evidence ee
+            WHERE ee.event_id = e.event_id
+            ORDER BY ee.rank ASC, ee.published_at DESC, ee.raw_id ASC
+            LIMIT 1
+          ) AS source_id
+        FROM events e
+        WHERE e.source_kind = 'exchange_disclosure'
+          AND e.event_id IN (${placeholders})
+        ORDER BY e.event_id ASC
+      `).all(...eventIds)
+      : await this.db.prepare(`
+        SELECT
+          e.event_id,
+          e.affected_markets_json,
+          (
+            SELECT ee.source_id
+            FROM event_evidence ee
+            WHERE ee.event_id = e.event_id
+            ORDER BY ee.rank ASC, ee.published_at DESC, ee.raw_id ASC
+            LIMIT 1
+          ) AS source_id
+        FROM events e
+        WHERE e.source_kind = 'exchange_disclosure'
+        ORDER BY e.event_id ASC
+        LIMIT ?
+      `).all(options?.limit ?? 100000))
+
+    let updatedEvents = 0
+    let normalizedAffectedMarkets = 0
+    let updatedSourceProfiles = 0
+    const touchedSourceIds = new Set<SourceID>()
+
+    await this.withTransaction(async () => {
+      for (const row of candidateRows) {
+        if (!row.source_id) continue
+        const sourceId = row.source_id as SourceID
+        const nextMarkets = [...getExchangeDisclosureMarkets(sourceId)]
+        const currentMarkets = parseJSON<AffectedMarket[]>(row.affected_markets_json, [])
+        if (JSON.stringify(currentMarkets) !== JSON.stringify(nextMarkets)) {
+          await this.db.prepare(`
+            UPDATE events
+            SET affected_markets_json = ?
+            WHERE event_id = ?
+          `).run(JSON.stringify(nextMarkets), row.event_id)
+          updatedEvents += 1
+          normalizedAffectedMarkets += 1
+        }
+        touchedSourceIds.add(sourceId)
+      }
+
+      for (const sourceId of touchedSourceIds) {
+        const profile = getSourceEventProfile(sourceId)
+        if (!profile) continue
+        const profileJson = JSON.stringify(profile)
+        const marketsJson = JSON.stringify(profile.markets)
+        const existingRow = await this.db.prepare(`
+          SELECT markets_json, profile_json
+          FROM event_sources
+          WHERE source_id = ?
+        `).get(sourceId) as { markets_json?: string | null, profile_json?: string | null } | undefined
+        if (
+          !existingRow
+          || (existingRow.markets_json ?? "") === marketsJson
+          && (existingRow.profile_json ?? "") === profileJson
+        ) {
+          continue
+        }
+        await this.db.prepare(`
+          UPDATE event_sources
+          SET markets_json = ?, profile_json = ?, updated_at = ?
+          WHERE source_id = ?
+        `).run(marketsJson, profileJson, Date.now(), sourceId)
+        updatedSourceProfiles += 1
+      }
+    })
+
+    return {
+      scannedEvents: candidateRows.length,
+      updatedEvents,
+      normalizedAffectedMarkets,
+      updatedSourceProfiles,
     }
   }
 

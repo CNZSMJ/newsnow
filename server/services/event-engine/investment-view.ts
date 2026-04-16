@@ -18,6 +18,8 @@ import type {
 import type { DirectionalView, EventSourceKind } from "@shared/event-profile"
 import { industries } from "@shared/industry"
 import sources from "@shared/sources"
+import { isCodeLikeEntityName, normalizeSecurityCode } from "#/services/event-engine/entity-normalization"
+import { normalizeTitle } from "#/services/event-engine/text"
 
 export function getInvestmentEventFamily(event: Pick<EventRecord, "eventType" | "eventSubType" | "sourceKind">): InvestmentEventFamily {
   if (event.sourceKind === "media_fast_feed" && event.eventType === "policy")
@@ -116,17 +118,113 @@ function inferMarketFromCode(code?: string) {
   return undefined
 }
 
+function normalizeComparableTitleToken(value?: string) {
+  return value
+    ?.replace(/\s+/g, "")
+    .replace(/[：:【】\[\]（）()《》<>"'`、，,._-]/g, "")
+    .toLowerCase()
+}
+
+function formatInvestmentDisplayTitle(title: string, options?: {
+  sourceKind?: EventSourceKind
+  primaryEntityName?: string
+}) {
+  const normalized = normalizeTitle(title)
+  const match = normalized.match(/^([^：:]{2,40})[：:]\s*(.+)$/)
+  const prefix = match?.[1]?.trim() || options?.primaryEntityName?.trim()
+  const suffix = (match?.[2] ?? normalized).trim()
+  if (!suffix.includes("_")) return normalized
+
+  const tokens = suffix.split("_").map(token => token.trim()).filter(Boolean)
+  if (tokens.length < 2) return normalized
+
+  const prefixKey = normalizeComparableTitleToken(prefix)
+  const primaryKey = normalizeComparableTitleToken(options?.primaryEntityName)
+  let removedNoise = false
+  const filteredTokens = tokens.filter((token) => {
+    const comparable = normalizeComparableTitleToken(token)
+    if (!comparable) {
+      removedNoise = true
+      return false
+    }
+    if (/^(?:sh|sz|bj)?\d{6}$/i.test(token) || /^\d{4}-\d{2}-\d{2}$/.test(token)) {
+      removedNoise = true
+      return false
+    }
+    if ((prefixKey && comparable === prefixKey) || (primaryKey && comparable === primaryKey)) {
+      removedNoise = true
+      return false
+    }
+    return true
+  })
+
+  if (!removedNoise && options?.sourceKind !== "exchange_disclosure") return normalized
+
+  const cleanedSuffix = (filteredTokens.length ? filteredTokens : tokens).join("").replace(/\s+/g, "").trim()
+  if (!cleanedSuffix) return normalized
+  if (prefix) return `${prefix}：${cleanedSuffix}`
+  return cleanedSuffix
+}
+
+function shouldSuppressDisplayPrimaryEntity(
+  event: Pick<EventRecord, "sourceKind" | "title">,
+  primaryEntityName: string,
+) {
+  if (event.sourceKind !== "official_policy_notice" && event.sourceKind !== "official_macro_release") {
+    return false
+  }
+  if (!/(问题|通知|公告|办法|规定|制度|解释|细则|方案|意见|事宜|文件)$/.test(primaryEntityName)) {
+    return false
+  }
+  const normalizedTitle = normalizeTitle(event.title)
+  return normalizedTitle.includes(`关于${primaryEntityName}`)
+    || normalizedTitle.includes(`《${primaryEntityName}》`)
+    || normalizedTitle.includes(`${primaryEntityName}的`)
+}
+
+function extractInstitutionLabelFromTitle(title: string) {
+  const normalizedTitle = normalizeTitle(title)
+  const matched = normalizedTitle.match(/^([\u4e00-\u9fa5A-Za-z*“”"《》（）()\s]{2,48}?)(?:发布|印发|关于|令〔?\d{4}〕?第?\d+号?)/)
+  const prefix = matched?.[1]?.replace(/\s+/g, " ").trim()
+  if (!prefix) return undefined
+  const parts = prefix.split(/\s+/).filter(Boolean)
+  const institutionParts = parts.filter(part => /(?:部|委|局|署|会|院|行|厅|办|法院|检察院|税务总局|人民银行|外汇管理局|海关总署|“两高”|两高)$/.test(part))
+  if (institutionParts.length) return institutionParts.join(" / ")
+  return prefix
+}
+
+function getDisplayPrimaryEntityName(
+  event: Pick<EventRecord, "primaryEntityName" | "sourceKind" | "title">,
+  publisherInstitution?: string,
+) {
+  const primaryEntityName = event.primaryEntityName?.trim()
+  if (!primaryEntityName) return undefined
+  if (shouldSuppressDisplayPrimaryEntity(event, primaryEntityName)) {
+    return extractInstitutionLabelFromTitle(event.title) ?? publisherInstitution?.trim()
+  }
+  return primaryEntityName
+}
+
+function normalizeEntityText(value?: string) {
+  return value?.trim().toLowerCase()
+}
+
+function isCodeLikeLabel(label: string) {
+  return isCodeLikeEntityName(label)
+}
+
 function toInvestmentEntity(entity: EventEntityLink): InvestmentEntityRef {
-  const code = entity.fullCode || entity.code || undefined
+  const entityId = entity.fullCode || entity.code || entity.entityName
+  const code = entity.code || normalizeSecurityCode(entity.fullCode) || undefined
   const entityType = mapEntityType(entity.entityType)
   const label = industries[entity.entityName as keyof typeof industries] ?? entity.entityName
   return {
-    entityId: code || entity.entityName,
+    entityId,
     label,
     entityType,
     entityTypeLabel: mapEntityTypeLabel(entityType),
     code,
-    market: inferMarketFromCode(code),
+    market: inferMarketFromCode(entity.fullCode || entity.code || entityId),
   }
 }
 
@@ -140,7 +238,7 @@ function dedupeEntities(entities: InvestmentEntityRef[]) {
   })
 }
 
-function collapseDisplayEntities(entities: InvestmentEntityRef[]) {
+function getEntitySelectionScore(entity: InvestmentEntityRef) {
   const priority: Record<InvestmentEntityRef["entityType"], number> = {
     security: 6,
     issuer: 5,
@@ -150,15 +248,61 @@ function collapseDisplayEntities(entities: InvestmentEntityRef[]) {
     topic: 1,
   }
 
-  const bestByLabel = new Map<string, InvestmentEntityRef>()
+  let score = priority[entity.entityType] * 100
+  if (!isCodeLikeLabel(entity.label)) score += 20
+  if (entity.market) score += 10
+  if (normalizeSecurityCode(entity.entityId) && entity.entityId.length > 6) score += 5
+  if (entity.code) score += 2
+  return score
+}
+
+function isPreferredEntity(candidate: InvestmentEntityRef, current: InvestmentEntityRef) {
+  const candidateScore = getEntitySelectionScore(candidate)
+  const currentScore = getEntitySelectionScore(current)
+  if (candidateScore !== currentScore) return candidateScore > currentScore
+  if (candidate.label.length !== current.label.length) return candidate.label.length > current.label.length
+  return candidate.entityId.length > current.entityId.length
+}
+
+function getEntityAliasKey(entity: InvestmentEntityRef) {
+  if (entity.entityType === "security") {
+    const normalizedCode = normalizeSecurityCode(entity.code)
+      ?? normalizeSecurityCode(entity.entityId)
+      ?? normalizeSecurityCode(entity.label)
+    if (normalizedCode) return `${entity.entityType}|code:${normalizedCode}`
+  }
+
+  return `${entity.entityType}|label:${normalizeEntityText(entity.label) ?? entity.entityId.toLowerCase()}`
+}
+
+function collapseDisplayEntities(entities: InvestmentEntityRef[]) {
+  const bestByAlias = new Map<string, InvestmentEntityRef>()
   for (const entity of entities) {
-    const existing = bestByLabel.get(entity.label)
-    if (!existing || priority[entity.entityType] > priority[existing.entityType]) {
-      bestByLabel.set(entity.label, entity)
+    const aliasKey = getEntityAliasKey(entity)
+    const existing = bestByAlias.get(aliasKey)
+    if (!existing || isPreferredEntity(entity, existing)) {
+      bestByAlias.set(aliasKey, entity)
+    }
+  }
+
+  const bestByLabel = new Map<string, InvestmentEntityRef>()
+  for (const entity of bestByAlias.values()) {
+    const labelKey = normalizeEntityText(entity.label) ?? entity.entityId.toLowerCase()
+    const existing = bestByLabel.get(labelKey)
+    if (!existing || isPreferredEntity(entity, existing)) {
+      bestByLabel.set(labelKey, entity)
     }
   }
 
   return Array.from(bestByLabel.values())
+}
+
+function collectEntityLookupKeys(entity: InvestmentEntityRef) {
+  const keys = new Set<string>([entity.entityId])
+  if (entity.code) keys.add(entity.code)
+  const normalizedCode = normalizeSecurityCode(entity.code) ?? normalizeSecurityCode(entity.entityId)
+  if (normalizedCode) keys.add(normalizedCode)
+  return Array.from(keys)
 }
 
 export function formatAffectedMarketLabel(value: string) {
@@ -311,6 +455,55 @@ function formatFactLabel(fact: EventFact) {
   }
 }
 
+function formatFactMetricName(fact: EventFact) {
+  switch (fact.metricName) {
+    case "analysis_signal":
+      return "媒体解读"
+    case "rate_fixing":
+      return "利率定价"
+    case "earnings":
+      return "业绩披露"
+    case "financing":
+      return "融资事项"
+    case "contract":
+      return "合同订单"
+    case "shareholding_change":
+      return "股东持股变动"
+    case "management_change":
+      return "管理层变动"
+    case "regulation":
+      return "监管规则"
+    case "listing_status":
+      return "上市与交易状态"
+    case "buyback":
+      return "回购事项"
+    case "dividend":
+      return "分红派息"
+    case "monetary_policy":
+      return "货币政策"
+    case "trade_policy":
+      return "贸易政策"
+    case "industrial_policy":
+      return "产业政策"
+    case "macro_data":
+      return "宏观数据"
+    case "industry_data":
+      return "产业数据"
+    case "industry_news":
+      return "行业动态"
+    case "policy_signal":
+      return "政策线索"
+    case "macro_rate_signal":
+      return "利率线索"
+    case "market_move_signal":
+      return "盘口异动"
+    default:
+      if (fact.factType === "central_bank_operation")
+        return fact.metricName.toUpperCase()
+      return fact.metricName || undefined
+  }
+}
+
 function getFactValueLabels(fact: EventFact) {
   if (fact.factType === "media_fast_signal") {
     if (fact.unit === "%") {
@@ -368,10 +561,12 @@ function formatFactSummary(fact: EventFact) {
 
 function toInvestmentFact(fact: EventFact, entities: Map<string, InvestmentEntityRef>): InvestmentEventFact {
   const valueLabels = getFactValueLabels(fact)
+  const normalizedFactEntityId = normalizeSecurityCode(fact.entityId)
+  const metricName = formatFactMetricName(fact)
   return {
     factType: fact.factType,
     label: formatFactLabel(fact),
-    metricName: fact.factType === "media_fast_signal" ? undefined : (fact.metricName || undefined),
+    metricName: fact.factType === "media_fast_signal" ? undefined : metricName,
     summary: formatFactSummary(fact),
     valueLabel: valueLabels.valueLabel,
     previousValueLabel: valueLabels.previousValueLabel,
@@ -384,12 +579,19 @@ function toInvestmentFact(fact: EventFact, entities: Map<string, InvestmentEntit
     directionLabel: fact.direction ? getFactDirectionLabel(fact.direction as NonNullable<InvestmentEventFact["direction"]>) : null,
     effectiveAt: fact.effectiveAt ?? null,
     confidence: fact.confidence,
-    entity: fact.entityId ? (entities.get(fact.entityId) ?? null) : null,
+    entity: fact.entityId
+      ? (entities.get(fact.entityId)
+        ?? (normalizedFactEntityId ? entities.get(normalizedFactEntityId) : null)
+        ?? null)
+      : null,
     evidenceId: fact.evidenceId ?? null,
   }
 }
 
-function toInvestmentEvidence(evidence: EventEvidence, sourceKind?: EventSourceKind): InvestmentEventEvidence {
+function toInvestmentEvidence(evidence: EventEvidence, options?: {
+  sourceKind?: EventSourceKind
+  primaryEntityName?: string
+}): InvestmentEventEvidence {
   const extractionStatus = evidence.extractionStatus
     ? evidence.extractionStatus === "unknown"
       ? "legacy"
@@ -402,8 +604,11 @@ function toInvestmentEvidence(evidence: EventEvidence, sourceKind?: EventSourceK
     sourceTitle: evidence.sourceTitle,
     authorityLevel: evidence.authorityLevel || "unknown",
     authorityLabel: getAuthorityLevelLabel(evidence.authorityLevel || "unknown"),
-    sourceKind,
-    title: evidence.title,
+    sourceKind: options?.sourceKind,
+    title: formatInvestmentDisplayTitle(evidence.title, {
+      sourceKind: options?.sourceKind,
+      primaryEntityName: options?.primaryEntityName,
+    }),
     summary: evidence.summary,
     url: evidence.url,
     publishedAt: evidence.publishedAt,
@@ -510,6 +715,8 @@ function deriveSubjectSummary(primarySubject: InvestmentEntityRef | undefined, w
       return `影响市场：${primarySubject.label}`
     if (primarySubject.entityType === "industry")
       return `核心赛道：${primarySubject.label}`
+    if (primarySubject.entityType === "institution")
+      return `发布机构：${primarySubject.label}`
     return `核心主体：${primarySubject.label}`
   }
 
@@ -864,12 +1071,22 @@ export function projectInvestmentEventBrief(event: EventRecord): InvestmentEvent
   const signalDirection = event.directionalView ?? "unknown"
   const tradableNow = deriveTradableNow(event.tradabilityScore, eventFamily)
   const whatToWatchNext = deriveWhatToWatchNext(event, eventFamily, event.directionalView ?? "unknown")
-  const primaryEntityType = event.primaryEntityName ? inferPrimaryEntityType(event, event.primaryEntityName) : undefined
+  const publisherInstitution = event.sourceIds[0] ? sources[event.sourceIds[0]]?.name : undefined
+  const displayPrimaryEntityName = getDisplayPrimaryEntityName(event, publisherInstitution)
+  const displayTitle = formatInvestmentDisplayTitle(event.title, {
+    sourceKind: event.sourceKind,
+    primaryEntityName: displayPrimaryEntityName ?? event.primaryEntityName ?? undefined,
+  })
+  const displayEvent = {
+    ...event,
+    title: displayTitle,
+  }
+  const primaryEntityType = displayPrimaryEntityName ? inferPrimaryEntityType(event, displayPrimaryEntityName) : undefined
   const affectedEntities = dedupeEntities([
-    ...(event.primaryEntityName
+    ...(displayPrimaryEntityName
       ? [{
-          entityId: event.primaryEntityName,
-          label: event.primaryEntityName,
+          entityId: displayPrimaryEntityName,
+          label: displayPrimaryEntityName,
           entityType: primaryEntityType!,
           entityTypeLabel: mapEntityTypeLabel(primaryEntityType!),
         }]
@@ -882,22 +1099,23 @@ export function projectInvestmentEventBrief(event: EventRecord): InvestmentEvent
     })),
   ]).slice(0, 6)
 
-  const whyItMatters = selectWhyItMatters(event, eventFamily)
+  const whyItMatters = selectWhyItMatters(displayEvent, eventFamily)
   const affectedMarketLabels = event.affectedMarkets.map(formatAffectedMarketLabel)
   const primarySubject = derivePrimarySubject(affectedEntities, event.affectedMarkets)
   const whoIsAffected = deriveWhoIsAffected(affectedEntities, event.affectedMarkets)
-  const publisherInstitution = event.sourceIds[0] ? sources[event.sourceIds[0]]?.name : undefined
 
   return {
     eventId: event.eventId,
-    title: event.title,
+    title: displayTitle,
     summary: event.summary,
     eventFamily,
     eventFamilyLabel: getInvestmentEventFamilyLabel(eventFamily),
     actionBucket,
     actionLabel: getInvestmentActionLabel(actionBucket),
     actionReason: deriveActionReason(event, eventFamily, actionBucket, whatToWatchNext),
-    whatHappened: deriveWhatHappened(event, eventFamily),
+    whatHappened: deriveWhatHappened({
+      ...displayEvent,
+    }, eventFamily),
     whoIsAffected,
     signalDirection,
     signalDirectionLabel: getDirectionalViewLabel(signalDirection),
@@ -937,7 +1155,9 @@ export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEve
   const entities = collapseDisplayEntities(dedupeEntities(detail.entities.map(toInvestmentEntity)))
   const entityMap = new Map<string, InvestmentEntityRef>()
   for (const entity of entities) {
-    entityMap.set(entity.entityId, entity)
+    for (const key of collectEntityLookupKeys(entity)) {
+      if (!entityMap.has(key)) entityMap.set(key, entity)
+    }
   }
 
   const brief = projectInvestmentEventBrief({
@@ -947,7 +1167,10 @@ export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEve
 
   const evidence = detail.evidences
     .filter(item => item.title || item.url)
-    .map(item => toInvestmentEvidence(item, detail.sourceKind))
+    .map(item => toInvestmentEvidence(item, {
+      sourceKind: detail.sourceKind,
+      primaryEntityName: entities[0]?.label ?? detail.primaryEntityName ?? undefined,
+    }))
 
   const sourceKinds = detail.sourceKind ? [detail.sourceKind] : []
   const primaryEvidence = evidence[0]
@@ -983,7 +1206,7 @@ export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEve
         note: summarizeTimelineReason(entry.reason, entry.metadata),
         relatedEventId: typeof entry.metadata?.mergedEventId === "string" ? entry.metadata.mergedEventId : undefined,
         relatedEventTitle: typeof entry.metadata?.mergedEventTitle === "string"
-          ? entry.metadata.mergedEventTitle
+          ? formatInvestmentDisplayTitle(entry.metadata.mergedEventTitle)
           : typeof entry.metadata?.mergedEventId === "string"
             ? "历史归并事件（原记录已清理）"
             : undefined,

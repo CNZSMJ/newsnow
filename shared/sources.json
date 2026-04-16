@@ -1106,7 +1106,6 @@
         "fund"
       ],
       "markets": [
-        "A",
         "HK"
       ]
     },
@@ -1128,7 +1127,6 @@
         "fund"
       ],
       "markets": [
-        "A",
         "HK"
       ]
     },
@@ -1150,7 +1148,6 @@
         "fund"
       ],
       "markets": [
-        "A",
         "HK"
       ],
       "defaultEventSubType": "earnings"
@@ -1173,7 +1170,6 @@
         "fund"
       ],
       "markets": [
-        "A",
         "HK"
       ],
       "defaultEventSubType": "listing_status"
@@ -1197,8 +1193,7 @@
         "fund"
       ],
       "markets": [
-        "A",
-        "HK"
+        "A"
       ]
     },
     "color": "blue",
@@ -1219,8 +1214,7 @@
         "fund"
       ],
       "markets": [
-        "A",
-        "HK"
+        "A"
       ]
     },
     "color": "blue",
@@ -1259,8 +1253,7 @@
         "fund"
       ],
       "markets": [
-        "A",
-        "HK"
+        "A"
       ]
     },
     "color": "indigo",
@@ -1281,8 +1274,7 @@
         "fund"
       ],
       "markets": [
-        "A",
-        "HK"
+        "A"
       ]
     },
     "color": "indigo",
@@ -1303,8 +1295,7 @@
         "fund"
       ],
       "markets": [
-        "A",
-        "HK"
+        "A"
       ]
     },
     "color": "indigo",
@@ -1325,7 +1316,6 @@
         "fund"
       ],
       "markets": [
-        "A",
         "HK"
       ]
     },
@@ -1347,7 +1337,6 @@
         "fund"
       ],
       "markets": [
-        "A",
         "HK"
       ]
     },
@@ -1369,7 +1358,6 @@
         "fund"
       ],
       "markets": [
-        "A",
         "HK"
       ],
       "defaultEventSubType": "shareholding_change"

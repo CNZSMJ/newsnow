@@ -3,6 +3,20 @@ import { sourceKindAllowedEventTypes } from "@shared/event-profile"
 import type { SourceID } from "@shared/types"
 import sources from "@shared/sources"
 
+export function getExchangeDisclosureMarkets(sourceId: SourceID) {
+  if (sourceId.startsWith("hkexnews") || sourceId.startsWith("cninfo-hk")) {
+    return ["HK"] as const
+  }
+  if (
+    sourceId === "cninfo"
+    || sourceId.startsWith("cninfo-s")
+    || sourceId.startsWith("sse")
+  ) {
+    return ["A"] as const
+  }
+  return ["A", "HK"] as const
+}
+
 function getLegacyProfile(sourceId: SourceID): EventProfile | undefined {
   const [mainId] = sourceId.split("-")
   if (["pbc", "safe", "csrc", "gov", "sasac", "mof", "mofcom"].includes(mainId)) {
@@ -50,7 +64,15 @@ function getLegacyProfile(sourceId: SourceID): EventProfile | undefined {
 }
 
 export function getSourceEventProfile(sourceId: SourceID) {
-  return sources[sourceId]?.eventProfile ?? getLegacyProfile(sourceId)
+  const profile = sources[sourceId]?.eventProfile ?? getLegacyProfile(sourceId)
+  if (!profile) return profile
+  if (profile.sourceKind === "exchange_disclosure") {
+    return {
+      ...profile,
+      markets: [...getExchangeDisclosureMarkets(sourceId)],
+    }
+  }
+  return profile
 }
 
 export function validateSourceEventProfile(sourceId: SourceID) {
