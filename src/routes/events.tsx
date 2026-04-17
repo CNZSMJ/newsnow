@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router"
 import type { AffectedMarket, DirectionalView } from "@shared/event-profile"
-import { allIndustryTags, industries } from "@shared/industry"
+import { allIndustryTags, industries, type IndustryTag } from "@shared/industry"
 import type { ReactNode } from "react"
 import type {
   EventType,
@@ -131,7 +131,18 @@ function EventsListPage() {
   })
 
   const query = useQuery({
-    queryKey: ["events", { sortBy, eventType, eventFamily, market, directionalView, industry, focusMode, queryMode, activeQuery }],
+    queryKey: ["events", {
+      sortBy,
+      eventType,
+      eventFamily,
+      market,
+      directionalView,
+      industry,
+      focusMode,
+      queryMode,
+      activeQuery,
+      visibleLimit,
+    }],
     queryFn: async () => {
       const baseQuery = {
         limit: visibleLimit,
@@ -504,6 +515,7 @@ function EventsListPage() {
                 key={item.eventId}
                 item={item}
                 compact={compactMode}
+                activeIndustry={industry === "all" ? undefined : industry}
                 watchlists={getMatchingWatchlists(item, watchlistsQuery.data?.items ?? [], 2)}
               />
             ))}
@@ -555,7 +567,19 @@ function FilterSelect<T extends string>(props: {
   )
 }
 
-function EventCard({ item, compact, watchlists }: { item: InvestmentEventBrief, compact: boolean, watchlists: WatchlistRecord[] }) {
+function EventCard({
+  item,
+  compact,
+  activeIndustry,
+  watchlists,
+}: {
+  item: InvestmentEventBrief
+  compact: boolean
+  activeIndustry?: IndustryTag
+  watchlists: WatchlistRecord[]
+}) {
+  const visibleTopicTags = getVisibleTopicTags(item.relatedTopics, activeIndustry)
+
   return (
     <article className={$([
       "rounded-3xl border border-neutral-400/10 bg-base px-5 py-4",
@@ -571,8 +595,8 @@ function EventCard({ item, compact, watchlists }: { item: InvestmentEventBrief, 
         {!!item.affectedMarkets.length && item.affectedMarketLabels.slice(0, 3).map(marketLabel => (
           <Badge key={marketLabel} tone="subtle">{marketLabel}</Badge>
         ))}
-        {!!item.relatedTopics.length && item.relatedTopics.slice(0, 2).map(tag => (
-          <Badge key={tag} tone="subtle">{industries[tag]}</Badge>
+        {!!visibleTopicTags.length && visibleTopicTags.map(tag => (
+          <Badge key={tag} tone={tag === activeIndustry ? "default" : "subtle"}>{industries[tag]}</Badge>
         ))}
       </div>
       <div className="mt-3 flex items-start justify-between gap-4">
@@ -751,4 +775,11 @@ function formatMarket(value: AffectedMarket) {
     case "global_macro": return "全球宏观"
     default: return value
   }
+}
+
+function getVisibleTopicTags(tags: IndustryTag[], activeIndustry?: IndustryTag) {
+  if (!tags.length) return [] as IndustryTag[]
+  if (!activeIndustry || !tags.includes(activeIndustry)) return tags.slice(0, 2)
+  const ordered = [activeIndustry, ...tags.filter(tag => tag !== activeIndustry)]
+  return ordered.slice(0, 2)
 }

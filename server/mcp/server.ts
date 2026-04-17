@@ -24,8 +24,9 @@ const affectedMarketEnum = ["A", "HK", "CN_rates", "CN_macro", "global_macro"] a
 const directionalViewEnum = ["positive", "negative", "neutral", "mixed", "unknown"] as const
 const scanFocusEnum = ["all", "actionable", "watchable"] as const
 const countSchema = z.coerce.number().int().positive().max(100).default(10)
+const timeFilterSchema = z.union([z.string(), z.number()]).optional()
 
-function formatInvestmentEventSummary(item: Pick<McpInvestmentEventBrief, "title" | "eventId" | "actionBucket" | "actionLabel" | "actionReason" | "eventFamily" | "eventFamilyLabel" | "whatHappened" | "whoIsAffected" | "affectedEntities" | "subjectSummary" | "publisherInstitution" | "latestLifecycleState" | "latestLifecycleAt" | "signalDirection" | "signalDirectionLabel" | "signalConfidence" | "materialityScore" | "tradabilityScore" | "authorityScore" | "affectedMarkets" | "affectedMarketLabels" | "tradableNow" | "tradableNowLabel" | "relatedTopics" | "whyItMatters" | "whatToWatchNext" | "riskOfMisread" | "sourceSummary" | "canonicalUrl">) {
+function formatInvestmentEventSummary(item: Pick<McpInvestmentEventBrief, "title" | "eventId" | "actionBucket" | "actionLabel" | "actionReason" | "eventFamily" | "eventFamilyLabel" | "whatHappened" | "whoIsAffected" | "affectedEntities" | "subjectSummary" | "publisherInstitution" | "latestLifecycleState" | "latestLifecycleAt" | "seriesSummary" | "signalDirection" | "signalDirectionLabel" | "signalConfidence" | "materialityScore" | "tradabilityScore" | "authorityScore" | "affectedMarkets" | "affectedMarketLabels" | "tradableNow" | "tradableNowLabel" | "relatedTopics" | "whyItMatters" | "whatToWatchNext" | "riskOfMisread" | "sourceSummary" | "canonicalUrl">) {
   return [
     item.title,
     `- event_id: ${item.eventId}`,
@@ -38,6 +39,7 @@ function formatInvestmentEventSummary(item: Pick<McpInvestmentEventBrief, "title
     item.publisherInstitution ? `- publisher: ${item.publisherInstitution}` : undefined,
     `- action_reason: ${item.actionReason}`,
     item.latestLifecycleState ? `- lifecycle: ${item.latestLifecycleState}${item.latestLifecycleAt ? ` @ ${new Date(item.latestLifecycleAt).toISOString()}` : ""}` : undefined,
+    item.seriesSummary ? `- series: ${item.seriesSummary}` : undefined,
     `- signal: ${item.signalDirection} (${item.signalDirectionLabel}, ${item.signalConfidence})`,
     `- materiality: ${item.materialityScore}`,
     `- tradability: ${item.tradabilityScore}`,
@@ -109,10 +111,14 @@ export function getServer() {
       directional_view: z.enum(directionalViewEnum).optional(),
       min_materiality_score: z.number().optional(),
       min_authority_score: z.number().optional(),
+      changed_since: timeFilterSchema.describe("only return events whose latest lifecycle change is at or after this timestamp"),
+      lifecycle_after: timeFilterSchema.describe("alias of changed_since"),
+      series_key: z.string().optional(),
+      period_key: z.string().optional(),
       latest: z.boolean().default(true).optional(),
-      sort: z.enum(["investment", "latest"]).default("investment").optional(),
+      sort: z.enum(["investment", "latest", "changed"]).default("investment").optional(),
     },
-    async ({ count, focus, event_family, market, topic, directional_view, min_materiality_score, min_authority_score, latest, sort }): Promise<CallToolResult> => {
+    async ({ count, focus, event_family, market, topic, directional_view, min_materiality_score, min_authority_score, changed_since, lifecycle_after, series_key, period_key, latest, sort }): Promise<CallToolResult> => {
       let n = Number(count)
       if (Number.isNaN(n) || n < 1) n = 10
       const focusMode = focus ?? "all"
@@ -129,6 +135,10 @@ export function getServer() {
       if (directional_view) query.set("directional_view", directional_view)
       if (min_materiality_score !== undefined) query.set("min_materiality_score", String(min_materiality_score))
       if (min_authority_score !== undefined) query.set("min_authority_score", String(min_authority_score))
+      if (changed_since !== undefined) query.set("changed_since", String(changed_since))
+      if (lifecycle_after !== undefined) query.set("lifecycle_after", String(lifecycle_after))
+      if (series_key) query.set("series_key", series_key)
+      if (period_key) query.set("period_key", period_key)
 
       const res: InvestmentProviderEventListResponse = await $fetch(`/api/investment-events/latest?${query.toString()}`)
       const items = res.items.map(item => toMcpEventBrief(item)).slice(0, n)
@@ -164,15 +174,21 @@ export function getServer() {
       focus: z.enum(scanFocusEnum).default("all").optional(),
       min_materiality_score: z.number().optional(),
       min_authority_score: z.number().optional(),
+      changed_since: timeFilterSchema.describe("only return events whose latest lifecycle change is at or after this timestamp"),
+      lifecycle_after: timeFilterSchema.describe("alias of changed_since"),
+      series_key: z.string().optional(),
+      period_key: z.string().optional(),
       latest: z.boolean().default(true).optional(),
+      sort: z.enum(["investment", "latest", "changed"]).default("latest").optional(),
     },
-    async ({ count, event_type, event_subtype, event_family, source_id, topic, market, directional_view, focus, min_materiality_score, min_authority_score, latest }): Promise<CallToolResult> => {
+    async ({ count, event_type, event_subtype, event_family, source_id, topic, market, directional_view, focus, min_materiality_score, min_authority_score, changed_since, lifecycle_after, series_key, period_key, latest, sort }): Promise<CallToolResult> => {
       let n = Number(count)
       if (Number.isNaN(n) || n < 1) n = 10
 
       const query = new URLSearchParams({
         limit: String(n),
         latest: String(latest ?? true),
+        sort: sort ?? "latest",
       })
       if (event_type) query.set("event_type", event_type)
       if (event_subtype) query.set("event_subtype", event_subtype)
@@ -184,6 +200,10 @@ export function getServer() {
       if (focus) query.set("focus", focus)
       if (min_materiality_score !== undefined) query.set("min_materiality_score", String(min_materiality_score))
       if (min_authority_score !== undefined) query.set("min_authority_score", String(min_authority_score))
+      if (changed_since !== undefined) query.set("changed_since", String(changed_since))
+      if (lifecycle_after !== undefined) query.set("lifecycle_after", String(lifecycle_after))
+      if (series_key) query.set("series_key", series_key)
+      if (period_key) query.set("period_key", period_key)
 
       const res: InvestmentProviderEventListResponse = await $fetch(`/api/investment-events/latest?${query.toString()}`)
       const items = res.items.map(item => toMcpEventBrief(item))
@@ -208,9 +228,14 @@ export function getServer() {
       directional_view: z.enum(directionalViewEnum).optional(),
       min_materiality_score: z.number().optional(),
       min_authority_score: z.number().optional(),
+      changed_since: timeFilterSchema.describe("only return events whose latest lifecycle change is at or after this timestamp"),
+      lifecycle_after: timeFilterSchema.describe("alias of changed_since"),
+      series_key: z.string().optional(),
+      period_key: z.string().optional(),
       latest: z.boolean().default(false).optional(),
+      sort: z.enum(["investment", "latest", "changed"]).default("investment").optional(),
     },
-    async ({ q, count, event_family, market, directional_view, min_materiality_score, min_authority_score, latest }): Promise<CallToolResult> => {
+    async ({ q, count, event_family, market, directional_view, min_materiality_score, min_authority_score, changed_since, lifecycle_after, series_key, period_key, latest, sort }): Promise<CallToolResult> => {
       let n = Number(count)
       if (Number.isNaN(n) || n < 1) n = 10
 
@@ -218,12 +243,17 @@ export function getServer() {
         q,
         limit: String(n),
         latest: String(latest ?? false),
+        sort: sort ?? "investment",
       })
       if (event_family) query.set("event_family", event_family)
       if (market) query.set("market", market)
       if (directional_view) query.set("directional_view", directional_view)
       if (min_materiality_score !== undefined) query.set("min_materiality_score", String(min_materiality_score))
       if (min_authority_score !== undefined) query.set("min_authority_score", String(min_authority_score))
+      if (changed_since !== undefined) query.set("changed_since", String(changed_since))
+      if (lifecycle_after !== undefined) query.set("lifecycle_after", String(lifecycle_after))
+      if (series_key) query.set("series_key", series_key)
+      if (period_key) query.set("period_key", period_key)
       const res: InvestmentProviderEventListResponse = await $fetch(`/api/investment-events/search?${query.toString()}`)
       const items = res.items.map(item => toMcpEventBrief(item))
       return {
@@ -250,9 +280,14 @@ export function getServer() {
       directional_view: z.enum(directionalViewEnum).optional(),
       min_materiality_score: z.number().optional(),
       min_authority_score: z.number().optional(),
+      changed_since: timeFilterSchema.describe("only return events whose latest lifecycle change is at or after this timestamp"),
+      lifecycle_after: timeFilterSchema.describe("alias of changed_since"),
+      series_key: z.string().optional(),
+      period_key: z.string().optional(),
       latest: z.boolean().default(true).optional(),
+      sort: z.enum(["investment", "latest", "changed"]).default("latest").optional(),
     },
-    async ({ entity, count, event_family, market, directional_view, min_materiality_score, min_authority_score, latest }): Promise<CallToolResult> => {
+    async ({ entity, count, event_family, market, directional_view, min_materiality_score, min_authority_score, changed_since, lifecycle_after, series_key, period_key, latest, sort }): Promise<CallToolResult> => {
       let n = Number(count)
       if (Number.isNaN(n) || n < 1) n = 10
 
@@ -260,12 +295,17 @@ export function getServer() {
         entity,
         limit: String(n),
         latest: String(latest ?? true),
+        sort: sort ?? "latest",
       })
       if (event_family) query.set("event_family", event_family)
       if (market) query.set("market", market)
       if (directional_view) query.set("directional_view", directional_view)
       if (min_materiality_score !== undefined) query.set("min_materiality_score", String(min_materiality_score))
       if (min_authority_score !== undefined) query.set("min_authority_score", String(min_authority_score))
+      if (changed_since !== undefined) query.set("changed_since", String(changed_since))
+      if (lifecycle_after !== undefined) query.set("lifecycle_after", String(lifecycle_after))
+      if (series_key) query.set("series_key", series_key)
+      if (period_key) query.set("period_key", period_key)
       const res: InvestmentProviderEventListResponse = await $fetch(`/api/investment-events/entity?${query.toString()}`)
       const items = res.items.map(item => toMcpEventBrief(item))
       return {

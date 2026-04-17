@@ -15,6 +15,7 @@ import type {
   SourceID,
 } from "@shared/types"
 import sources from "@shared/sources"
+import { consola } from "consola"
 import type { Database } from "db0"
 import { getRows, parseJSON } from "#/database/sqlite"
 import {
@@ -23,18 +24,33 @@ import {
   normalizeFactEntityIds,
   normalizePrimaryEntityName,
 } from "#/services/event-engine/entity-normalization"
+import { extractEntityLinks } from "#/services/event-engine/entity"
+import { getEntityLookupTerms } from "#/services/event-engine/entity-registry"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
 import { getExchangeDisclosureMarkets, getSourceEventProfile } from "#/services/event-engine/profiles"
 import { resolveEventClassification } from "#/services/event-engine/resolver"
+import { HIGH_VALUE_SOURCE_KINDS, type EventBaseQualitySnapshot } from "#/services/event-engine/slo"
 import { inferIndustryTagsFromText } from "#/services/event-engine/text"
 import type { EntityLinkRow, EventEvidenceRow, EventFactRow, EventRow, EventSourceRow, EventTimelineRow, RawItemRow } from "#/types"
 import { getEventRecencyAnchor, scoreInvestmentEvent } from "#/services/event-engine/ranking"
+
+function getEventTableLogger() {
+  return (globalThis as typeof globalThis & {
+    logger?: Pick<typeof consola, "success" | "error">
+  }).logger ?? consola.withTag("event-table")
+}
 
 interface EventQueryRow extends EventRow {
   evidence_count?: number
   source_ids_json?: string | null
   latest_lifecycle_state?: EventLifecycleState | null
   latest_lifecycle_at?: number | null
+}
+
+export interface EventDetailRow extends EventDetail {
+  seriesKey?: string
+  periodKey?: string
+  releaseCadence?: string
 }
 
 interface EventEvidenceQueryRow {
@@ -52,6 +68,62 @@ interface EventEvidenceQueryRow {
   parser_family?: string | null
   extraction_status?: string | null
   extraction_error?: string | null
+}
+
+export interface EventOperationalLatencyDiagnosticBucket {
+  sourceKind: string
+  sourceId?: SourceID
+  sourceName?: string
+  totalEvents: number
+  latencySampleCount: number
+  staleEventCount: number
+  freshEventCount: number
+  staleSharePct: number | null
+  avgIngestLatencyMs: number | null
+  p95IngestLatencyMs: number | null
+  maxIngestLatencyMs: number | null
+  avgPublicationAgeMs: number | null
+  p95PublicationAgeMs: number | null
+  maxPublicationAgeMs: number | null
+  avgLastSeenDelayMs: number | null
+  p95LastSeenDelayMs: number | null
+  maxLastSeenDelayMs: number | null
+}
+
+export interface EventOperationalLatencyDiagnostics {
+  generatedAt: number
+  windowStartAt: number
+  staleThresholdMs: number
+  sourceKindBreakdown: EventOperationalLatencyDiagnosticBucket[]
+  sourceBreakdown: EventOperationalLatencyDiagnosticBucket[]
+}
+
+function percentageOrNull(numerator: number, denominator: number) {
+  if (denominator <= 0) return null
+  return Number(((numerator / denominator) * 100).toFixed(2))
+}
+
+function percentileFromSorted(values: number[], percentile: number) {
+  if (!values.length) return null
+  const index = Math.min(values.length - 1, Math.max(0, Math.ceil(values.length * percentile) - 1))
+  return values[index] ?? null
+}
+
+function summarizeOperationalDurations(values: number[]) {
+  if (!values.length) {
+    return {
+      avgMs: null,
+      p95Ms: null,
+      maxMs: null,
+    }
+  }
+
+  const sortedValues = [...values].sort((left, right) => left - right)
+  return {
+    avgMs: Math.round(sortedValues.reduce((sum, value) => sum + value, 0) / sortedValues.length),
+    p95Ms: percentileFromSorted(sortedValues, 0.95),
+    maxMs: sortedValues[sortedValues.length - 1] ?? null,
+  }
 }
 
 export class EventTable {
@@ -126,6 +198,9 @@ export class EventTable {
         ingested_at INTEGER NOT NULL,
         canonical_url TEXT,
         primary_entity_name TEXT,
+        series_key TEXT,
+        period_key TEXT,
+        release_cadence TEXT,
         importance TEXT NOT NULL,
         sentiment TEXT,
         directional_view TEXT,
@@ -146,6 +221,9 @@ export class EventTable {
     await this.ensureColumn("events", "event_subtype", "TEXT NOT NULL DEFAULT 'other'")
     await this.ensureColumn("events", "primary_entity_name", "TEXT")
     await this.ensureColumn("events", "source_kind", "TEXT")
+    await this.ensureColumn("events", "series_key", "TEXT")
+    await this.ensureColumn("events", "period_key", "TEXT")
+    await this.ensureColumn("events", "release_cadence", "TEXT")
     await this.ensureColumn("events", "directional_view", "TEXT")
     await this.ensureColumn("events", "directional_confidence", "INTEGER")
     await this.ensureColumn("events", "materiality_score", "INTEGER")
@@ -273,7 +351,7 @@ export class EventTable {
     `).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_entity_links_name ON entity_links(entity_name, entity_type);`).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_entity_links_code ON entity_links(code, full_code);`).run()
-    logger.success("init event tables")
+    getEventTableLogger().success("init event tables")
   }
 
   async upsertRawItem(row: RawItemRow) {
@@ -324,9 +402,9 @@ export class EventTable {
     await this.db.prepare(`
       INSERT INTO events (
         event_id, cluster_key, title, summary, event_type, event_subtype, source_kind, published_at, ingested_at, canonical_url,
-        primary_entity_name, importance, sentiment, directional_view, directional_confidence, materiality_score, tradability_score,
+        primary_entity_name, series_key, period_key, release_cadence, importance, sentiment, directional_view, directional_confidence, materiality_score, tradability_score,
         authority_score, freshness_score, surprise_score, affected_markets_json, impact_summary_json, degraded, topic_tags_json, last_seen_at, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(cluster_key) DO UPDATE SET
         title = excluded.title,
         summary = COALESCE(excluded.summary, events.summary),
@@ -337,6 +415,9 @@ export class EventTable {
         ingested_at = excluded.ingested_at,
         canonical_url = COALESCE(events.canonical_url, excluded.canonical_url),
         primary_entity_name = COALESCE(events.primary_entity_name, excluded.primary_entity_name),
+        series_key = COALESCE(events.series_key, excluded.series_key),
+        period_key = COALESCE(events.period_key, excluded.period_key),
+        release_cadence = COALESCE(events.release_cadence, excluded.release_cadence),
         importance = excluded.importance,
         sentiment = COALESCE(excluded.sentiment, events.sentiment),
         directional_view = COALESCE(excluded.directional_view, events.directional_view),
@@ -364,6 +445,9 @@ export class EventTable {
       row.ingested_at,
       row.canonical_url,
       row.primary_entity_name,
+      row.series_key ?? null,
+      row.period_key ?? null,
+      row.release_cadence ?? null,
       row.importance,
       row.sentiment,
       row.directional_view,
@@ -568,6 +652,236 @@ export class EventTable {
     }
   }
 
+  async getQualitySnapshot(options?: {
+    since?: number
+  }): Promise<EventBaseQualitySnapshot> {
+    const since = options?.since ?? (Date.now() - 24 * 60 * 60 * 1000)
+    const placeholders = HIGH_VALUE_SOURCE_KINDS.map(() => "?").join(", ")
+    const filter = `
+      WHERE e.status = 'active'
+        AND COALESCE(e.published_at, e.ingested_at) >= ?
+        AND COALESCE(e.source_kind, '') IN (${placeholders})
+    `
+
+    const coverageRow = await this.db.prepare(`
+      SELECT
+        COUNT(*) AS high_value_source_event_count,
+        SUM(CASE WHEN e.degraded = 0 AND (
+          EXISTS (
+            SELECT 1
+            FROM event_facts ef
+            WHERE ef.event_id = e.event_id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM event_evidence ee
+            WHERE ee.event_id = e.event_id
+              AND COALESCE(ee.extraction_status, '') IN ('ready', 'structured')
+          )
+        ) THEN 1 ELSE 0 END) AS high_value_structured_event_count,
+        SUM(CASE WHEN e.event_type = 'news' AND e.event_subtype = 'other' THEN 1 ELSE 0 END) AS high_value_generic_fallback_event_count,
+        SUM(CASE WHEN e.degraded = 1 THEN 1 ELSE 0 END) AS high_value_degraded_event_count
+      FROM events e
+      ${filter}
+    `).get(since, ...HIGH_VALUE_SOURCE_KINDS) as {
+      high_value_source_event_count?: number | null
+      high_value_structured_event_count?: number | null
+      high_value_generic_fallback_event_count?: number | null
+      high_value_degraded_event_count?: number | null
+    } | undefined
+
+    const latencyRows = getRows<{ ingest_latency_ms: number | null }>(await this.db.prepare(`
+      SELECT MAX(0, e.ingested_at - e.published_at) AS ingest_latency_ms
+      FROM events e
+      ${filter}
+        AND e.published_at IS NOT NULL
+      ORDER BY ingest_latency_ms ASC
+    `).all(since, ...HIGH_VALUE_SOURCE_KINDS))
+      .map(row => row.ingest_latency_ms)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+
+    const highValueSourceEventCount = Number(coverageRow?.high_value_source_event_count) || 0
+    const highValueStructuredEventCount = Number(coverageRow?.high_value_structured_event_count) || 0
+    const highValueGenericFallbackEventCount = Number(coverageRow?.high_value_generic_fallback_event_count) || 0
+    const highValueDegradedEventCount = Number(coverageRow?.high_value_degraded_event_count) || 0
+    const highValueStructuredCoveragePct = percentageOrNull(highValueStructuredEventCount, highValueSourceEventCount)
+    const highValueGenericFallbackSharePct = percentageOrNull(highValueGenericFallbackEventCount, highValueSourceEventCount)
+    const prioritySourceAvgIngestLatencyMs = latencyRows.length
+      ? Math.round(latencyRows.reduce((sum, value) => sum + value, 0) / latencyRows.length)
+      : null
+    const prioritySourceIngestLatencyP95Ms = percentileFromSorted(latencyRows, 0.95)
+
+    return {
+      generatedAt: Date.now(),
+      windowStartAt: since,
+      highValue: {
+        sourceKinds: [...HIGH_VALUE_SOURCE_KINDS],
+        totalEventCount: highValueSourceEventCount,
+        structuredEventCount: highValueStructuredEventCount,
+        degradedEventCount: highValueDegradedEventCount,
+        genericFallbackEventCount: highValueGenericFallbackEventCount,
+        structuredCoveragePct: highValueStructuredCoveragePct,
+        genericFallbackSharePct: highValueGenericFallbackSharePct,
+        latencySampleCount: latencyRows.length,
+        avgIngestLatencyMs: prioritySourceAvgIngestLatencyMs,
+        p95IngestLatencyMs: prioritySourceIngestLatencyP95Ms,
+      },
+      highValueSourceEventCount,
+      highValueStructuredEventCount,
+      highValueStructuredCoveragePct,
+      highValueDegradedEventCount,
+      highValueGenericFallbackEventCount,
+      highValueGenericFallbackSharePct,
+      prioritySourceAvgIngestLatencyMs,
+      prioritySourceIngestLatencyP95Ms,
+    }
+  }
+
+  async getOperationalLatencyDiagnostics(options?: {
+    since?: number
+    limit?: number
+    staleThresholdMs?: number
+  }): Promise<EventOperationalLatencyDiagnostics> {
+    const generatedAt = Date.now()
+    const since = options?.since ?? (generatedAt - 24 * 60 * 60 * 1000)
+    const limit = options?.limit ?? 10
+    const staleThresholdMs = options?.staleThresholdMs ?? 5 * 60 * 1000
+    const placeholders = HIGH_VALUE_SOURCE_KINDS.map(() => "?").join(", ")
+    const rows = getRows<{
+      source_kind?: string | null
+      source_id?: SourceID | null
+      published_at?: number | null
+      ingested_at?: number | null
+      last_seen_at?: number | null
+      ingest_latency_ms?: number | null
+    }>(await this.db.prepare(`
+      SELECT
+        e.source_kind,
+        (
+          SELECT ee.source_id
+          FROM event_evidence ee
+          WHERE ee.event_id = e.event_id
+          ORDER BY
+            ee.rank ASC,
+            COALESCE(ee.source_priority, 0) DESC,
+            COALESCE(ee.published_at, ee.fetched_at) DESC,
+            ee.raw_id ASC
+          LIMIT 1
+        ) AS source_id,
+        e.published_at,
+        e.ingested_at,
+        e.last_seen_at,
+        MAX(0, e.ingested_at - e.published_at) AS ingest_latency_ms
+      FROM events e
+      WHERE e.status = 'active'
+        AND COALESCE(e.published_at, e.ingested_at) >= ?
+        AND COALESCE(e.source_kind, '') IN (${placeholders})
+      ORDER BY ingest_latency_ms DESC
+    `).all(since, ...HIGH_VALUE_SOURCE_KINDS))
+
+    const bySourceKind = new Map<string, typeof rows>()
+    const bySource = new Map<string, {
+      sourceKind: string
+      sourceId: SourceID
+      rows: typeof rows
+    }>()
+
+    for (const row of rows) {
+      const sourceKind = row.source_kind ?? "unknown"
+      const sourceKindBucket = bySourceKind.get(sourceKind) ?? []
+      sourceKindBucket.push(row)
+      bySourceKind.set(sourceKind, sourceKindBucket)
+
+      if (!row.source_id) continue
+      const key = `${sourceKind}|${row.source_id}`
+      const sourceBucket = bySource.get(key) ?? {
+        sourceKind,
+        sourceId: row.source_id,
+        rows: [],
+      }
+      sourceBucket.rows.push(row)
+      bySource.set(key, sourceBucket)
+    }
+
+    const toBucket = (
+      sourceKind: string,
+      bucketRows: typeof rows,
+      sourceId?: SourceID,
+    ): EventOperationalLatencyDiagnosticBucket => {
+      const latencies = bucketRows
+        .map(row => row.ingest_latency_ms)
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+      const publicationAges = bucketRows
+        .map((row) => {
+          const publicationAnchor = row.published_at ?? row.ingested_at
+          if (typeof publicationAnchor !== "number" || !Number.isFinite(publicationAnchor)) return null
+          return Math.max(0, generatedAt - publicationAnchor)
+        })
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+      const lastSeenDelays = bucketRows
+        .map((row) => {
+          const lastSeenAt = row.last_seen_at ?? row.ingested_at
+          if (typeof lastSeenAt !== "number" || !Number.isFinite(lastSeenAt)) return null
+          return Math.max(0, generatedAt - lastSeenAt)
+        })
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+      const latencySummary = summarizeOperationalDurations(latencies)
+      const publicationAgeSummary = summarizeOperationalDurations(publicationAges)
+      const lastSeenDelaySummary = summarizeOperationalDurations(lastSeenDelays)
+      const staleEventCount = latencies.filter(value => value > staleThresholdMs).length
+      const freshEventCount = Math.max(0, latencies.length - staleEventCount)
+      return {
+        sourceKind,
+        sourceId,
+        sourceName: sourceId ? sources[sourceId]?.name : undefined,
+        totalEvents: bucketRows.length,
+        latencySampleCount: latencies.length,
+        staleEventCount,
+        freshEventCount,
+        staleSharePct: percentageOrNull(staleEventCount, latencies.length),
+        avgIngestLatencyMs: latencySummary.avgMs,
+        p95IngestLatencyMs: latencySummary.p95Ms,
+        maxIngestLatencyMs: latencySummary.maxMs,
+        avgPublicationAgeMs: publicationAgeSummary.avgMs,
+        p95PublicationAgeMs: publicationAgeSummary.p95Ms,
+        maxPublicationAgeMs: publicationAgeSummary.maxMs,
+        avgLastSeenDelayMs: lastSeenDelaySummary.avgMs,
+        p95LastSeenDelayMs: lastSeenDelaySummary.p95Ms,
+        maxLastSeenDelayMs: lastSeenDelaySummary.maxMs,
+      }
+    }
+
+    const sourceKindBreakdown = [...bySourceKind.entries()]
+      .map(([sourceKind, bucketRows]) => toBucket(sourceKind, bucketRows))
+      .sort((a, b) => {
+        if ((b.p95IngestLatencyMs ?? 0) !== (a.p95IngestLatencyMs ?? 0)) {
+          return (b.p95IngestLatencyMs ?? 0) - (a.p95IngestLatencyMs ?? 0)
+        }
+        if (b.totalEvents !== a.totalEvents) return b.totalEvents - a.totalEvents
+        return a.sourceKind.localeCompare(b.sourceKind)
+      })
+      .slice(0, limit)
+
+    const sourceBreakdown = [...bySource.values()]
+      .map(item => toBucket(item.sourceKind, item.rows, item.sourceId))
+      .sort((a, b) => {
+        if ((b.p95IngestLatencyMs ?? 0) !== (a.p95IngestLatencyMs ?? 0)) {
+          return (b.p95IngestLatencyMs ?? 0) - (a.p95IngestLatencyMs ?? 0)
+        }
+        if (b.totalEvents !== a.totalEvents) return b.totalEvents - a.totalEvents
+        return (a.sourceId ?? "").localeCompare(b.sourceId ?? "")
+      })
+      .slice(0, limit)
+
+    return {
+      generatedAt,
+      windowStartAt: since,
+      staleThresholdMs,
+      sourceKindBreakdown,
+      sourceBreakdown,
+    }
+  }
+
   async getRawItemsByIds(rawIds: string[]) {
     if (!rawIds.length) return []
     const placeholders = rawIds.map(() => "?").join(", ")
@@ -616,6 +930,37 @@ export class EventTable {
   }
 
   async addTimeline(row: EventTimelineRow) {
+    if (row.reason === "new_event") {
+      const existing = await this.db.prepare(`
+        SELECT timeline_id
+        FROM event_timeline
+        WHERE event_id = ?
+          AND reason = 'new_event'
+        LIMIT 1
+      `).get(row.event_id) as { timeline_id?: string } | undefined
+
+      if (existing?.timeline_id) {
+        return
+      }
+    }
+
+    if (row.reason === "multi_source_confirmation" || row.reason === "authoritative_source_confirmation") {
+      const duplicateWhere = row.reason === "multi_source_confirmation"
+        ? `reason IN ('multi_source_confirmation', 'authoritative_source_confirmation')`
+        : `reason = 'authoritative_source_confirmation'`
+      const existing = await this.db.prepare(`
+        SELECT timeline_id
+        FROM event_timeline
+        WHERE event_id = ?
+          AND ${duplicateWhere}
+        LIMIT 1
+      `).get(row.event_id) as { timeline_id?: string } | undefined
+
+      if (existing?.timeline_id) {
+        return
+      }
+    }
+
     await this.db.prepare(`
       INSERT OR REPLACE INTO event_timeline (
         timeline_id, event_id, state_from, state_to, changed_at, trigger_evidence_id, actor, reason, metadata_json
@@ -707,6 +1052,7 @@ export class EventTable {
       SELECT state_to, changed_at
       FROM event_timeline
       WHERE event_id = ?
+        AND COALESCE(reason, '') != 'canonical_identity_merge'
       ORDER BY changed_at DESC, timeline_id DESC
       LIMIT 1
     `).get(eventId) as {
@@ -765,6 +1111,9 @@ export class EventTable {
         SET
           summary = COALESCE(summary, ?),
           primary_entity_name = COALESCE(primary_entity_name, ?),
+          series_key = COALESCE(series_key, ?),
+          period_key = COALESCE(period_key, ?),
+          release_cadence = COALESCE(release_cadence, ?),
           published_at = COALESCE(published_at, ?),
           canonical_url = COALESCE(canonical_url, ?),
           impact_summary_json = CASE
@@ -776,6 +1125,9 @@ export class EventTable {
       `).run(
         duplicate.summary,
         duplicate.primary_entity_name,
+        duplicate.series_key,
+        duplicate.period_key,
+        duplicate.release_cadence,
         duplicate.published_at,
         duplicate.canonical_url,
         duplicate.impact_summary_json,
@@ -847,31 +1199,6 @@ export class EventTable {
         )
       }
 
-      const duplicateTimeline = getRows<EventTimelineRow>(await this.db.prepare(`
-        SELECT timeline_id, event_id, state_from, state_to, changed_at, trigger_evidence_id, actor, reason, metadata_json
-        FROM event_timeline
-        WHERE event_id = ?
-        ORDER BY changed_at ASC, timeline_id ASC
-      `).all(options.duplicateEventId))
-
-      for (const entry of duplicateTimeline) {
-        await this.db.prepare(`
-          INSERT OR IGNORE INTO event_timeline (
-            timeline_id, event_id, state_from, state_to, changed_at, trigger_evidence_id, actor, reason, metadata_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          `etl_${md5(`${options.canonicalEventId}|${entry.state_to}|${entry.changed_at}|${entry.trigger_evidence_id ?? ""}|${entry.reason ?? ""}`)}`,
-          options.canonicalEventId,
-          entry.state_from,
-          entry.state_to,
-          entry.changed_at,
-          entry.trigger_evidence_id,
-          entry.actor,
-          entry.reason,
-          entry.metadata_json,
-        )
-      }
-
       await this.addTimeline({
         timeline_id: `etl_${md5(`${options.canonicalEventId}|${options.duplicateEventId}|merged_duplicate|${mergedAt}`)}`,
         event_id: options.canonicalEventId,
@@ -880,12 +1207,13 @@ export class EventTable {
         changed_at: mergedAt,
         trigger_evidence_id: null,
         actor: "event-engine",
-        reason: options.reason,
+        reason: "canonical_identity_merge",
         metadata_json: JSON.stringify({
           mergedEventId: options.duplicateEventId,
           mergedEventTitle: duplicate.title,
           mergedEventUrl: duplicate.canonical_url,
           mergedEventSourceKind: duplicate.source_kind,
+          mergeReason: options.reason,
         }),
       })
 
@@ -924,7 +1252,7 @@ export class EventTable {
       : getRows<{ event_id: string }>(await this.db.prepare(`
         SELECT DISTINCT event_id
         FROM entity_links
-        WHERE entity_type = 'stock'
+        WHERE entity_type IN ('stock', 'company')
           AND (
             COALESCE(code, '') != ''
             OR COALESCE(full_code, '') != ''
@@ -1006,6 +1334,267 @@ export class EventTable {
       removedEntityAliases,
       normalizedFactEntityIds,
       normalizedPrimaryEntityNames,
+    }
+  }
+
+  async repairPrimaryEntityContainerNames(options?: {
+    eventIds?: string[]
+    limit?: number
+  }) {
+    const candidateEventIds = options?.eventIds?.length
+      ? options.eventIds.slice(0, options.limit ?? options.eventIds.length)
+      : getRows<{ event_id: string }>(await this.db.prepare(`
+        SELECT DISTINCT event_id
+        FROM (
+          SELECT e.event_id AS event_id
+          FROM events e
+          WHERE COALESCE(e.primary_entity_name, '') != ''
+            AND (
+              e.primary_entity_name LIKE '%法说会%'
+              OR e.primary_entity_name LIKE '%法說會%'
+              OR e.primary_entity_name LIKE '%业绩说明会%'
+              OR e.primary_entity_name LIKE '%業績說明會%'
+              OR e.primary_entity_name LIKE '%说明会%'
+              OR e.primary_entity_name LIKE '%說明會%'
+              OR e.primary_entity_name LIKE '%业绩会%'
+              OR e.primary_entity_name LIKE '%業績會%'
+              OR e.primary_entity_name LIKE '%电话会议%'
+              OR e.primary_entity_name LIKE '%電話會議%'
+              OR e.primary_entity_name LIKE '%电话会%'
+              OR e.primary_entity_name LIKE '%電話會%'
+              OR e.primary_entity_name LIKE '%交流会%'
+              OR e.primary_entity_name LIKE '%沟通会%'
+              OR e.primary_entity_name LIKE '%投资者日%'
+              OR e.primary_entity_name LIKE '%发布会%'
+              OR e.primary_entity_name LIKE '%發布會%'
+            )
+
+          UNION
+
+          SELECT el.event_id AS event_id
+          FROM entity_links el
+          WHERE el.entity_type = 'company'
+            AND el.resolver = 'primary-entity-fallback'
+            AND (
+              el.entity_name LIKE '%法说会%'
+              OR el.entity_name LIKE '%法說會%'
+              OR el.entity_name LIKE '%业绩说明会%'
+              OR el.entity_name LIKE '%業績說明會%'
+              OR el.entity_name LIKE '%说明会%'
+              OR el.entity_name LIKE '%說明會%'
+              OR el.entity_name LIKE '%业绩会%'
+              OR el.entity_name LIKE '%業績會%'
+              OR el.entity_name LIKE '%电话会议%'
+              OR el.entity_name LIKE '%電話會議%'
+              OR el.entity_name LIKE '%电话会%'
+              OR el.entity_name LIKE '%電話會%'
+              OR el.entity_name LIKE '%交流会%'
+              OR el.entity_name LIKE '%沟通会%'
+              OR el.entity_name LIKE '%投资者日%'
+              OR el.entity_name LIKE '%发布会%'
+              OR el.entity_name LIKE '%發布會%'
+            )
+        ) candidates
+        ORDER BY event_id ASC
+        LIMIT ?
+      `).all(options?.limit ?? 100000)).map(row => row.event_id)
+
+    let updatedEvents = 0
+    let updatedPrimaryEntityNames = 0
+    let replacedEntityLinks = 0
+
+    await this.withTransaction(async () => {
+      for (const eventId of candidateEventIds) {
+        const eventRow = await this.db.prepare(`
+          SELECT event_id, title, summary, topic_tags_json, primary_entity_name
+          FROM events
+          WHERE event_id = ?
+        `).get(eventId) as {
+          event_id: string
+          title: string
+          summary?: string | null
+          topic_tags_json: string
+          primary_entity_name?: string | null
+        } | undefined
+        if (!eventRow) continue
+
+        const evidenceRows = getRows<{
+          source_id: SourceID
+          title?: string | null
+          summary?: string | null
+          payload_json: string
+        }>(await this.db.prepare(`
+          SELECT ee.source_id, ee.title, ee.summary, ri.payload_json
+          FROM event_evidence ee
+          JOIN raw_items ri ON ri.raw_id = ee.raw_id
+          WHERE ee.event_id = ?
+          ORDER BY ee.rank ASC, ri.published_at DESC, ri.raw_id ASC
+        `).all(eventId))
+        if (!evidenceRows.length) continue
+
+        const leadEvidence = evidenceRows[0]
+        if (!leadEvidence?.source_id) continue
+
+        const resolved = resolveEventClassification(
+          leadEvidence.source_id,
+          eventRow.title,
+          eventRow.summary ?? leadEvidence.summary ?? undefined,
+        )
+        const topicTags = resolved.topicTags.length
+          ? resolved.topicTags
+          : parseJSON<IndustryTag[]>(eventRow.topic_tags_json, [])
+
+        const extractedEntityLinks = (
+          await Promise.all(evidenceRows.map(async (evidence) => {
+            const payload = parseJSON<Record<string, unknown>>(evidence.payload_json, {}) as any
+            return extractEntityLinks(eventId, eventRow.title, topicTags, {
+              primaryEntityName: resolved.primaryEntityName ?? undefined,
+              summary: eventRow.summary ?? evidence.summary ?? undefined,
+              payload,
+            })
+          }))
+        ).flat()
+        const normalizedEntityLinks = normalizeEntityLinks(extractedEntityLinks)
+
+        const existingEntityLinks = getRows<EntityLinkRow>(await this.db.prepare(`
+          SELECT event_id, entity_type, entity_name, code, full_code, confidence, resolver
+          FROM entity_links
+          WHERE event_id = ?
+          ORDER BY entity_type ASC, confidence DESC, entity_name ASC
+        `).all(eventId))
+
+        const existingKeys = new Set(existingEntityLinks.map(getEntityLinkPersistenceKey))
+        const nextKeys = new Set(normalizedEntityLinks.map(getEntityLinkPersistenceKey))
+        const entityLinksChanged = existingKeys.size !== nextKeys.size
+          || Array.from(existingKeys).some(key => !nextKeys.has(key))
+
+        const nextPrimaryEntityName = normalizePrimaryEntityName(resolved.primaryEntityName ?? null, normalizedEntityLinks)
+        const primaryEntityChanged = nextPrimaryEntityName !== (eventRow.primary_entity_name ?? null)
+
+        if (!entityLinksChanged && !primaryEntityChanged) continue
+        updatedEvents += 1
+
+        if (entityLinksChanged) {
+          replacedEntityLinks += 1
+          await this.db.prepare(`DELETE FROM entity_links WHERE event_id = ?`).run(eventId)
+          await this.upsertEntityLinks(normalizedEntityLinks)
+        }
+
+        if (primaryEntityChanged) {
+          updatedPrimaryEntityNames += 1
+          await this.db.prepare(`
+            UPDATE events
+            SET primary_entity_name = ?
+            WHERE event_id = ?
+          `).run(nextPrimaryEntityName, eventId)
+        }
+      }
+    })
+
+    return {
+      scannedEvents: candidateEventIds.length,
+      updatedEvents,
+      updatedPrimaryEntityNames,
+      replacedEntityLinks,
+    }
+  }
+
+  async repairExplicitTickerEntityLinks(options?: {
+    eventIds?: string[]
+    limit?: number
+  }) {
+    const candidateEventIds = options?.eventIds?.length
+      ? options.eventIds.slice(0, options.limit ?? options.eventIds.length)
+      : getRows<{ event_id: string }>(await this.db.prepare(`
+        SELECT DISTINCT event_id
+        FROM (
+          SELECT e.event_id AS event_id
+          FROM events e
+          JOIN event_evidence ee ON ee.event_id = e.event_id
+          JOIN raw_items ri ON ri.raw_id = ee.raw_id
+          WHERE ri.payload_json LIKE '%(%.US)%'
+             OR ri.payload_json LIKE '%(%.HK)%'
+
+          UNION
+
+          SELECT el.event_id AS event_id
+          FROM entity_links el
+          WHERE el.entity_type IN ('company', 'stock')
+            AND el.resolver = 'primary-entity-fallback'
+            AND (
+              (el.entity_name LIKE '%板块%' OR el.entity_name LIKE '%概念%' OR el.entity_name LIKE '%题材%' OR el.entity_name LIKE '%指数%' OR el.entity_name LIKE '%市场%')
+              AND (el.entity_name LIKE '%走高%' OR el.entity_name LIKE '%走弱%' OR el.entity_name LIKE '%拉升%' OR el.entity_name LIKE '%下跌%' OR el.entity_name LIKE '%上涨%' OR el.entity_name LIKE '%下挫%')
+            )
+        ) candidates
+        ORDER BY event_id ASC
+        LIMIT ?
+      `).all(options?.limit ?? 100000)).map(row => row.event_id)
+
+    let updatedEvents = 0
+    let addedEntityLinks = 0
+
+    await this.withTransaction(async () => {
+      for (const eventId of candidateEventIds) {
+        const eventRow = await this.db.prepare(`
+          SELECT event_id, title, summary, topic_tags_json, primary_entity_name
+          FROM events
+          WHERE event_id = ?
+        `).get(eventId) as {
+          event_id: string
+          title: string
+          summary?: string | null
+          topic_tags_json: string
+          primary_entity_name?: string | null
+        } | undefined
+        if (!eventRow) continue
+
+        const rawRows = getRows<{ payload_json: string }>(await this.db.prepare(`
+          SELECT ri.payload_json
+          FROM event_evidence ee
+          JOIN raw_items ri ON ri.raw_id = ee.raw_id
+          WHERE ee.event_id = ?
+          ORDER BY ee.rank ASC, ri.published_at DESC, ri.raw_id ASC
+        `).all(eventId))
+        if (!rawRows.length) continue
+
+        const topicTags = parseJSON<IndustryTag[]>(eventRow.topic_tags_json, [])
+        const extractedEntityLinks = (
+          await Promise.all(rawRows.map(async (raw) => {
+            const payload = parseJSON<Record<string, unknown>>(raw.payload_json, {}) as any
+            return extractEntityLinks(eventId, eventRow.title, topicTags, {
+              primaryEntityName: eventRow.primary_entity_name ?? undefined,
+              summary: eventRow.summary ?? undefined,
+              payload,
+            })
+          }))
+        ).flat()
+
+        const normalizedEntityLinks = normalizeEntityLinks(extractedEntityLinks)
+        const existingEntityLinks = getRows<EntityLinkRow>(await this.db.prepare(`
+          SELECT event_id, entity_type, entity_name, code, full_code, confidence, resolver
+          FROM entity_links
+          WHERE event_id = ?
+          ORDER BY entity_type ASC, confidence DESC, entity_name ASC
+        `).all(eventId))
+
+        const existingKeys = new Set(existingEntityLinks.map(getEntityLinkPersistenceKey))
+        const nextKeys = new Set(normalizedEntityLinks.map(getEntityLinkPersistenceKey))
+        const entityLinksChanged = existingKeys.size !== nextKeys.size
+          || Array.from(existingKeys).some(key => !nextKeys.has(key))
+
+        if (!entityLinksChanged) continue
+
+        updatedEvents += 1
+        addedEntityLinks += Math.max(0, normalizedEntityLinks.length - existingEntityLinks.length)
+        await this.db.prepare(`DELETE FROM entity_links WHERE event_id = ?`).run(eventId)
+        await this.upsertEntityLinks(normalizedEntityLinks)
+      }
+    })
+
+    return {
+      scannedEvents: candidateEventIds.length,
+      updatedEvents,
+      addedEntityLinks,
     }
   }
 
@@ -1112,6 +1701,110 @@ export class EventTable {
     }
   }
 
+  async repairDuplicateConfirmationTimeline(options?: {
+    eventIds?: string[]
+    limit?: number
+  }) {
+    const candidateEventIds = options?.eventIds?.length
+      ? options.eventIds.slice(0, options.limit ?? options.eventIds.length)
+      : getRows<{ event_id: string }>(await this.db.prepare(`
+        SELECT DISTINCT event_id
+        FROM event_timeline
+        WHERE reason IN ('multi_source_confirmation', 'authoritative_source_confirmation')
+        ORDER BY event_id ASC
+        LIMIT ?
+      `).all(options?.limit ?? 100000)).map(row => row.event_id)
+
+    let updatedEvents = 0
+    let removedConfirmationEntries = 0
+    let normalizedConfirmedSnapshotEntries = 0
+
+    await this.withTransaction(async () => {
+      for (const eventId of candidateEventIds) {
+        const timeline = getRows<EventTimelineRow>(await this.db.prepare(`
+          SELECT timeline_id, event_id, state_from, state_to, changed_at, trigger_evidence_id, actor, reason, metadata_json
+          FROM event_timeline
+          WHERE event_id = ?
+          ORDER BY changed_at ASC, timeline_id ASC
+        `).all(eventId))
+        if (!timeline.length) continue
+
+        let firstConfirmedAt: number | null = null
+        let keptMultiSource = false
+        let keptAuthoritative = false
+        const timelineIdsToDelete: string[] = []
+
+        for (const entry of timeline) {
+          if (entry.reason !== "multi_source_confirmation" && entry.reason !== "authoritative_source_confirmation") {
+            continue
+          }
+
+          if (entry.reason === "multi_source_confirmation") {
+            if (!keptMultiSource && !keptAuthoritative) {
+              keptMultiSource = true
+              firstConfirmedAt ??= entry.changed_at
+              continue
+            }
+            timelineIdsToDelete.push(entry.timeline_id)
+            continue
+          }
+
+          if (!keptAuthoritative) {
+            keptAuthoritative = true
+            firstConfirmedAt ??= entry.changed_at
+            continue
+          }
+
+          timelineIdsToDelete.push(entry.timeline_id)
+        }
+
+        let normalizedSnapshotsForEvent = 0
+        if (firstConfirmedAt !== null) {
+          const snapshotRows = getRows<Pick<EventTimelineRow, "timeline_id" | "state_from" | "state_to">>(await this.db.prepare(`
+            SELECT timeline_id, state_from, state_to
+            FROM event_timeline
+            WHERE event_id = ?
+              AND reason = 'event_snapshot_changed'
+              AND changed_at > ?
+            ORDER BY changed_at ASC, timeline_id ASC
+          `).all(eventId, firstConfirmedAt))
+
+          for (const row of snapshotRows) {
+            if (row.state_from === "confirmed" && row.state_to === "confirmed") continue
+            await this.db.prepare(`
+              UPDATE event_timeline
+              SET state_from = 'confirmed',
+                  state_to = 'confirmed'
+              WHERE timeline_id = ?
+            `).run(row.timeline_id)
+            normalizedSnapshotsForEvent += 1
+          }
+        }
+
+        if (timelineIdsToDelete.length) {
+          const placeholders = timelineIdsToDelete.map(() => "?").join(", ")
+          await this.db.prepare(`
+            DELETE FROM event_timeline
+            WHERE timeline_id IN (${placeholders})
+          `).run(...timelineIdsToDelete)
+        }
+
+        if (timelineIdsToDelete.length || normalizedSnapshotsForEvent) {
+          updatedEvents += 1
+          removedConfirmationEntries += timelineIdsToDelete.length
+          normalizedConfirmedSnapshotEntries += normalizedSnapshotsForEvent
+        }
+      }
+    })
+
+    return {
+      scannedEvents: candidateEventIds.length,
+      updatedEvents,
+      removedConfirmationEntries,
+      normalizedConfirmedSnapshotEntries,
+    }
+  }
+
   async listEvents(options: {
     limit: number
     q?: string
@@ -1125,11 +1818,16 @@ export class EventTable {
     directionalView?: DirectionalView
     minMaterialityScore?: number
     minAuthorityScore?: number
-    sortBy?: "latest" | "investment"
+    changedSince?: number
+    lifecycleAfter?: number
+    seriesKey?: string
+    periodKey?: string
+    sortBy?: "latest" | "investment" | "changed"
   }): Promise<EventRecord[]> {
     const clauses: string[] = []
     const params: Array<string | number> = []
     const searchTopics = options.q ? resolveIndustryTagsFromKeywordQuery(options.q) : []
+    const lifecycleAfter = options.lifecycleAfter ?? options.changedSince
 
     if (options.eventType) {
       clauses.push("e.event_type = ?")
@@ -1171,6 +1869,27 @@ export class EventTable {
       clauses.push("COALESCE(e.authority_score, 0) >= ?")
       params.push(options.minAuthorityScore)
     }
+    if (lifecycleAfter !== undefined) {
+      clauses.push(`
+        COALESCE((
+          SELECT et.changed_at
+          FROM event_timeline et
+          WHERE et.event_id = e.event_id
+            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
+          ORDER BY et.changed_at DESC, et.timeline_id DESC
+          LIMIT 1
+        ), 0) >= ?
+      `)
+      params.push(lifecycleAfter)
+    }
+    if (options.seriesKey) {
+      clauses.push("e.series_key = ?")
+      params.push(options.seriesKey)
+    }
+    if (options.periodKey) {
+      clauses.push("e.period_key = ?")
+      params.push(options.periodKey)
+    }
     if (options.q) {
       const topicLikeClauses = searchTopics.map(() => "e.topic_tags_json LIKE ?")
       const searchClause = [
@@ -1182,19 +1901,23 @@ export class EventTable {
       params.push(`%${options.q}%`, `%${options.q}%`, ...searchTopics.map(topic => `%\"${topic}\"%`))
     }
     if (options.entity) {
-      clauses.push(`
-        EXISTS (
-          SELECT 1
-          FROM entity_links el
-          WHERE el.event_id = e.event_id
-            AND (
-              LOWER(el.entity_name) = LOWER(?)
-              OR LOWER(COALESCE(el.code, '')) = LOWER(?)
-              OR LOWER(COALESCE(el.full_code, '')) = LOWER(?)
-            )
-        )
-      `)
-      params.push(options.entity, options.entity, options.entity)
+      const lookupTerms = getEntityLookupTerms(options.entity)
+      if (lookupTerms.length) {
+        const placeholders = lookupTerms.map(() => "?").join(", ")
+        clauses.push(`
+          EXISTS (
+            SELECT 1
+            FROM entity_links el
+            WHERE el.event_id = e.event_id
+              AND (
+                LOWER(el.entity_name) IN (${placeholders})
+                OR LOWER(COALESCE(el.code, '')) IN (${placeholders})
+                OR LOWER(COALESCE(el.full_code, '')) IN (${placeholders})
+              )
+          )
+        `)
+        params.push(...lookupTerms, ...lookupTerms, ...lookupTerms)
+      }
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
@@ -1204,6 +1927,9 @@ export class EventTable {
     const fetchLimit = options.topic
       ? Math.max(baseFetchLimit * 4, 300)
       : baseFetchLimit
+    const orderBy = options.sortBy === "changed"
+      ? "ORDER BY COALESCE(latest_lifecycle_at, COALESCE(e.published_at, e.ingested_at)) DESC, COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC"
+      : "ORDER BY COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC"
 
     const rows = getRows<EventQueryRow>(await this.db.prepare(`
       SELECT
@@ -1222,6 +1948,7 @@ export class EventTable {
           SELECT et.state_to
           FROM event_timeline et
           WHERE et.event_id = e.event_id
+            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
           ORDER BY et.changed_at DESC, et.timeline_id DESC
           LIMIT 1
         ) AS latest_lifecycle_state,
@@ -1229,12 +1956,13 @@ export class EventTable {
           SELECT et.changed_at
           FROM event_timeline et
           WHERE et.event_id = e.event_id
+            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
           ORDER BY et.changed_at DESC, et.timeline_id DESC
           LIMIT 1
         ) AS latest_lifecycle_at
       FROM events e
       ${where}
-      ORDER BY COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC
+      ${orderBy}
       LIMIT ?
     `).all(...params, fetchLimit))
 
@@ -1264,10 +1992,15 @@ export class EventTable {
     directionalView?: DirectionalView
     minMaterialityScore?: number
     minAuthorityScore?: number
+    changedSince?: number
+    lifecycleAfter?: number
+    seriesKey?: string
+    periodKey?: string
   }) {
     const clauses: string[] = []
     const params: Array<string | number> = []
     const searchTopics = options.q ? resolveIndustryTagsFromKeywordQuery(options.q) : []
+    const lifecycleAfter = options.lifecycleAfter ?? options.changedSince
 
     if (options.eventType) {
       clauses.push("e.event_type = ?")
@@ -1309,6 +2042,27 @@ export class EventTable {
       clauses.push("COALESCE(e.authority_score, 0) >= ?")
       params.push(options.minAuthorityScore)
     }
+    if (lifecycleAfter !== undefined) {
+      clauses.push(`
+        COALESCE((
+          SELECT et.changed_at
+          FROM event_timeline et
+          WHERE et.event_id = e.event_id
+            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
+          ORDER BY et.changed_at DESC, et.timeline_id DESC
+          LIMIT 1
+        ), 0) >= ?
+      `)
+      params.push(lifecycleAfter)
+    }
+    if (options.seriesKey) {
+      clauses.push("e.series_key = ?")
+      params.push(options.seriesKey)
+    }
+    if (options.periodKey) {
+      clauses.push("e.period_key = ?")
+      params.push(options.periodKey)
+    }
     if (options.q) {
       const topicLikeClauses = searchTopics.map(() => "e.topic_tags_json LIKE ?")
       const searchClause = [
@@ -1320,19 +2074,23 @@ export class EventTable {
       params.push(`%${options.q}%`, `%${options.q}%`, ...searchTopics.map(topic => `%\"${topic}\"%`))
     }
     if (options.entity) {
-      clauses.push(`
-        EXISTS (
-          SELECT 1
-          FROM entity_links el
-          WHERE el.event_id = e.event_id
-            AND (
-              LOWER(el.entity_name) = LOWER(?)
-              OR LOWER(COALESCE(el.code, '')) = LOWER(?)
-              OR LOWER(COALESCE(el.full_code, '')) = LOWER(?)
-            )
-        )
-      `)
-      params.push(options.entity, options.entity, options.entity)
+      const lookupTerms = getEntityLookupTerms(options.entity)
+      if (lookupTerms.length) {
+        const placeholders = lookupTerms.map(() => "?").join(", ")
+        clauses.push(`
+          EXISTS (
+            SELECT 1
+            FROM entity_links el
+            WHERE el.event_id = e.event_id
+              AND (
+                LOWER(el.entity_name) IN (${placeholders})
+                OR LOWER(COALESCE(el.code, '')) IN (${placeholders})
+                OR LOWER(COALESCE(el.full_code, '')) IN (${placeholders})
+              )
+          )
+        `)
+        params.push(...lookupTerms, ...lookupTerms, ...lookupTerms)
+      }
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
@@ -1363,6 +2121,7 @@ export class EventTable {
           SELECT et.state_to
           FROM event_timeline et
           WHERE et.event_id = e.event_id
+            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
           ORDER BY et.changed_at DESC, et.timeline_id DESC
           LIMIT 1
         ) AS latest_lifecycle_state,
@@ -1370,6 +2129,7 @@ export class EventTable {
           SELECT et.changed_at
           FROM event_timeline et
           WHERE et.event_id = e.event_id
+            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
           ORDER BY et.changed_at DESC, et.timeline_id DESC
           LIMIT 1
         ) AS latest_lifecycle_at
@@ -1470,7 +2230,7 @@ export class EventTable {
     return assigned
   }
 
-  async getEventDetail(eventId: string): Promise<EventDetail | undefined> {
+  async getEventDetail(eventId: string): Promise<EventDetailRow | undefined> {
     const row = await this.db.prepare(`
       SELECT
         e.*,
@@ -1488,6 +2248,7 @@ export class EventTable {
           SELECT et.state_to
           FROM event_timeline et
           WHERE et.event_id = e.event_id
+            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
           ORDER BY et.changed_at DESC, et.timeline_id DESC
           LIMIT 1
         ) AS latest_lifecycle_state,
@@ -1495,6 +2256,7 @@ export class EventTable {
           SELECT et.changed_at
           FROM event_timeline et
           WHERE et.event_id = e.event_id
+            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
           ORDER BY et.changed_at DESC, et.timeline_id DESC
           LIMIT 1
         ) AS latest_lifecycle_at
@@ -1598,13 +2360,18 @@ export class EventTable {
       metadata: parseJSON<Record<string, unknown>>(entry.metadata_json, {}),
     }))
 
-    return {
+    const detail: EventDetailRow = {
       ...this.normalizeEventRecord(this.toEventRecord(row), factRows),
+      seriesKey: row.series_key ?? undefined,
+      periodKey: row.period_key ?? undefined,
+      releaseCadence: row.release_cadence ?? undefined,
       evidences,
       entities,
       facts,
       timeline,
     }
+
+    return detail
   }
 
   private toEventRecord(row: EventQueryRow): EventRecord {
@@ -1619,6 +2386,9 @@ export class EventTable {
       ingestedAt: row.ingested_at,
       canonicalUrl: row.canonical_url ?? undefined,
       primaryEntityName: row.primary_entity_name ?? undefined,
+      seriesKey: row.series_key ?? undefined,
+      periodKey: row.period_key ?? undefined,
+      releaseCadence: row.release_cadence ?? undefined,
       importance: row.importance,
       sentiment: row.sentiment ?? undefined,
       directionalView: row.directional_view ?? undefined,
@@ -1654,6 +2424,6 @@ export async function getEventTable() {
     if (process.env.INIT_TABLE !== "false") await eventTable.init()
     return eventTable
   } catch (e) {
-    logger.error("failed to init event database ", e)
+    getEventTableLogger().error("failed to init event database ", e)
   }
 }

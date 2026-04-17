@@ -9,9 +9,9 @@ import { EventTable } from "../server/database/events"
 
 loadEnv({
   path: resolve(projectDir, ".env.server"),
-});
+})
 
-(globalThis as typeof globalThis & { logger: typeof consola }).logger = consola.withTag("repair-event-entities")
+;(globalThis as typeof globalThis & { logger: typeof consola }).logger = consola.withTag("repair-explicit-ticker-entities")
 
 function parseArgs(argv: string[]) {
   const options: {
@@ -51,16 +51,12 @@ async function main() {
 
   const table = new EventTable(db as any)
   await table.init()
-  const entityRepair = await table.repairCanonicalEntityLinks(options)
-  const primaryEntityContainerRepair = await table.repairPrimaryEntityContainerNames(options)
-  const marketRepair = await table.repairExchangeDisclosureMarkets(options)
+  const tickerRepair = await table.repairExplicitTickerEntityLinks(options)
 
   console.log(JSON.stringify({
     status: "success",
     dataDir,
-    entityRepair,
-    primaryEntityContainerRepair,
-    marketRepair,
+    tickerRepair,
   }, null, 2))
 }
 

@@ -22,6 +22,27 @@ function createFact(overrides: Partial<EventFactRow>): EventFactRow {
   }
 }
 
+function createExchangeAnnouncementFact(payloadOverrides: Record<string, unknown> = {}, factOverrides: Partial<EventFactRow> = {}): EventFactRow {
+  return createFact({
+    fact_type: "exchange_announcement",
+    metric_name: "announcement_meta",
+    value: null,
+    unit: null,
+    delta: null,
+    direction: null,
+    payload_json: JSON.stringify({
+      announcementTitle: "关于交易所公告",
+      announcementTypeName: "交易所公告",
+      securityCode: "603501",
+      securityName: "豪威集团",
+      market: "A",
+      isFormalDisclosure: true,
+      ...payloadOverrides,
+    }),
+    ...factOverrides,
+  })
+}
+
 describe("buildImpactSnapshot", () => {
   it("maps falling rate fixing to positive CN rates impact", () => {
     vi.useFakeTimers()
@@ -177,6 +198,151 @@ describe("buildImpactSnapshot", () => {
     expect(snapshot.tradabilityScore).toBeLessThan(45)
     expect(snapshot.impactSummary.join(" ")).toContain("媒体解读")
     expect(snapshot.impactSummary.join(" ")).toContain("不等于新的正式披露")
+  })
+
+  it("uses announcement facts to mark equity financing as negative and materially relevant", () => {
+    const snapshot = buildImpactSnapshot({
+      eventType: "announcement",
+      eventSubType: "financing",
+      profile: {
+        sourceKind: "exchange_disclosure",
+        defaultEventType: "announcement",
+        authorityLevel: "exchange",
+        parserFamily: "exchange_announcement",
+        assetClasses: ["equity"],
+        markets: ["A"],
+      },
+      facts: [
+        createExchangeAnnouncementFact({
+          announcementTitle: "关于向特定对象发行股票预案的公告",
+          announcementTypeName: "再融资",
+          actionKind: "equity_issuance",
+          financingPath: "equity_issuance",
+          announcementStage: "preliminary",
+        }),
+      ],
+    })
+
+    expect(snapshot.directionalView).toBe("negative")
+    expect(snapshot.materialityScore).toBeGreaterThanOrEqual(68)
+    expect(snapshot.tradabilityScore).toBeGreaterThanOrEqual(50)
+    expect(snapshot.impactSummary.join(" ")).toContain("豪威集团")
+    expect(snapshot.impactSummary.join(" ")).toContain("再融资")
+    expect(snapshot.impactSummary.join(" ")).toContain("稀释压力")
+  })
+
+  it("keeps buyback announcements positive but still bounded on tradability", () => {
+    const snapshot = buildImpactSnapshot({
+      eventType: "announcement",
+      eventSubType: "buyback",
+      profile: {
+        sourceKind: "exchange_disclosure",
+        defaultEventType: "announcement",
+        authorityLevel: "exchange",
+        parserFamily: "exchange_announcement",
+        assetClasses: ["equity"],
+        markets: ["A"],
+      },
+      facts: [
+        createExchangeAnnouncementFact({
+          announcementTitle: "关于回购股份方案的公告",
+          announcementTypeName: "回购",
+          actionKind: "buyback",
+        }),
+      ],
+    })
+
+    expect(snapshot.directionalView).toBe("positive")
+    expect(snapshot.materialityScore).toBeGreaterThanOrEqual(70)
+    expect(snapshot.tradabilityScore).toBeGreaterThanOrEqual(60)
+    expect(snapshot.impactSummary.join(" ")).toContain("回购")
+    expect(snapshot.impactSummary.join(" ")).toContain("正式披露")
+  })
+
+  it("marks dividend announcements positive but not as an immediate trigger", () => {
+    const snapshot = buildImpactSnapshot({
+      eventType: "announcement",
+      eventSubType: "dividend",
+      profile: {
+        sourceKind: "exchange_disclosure",
+        defaultEventType: "announcement",
+        authorityLevel: "exchange",
+        parserFamily: "exchange_announcement",
+        assetClasses: ["equity"],
+        markets: ["A"],
+      },
+      facts: [
+        createExchangeAnnouncementFact({
+          announcementTitle: "关于2025年度利润分配预案的公告",
+          announcementTypeName: "权益分派",
+          actionKind: "dividend",
+          announcementStage: "proposal",
+        }),
+      ],
+    })
+
+    expect(snapshot.directionalView).toBe("positive")
+    expect(snapshot.materialityScore).toBeGreaterThanOrEqual(60)
+    expect(snapshot.tradabilityScore).toBeGreaterThanOrEqual(40)
+    expect(snapshot.impactSummary.join(" ")).toContain("分红")
+    expect(snapshot.impactSummary.join(" ")).toContain("前置披露阶段")
+  })
+
+  it("uses ownership direction to distinguish shareholding increases from decreases", () => {
+    const snapshot = buildImpactSnapshot({
+      eventType: "announcement",
+      eventSubType: "shareholding_change",
+      profile: {
+        sourceKind: "exchange_disclosure",
+        defaultEventType: "announcement",
+        authorityLevel: "exchange",
+        parserFamily: "exchange_announcement",
+        assetClasses: ["equity"],
+        markets: ["A"],
+      },
+      facts: [
+        createExchangeAnnouncementFact({
+          announcementTitle: "关于控股股东减持股份预披露公告",
+          announcementTypeName: "股东持股变动",
+          ownershipDirection: "decrease",
+          actionKind: "shareholding_change",
+        }),
+      ],
+    })
+
+    expect(snapshot.directionalView).toBe("negative")
+    expect(snapshot.materialityScore).toBeGreaterThanOrEqual(65)
+    expect(snapshot.tradabilityScore).toBeGreaterThanOrEqual(55)
+    expect(snapshot.impactSummary.join(" ")).toContain("减持")
+    expect(snapshot.impactSummary.join(" ")).toContain("持股变动")
+  })
+
+  it("keeps generic exchange announcements conservative while preserving disclosure priority", () => {
+    const snapshot = buildImpactSnapshot({
+      eventType: "announcement",
+      eventSubType: "other",
+      profile: {
+        sourceKind: "exchange_disclosure",
+        defaultEventType: "announcement",
+        authorityLevel: "exchange",
+        parserFamily: "exchange_announcement",
+        assetClasses: ["equity"],
+        markets: ["A"],
+      },
+      facts: [
+        createExchangeAnnouncementFact({
+          announcementTitle: "关于收到问询函的公告",
+          announcementTypeName: "交易所公告",
+          announcementStage: "implementation",
+        }),
+      ],
+    })
+
+    expect(snapshot.directionalView).toBe("neutral")
+    expect(snapshot.materialityScore).toBeGreaterThanOrEqual(55)
+    expect(snapshot.tradabilityScore).toBeGreaterThanOrEqual(40)
+    expect(snapshot.impactSummary.join(" ")).toContain("正式披露")
+    expect(snapshot.impactSummary.join(" ")).toContain("信息确认度更高")
   })
 
   it("treats event-cadence industry releases as theme catalysts instead of statistical prints", () => {

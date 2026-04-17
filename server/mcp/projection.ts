@@ -99,6 +99,10 @@ export interface McpInvestmentEventBrief {
   riskOfMisread: string[]
   latestLifecycleState?: InvestmentEventBrief["latestLifecycleState"]
   latestLifecycleAt?: number
+  seriesKey?: string
+  periodKey?: string
+  releaseCadence?: string
+  seriesSummary?: string
   canonicalUrl?: string
   relatedTopics: InvestmentEventBrief["relatedTopics"]
   sourceSummary: {
@@ -193,6 +197,32 @@ function toMcpTimeline(item: InvestmentTimelineEntry, debug = false): McpInvestm
   }
 }
 
+function formatReleaseCadenceLabel(value?: string) {
+  switch (value) {
+    case "daily":
+      return "日度序列"
+    case "weekly":
+      return "周度序列"
+    case "monthly":
+      return "月度序列"
+    case "quarterly":
+      return "季度序列"
+    case "yearly":
+      return "年度序列"
+    default:
+      return value ? "持续跟踪序列" : undefined
+  }
+}
+
+function getSeriesSummary(item: Pick<InvestmentEventBrief, "periodKey" | "releaseCadence" | "seriesKey">) {
+  if (!item.seriesKey && !item.periodKey && !item.releaseCadence) return undefined
+  const cadenceLabel = formatReleaseCadenceLabel(item.releaseCadence)
+  if (cadenceLabel && item.periodKey) return `${cadenceLabel}，当前期次：${item.periodKey}`
+  if (cadenceLabel) return cadenceLabel
+  if (item.periodKey) return `当前期次：${item.periodKey}`
+  return "持续跟踪序列"
+}
+
 export function toMcpEventBrief(item: InvestmentEventBrief, debug = false): McpInvestmentEventBrief {
   return {
     eventId: item.eventId,
@@ -227,6 +257,10 @@ export function toMcpEventBrief(item: InvestmentEventBrief, debug = false): McpI
     riskOfMisread: item.riskOfMisread,
     latestLifecycleState: item.latestLifecycleState,
     latestLifecycleAt: item.latestLifecycleAt,
+    seriesKey: item.seriesKey,
+    periodKey: item.periodKey,
+    releaseCadence: item.releaseCadence,
+    seriesSummary: getSeriesSummary(item),
     canonicalUrl: item.canonicalUrl,
     relatedTopics: item.relatedTopics,
     sourceSummary: {

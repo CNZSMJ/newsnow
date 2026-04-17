@@ -5,6 +5,7 @@ import type {
   EventFact,
   EventLifecycleState,
   EventRecord,
+  EventTimelineEntry,
   InvestmentActionBucket,
   InvestmentEntityRef,
   InvestmentEventBrief,
@@ -18,8 +19,8 @@ import type {
 import type { DirectionalView, EventSourceKind } from "@shared/event-profile"
 import { industries } from "@shared/industry"
 import sources from "@shared/sources"
-import { isCodeLikeEntityName, normalizeSecurityCode } from "#/services/event-engine/entity-normalization"
-import { normalizeTitle } from "#/services/event-engine/text"
+import { isCodeLikeEntityName, normalizeSecurityCode, normalizeSecurityIdentifier } from "#/services/event-engine/entity-normalization"
+import { isBroadMarketDescriptor, normalizeTitle } from "#/services/event-engine/text"
 
 export function getInvestmentEventFamily(event: Pick<EventRecord, "eventType" | "eventSubType" | "sourceKind">): InvestmentEventFamily {
   if (event.sourceKind === "media_fast_feed" && event.eventType === "policy")
@@ -46,12 +47,16 @@ export function getInvestmentEventFamily(event: Pick<EventRecord, "eventType" | 
     return "market_move"
   if (event.eventSubType === "industry_data")
     return "industry_data"
+  if (event.eventSubType === "industry_report")
+    return "industry_report"
   if (event.eventSubType === "industry_news" || event.sourceKind === "industry_news_feed")
     return "industry_news"
   if (event.sourceKind === "media_fast_feed" && (event.eventSubType === "contract" || event.eventSubType === "other"))
     return "rumor_clarification"
   if (["buyback", "dividend", "shareholding_change", "management_change", "contract"].includes(event.eventSubType))
     return "corporate_action"
+  if (event.sourceKind === "exchange_disclosure" && event.eventType === "announcement")
+    return "disclosure_signal"
   return "general_news"
 }
 
@@ -115,6 +120,8 @@ function inferMarketFromCode(code?: string) {
     return "A"
   if (normalized.startsWith("hk"))
     return "HK"
+  if (normalized.startsWith("us:") || normalized.endsWith(".us"))
+    return "US"
   return undefined
 }
 
@@ -167,7 +174,7 @@ function formatInvestmentDisplayTitle(title: string, options?: {
 }
 
 function shouldSuppressDisplayPrimaryEntity(
-  event: Pick<EventRecord, "sourceKind" | "title">,
+  event: Pick<EventRecord, "eventType" | "sourceKind" | "title">,
   primaryEntityName: string,
 ) {
   if (event.sourceKind !== "official_policy_notice" && event.sourceKind !== "official_macro_release") {
@@ -194,11 +201,14 @@ function extractInstitutionLabelFromTitle(title: string) {
 }
 
 function getDisplayPrimaryEntityName(
-  event: Pick<EventRecord, "primaryEntityName" | "sourceKind" | "title">,
+  event: Pick<EventRecord, "eventType" | "primaryEntityName" | "sourceKind" | "title">,
   publisherInstitution?: string,
 ) {
   const primaryEntityName = event.primaryEntityName?.trim()
   if (!primaryEntityName) return undefined
+  if (event.eventType === "market_move" && event.sourceKind === "media_fast_feed" && isBroadMarketDescriptor(primaryEntityName)) {
+    return undefined
+  }
   if (shouldSuppressDisplayPrimaryEntity(event, primaryEntityName)) {
     return extractInstitutionLabelFromTitle(event.title) ?? publisherInstitution?.trim()
   }
@@ -266,10 +276,10 @@ function isPreferredEntity(candidate: InvestmentEntityRef, current: InvestmentEn
 
 function getEntityAliasKey(entity: InvestmentEntityRef) {
   if (entity.entityType === "security") {
-    const normalizedCode = normalizeSecurityCode(entity.code)
-      ?? normalizeSecurityCode(entity.entityId)
-      ?? normalizeSecurityCode(entity.label)
-    if (normalizedCode) return `${entity.entityType}|code:${normalizedCode}`
+    const normalizedIdentifier = normalizeSecurityIdentifier(entity.entityId)
+      ?? normalizeSecurityIdentifier(entity.code)
+      ?? normalizeSecurityIdentifier(entity.label)
+    if (normalizedIdentifier) return `${entity.entityType}|${normalizedIdentifier}`
   }
 
   return `${entity.entityType}|label:${normalizeEntityText(entity.label) ?? entity.entityId.toLowerCase()}`
@@ -297,12 +307,49 @@ function collapseDisplayEntities(entities: InvestmentEntityRef[]) {
   return Array.from(bestByLabel.values())
 }
 
+function shouldSuppressDisplayEntityLink(
+  event: Pick<EventDetail, "eventType" | "sourceKind">,
+  entity: EventEntityLink,
+) {
+  return event.eventType === "market_move"
+    && event.sourceKind === "media_fast_feed"
+    && entity.entityType === "company"
+    && isBroadMarketDescriptor(entity.entityName)
+}
+
 function collectEntityLookupKeys(entity: InvestmentEntityRef) {
   const keys = new Set<string>([entity.entityId])
   if (entity.code) keys.add(entity.code)
+  const normalizedIdentifier = normalizeSecurityIdentifier(entity.entityId)
+    ?? normalizeSecurityIdentifier(entity.code)
+  if (normalizedIdentifier) keys.add(normalizedIdentifier)
   const normalizedCode = normalizeSecurityCode(entity.code) ?? normalizeSecurityCode(entity.entityId)
   if (normalizedCode) keys.add(normalizedCode)
   return Array.from(keys)
+}
+
+function getEntityTitleRelevanceScore(entity: InvestmentEntityRef, title: string) {
+  const normalizedTitle = normalizeComparableTitleToken(title) ?? ""
+  const normalizedLabel = normalizeComparableTitleToken(entity.label) ?? ""
+  let score = 0
+
+  if (normalizedLabel && normalizedTitle.includes(normalizedLabel)) score += 300
+  if (entity.code && title.toLowerCase().includes(entity.code.toLowerCase())) score += 220
+  if (entity.entityType === "security") score += 80
+  if (entity.entityType === "issuer") score += 40
+
+  return score
+}
+
+function orderProjectedEntities(entities: InvestmentEntityRef[], title: string) {
+  return [...entities].sort((left, right) => {
+    const leftScore = getEntityTitleRelevanceScore(left, title)
+    const rightScore = getEntityTitleRelevanceScore(right, title)
+    if (leftScore !== rightScore) return rightScore - leftScore
+    if (isPreferredEntity(right, left)) return 1
+    if (isPreferredEntity(left, right)) return -1
+    return left.label.localeCompare(right.label, "zh-Hans-CN")
+  })
 }
 
 export function formatAffectedMarketLabel(value: string) {
@@ -536,6 +583,76 @@ function getFactValueLabels(fact: EventFact) {
   }
 }
 
+function getExchangeAnnouncementPayload(fact: EventFact) {
+  const payload = fact.payload ?? {}
+  return {
+    announcementTypeName: typeof payload.announcementTypeName === "string" ? payload.announcementTypeName : undefined,
+    actionKind: typeof payload.actionKind === "string" ? payload.actionKind : undefined,
+    announcementStage: typeof payload.announcementStage === "string" ? payload.announcementStage : undefined,
+    financingPath: typeof payload.financingPath === "string" ? payload.financingPath : undefined,
+    ownershipDirection: typeof payload.ownershipDirection === "string" ? payload.ownershipDirection : undefined,
+    isFormalDisclosure: payload.isFormalDisclosure === true,
+  }
+}
+
+function formatAnnouncementStageLabel(stage?: string) {
+  if (!stage) return undefined
+  switch (stage) {
+    case "pre_disclosure":
+      return "预披露阶段"
+    case "proposal":
+      return "方案/预案阶段"
+    case "progress":
+      return "审核/进展阶段"
+    case "implementation":
+      return "实施阶段"
+    case "completion":
+      return "结果/终止阶段"
+    default:
+      return stage
+  }
+}
+
+function formatExchangeAnnouncementFactSummary(fact: EventFact) {
+  const payload = getExchangeAnnouncementPayload(fact)
+  const stageLabel = formatAnnouncementStageLabel(payload.announcementStage)
+  const formalLead = payload.isFormalDisclosure ? "这是正式披露公告" : "这是披露线索"
+
+  switch (fact.metricName) {
+    case "financing": {
+      const pathLabel = payload.financingPath === "ipo"
+        ? "IPO/上市融资"
+        : payload.financingPath === "convertible_bond"
+          ? "可转债融资"
+          : payload.financingPath === "rights_issue"
+            ? "配股融资"
+            : payload.financingPath === "refinancing"
+              ? "再融资/股权融资"
+              : "融资事项"
+      return `${formalLead}，围绕 ${pathLabel}${stageLabel ? `，当前处于${stageLabel}` : ""}，关键看规模、价格、稀释和资金用途。`
+    }
+    case "buyback":
+      return `${formalLead}，围绕回购事项${stageLabel ? `，当前处于${stageLabel}` : ""}，关键看金额、价格区间和执行力度。`
+    case "dividend":
+      return `${formalLead}，围绕分红派息${stageLabel ? `，当前处于${stageLabel}` : ""}，关键看分红率、派息节奏和现金流支持。`
+    case "shareholding_change": {
+      const directionLabel = payload.ownershipDirection === "increase"
+        ? "增持"
+        : payload.ownershipDirection === "decrease"
+          ? "减持"
+          : payload.ownershipDirection === "neutral"
+            ? "股份流通变化"
+            : "持股变动"
+      return `${formalLead}，围绕${directionLabel}${stageLabel ? `，当前处于${stageLabel}` : ""}，关键看主体属性、规模、均价和是否持续。`
+    }
+    default:
+      if (payload.announcementTypeName) {
+        return `${formalLead}，公告类型为${payload.announcementTypeName}${stageLabel ? `，当前处于${stageLabel}` : ""}，需继续核对正式文件和关键条款。`
+      }
+      return "这是一条交易所/法定披露事实，重点在于公告类型、关键条款和后续正式文件。"
+  }
+}
+
 function formatFactSummary(fact: EventFact) {
   switch (fact.factType) {
     case "policy_notice":
@@ -547,7 +664,7 @@ function formatFactSummary(fact: EventFact) {
     case "industry_news":
       return "这是行业动态型事实，更像主题催化线索，需要后续硬数据或公司公告确认。"
     case "exchange_announcement":
-      return "这是一条交易所/法定披露事实，重点在于公告类型、关键条款和后续正式文件。"
+      return formatExchangeAnnouncementFactSummary(fact)
     case "media_fast_signal":
       if (fact.unit === "%")
         return "快讯正文提到了一个幅度型数字，这更像市场情绪或题材线索，不等同于公司正式经营数据。"
@@ -987,9 +1104,33 @@ function summarizeTimelineState(state: EventLifecycleState) {
   }
 }
 
-function summarizeTimelineLabel(entry: Pick<EventTimelineEntry, "stateTo" | "reason">) {
+const maintenanceSnapshotFields = new Set([
+  "投资解读",
+  "投资评分",
+  "赛道标签",
+  "结构化完整度",
+])
+
+function getTimelineChangedFields(metadata?: Record<string, unknown>) {
+  if (!Array.isArray(metadata?.changedFields)) return []
+  return metadata.changedFields.filter(field => typeof field === "string") as string[]
+}
+
+function isMaintenanceOnlySnapshotChange(changedFields: string[]) {
+  return changedFields.length > 0 && changedFields.every(field => maintenanceSnapshotFields.has(field))
+}
+
+function summarizeTimelineLabel(
+  entry: Pick<EventTimelineEntry, "stateTo" | "reason">,
+  metadata?: Record<string, unknown>,
+) {
   if (entry.reason === "canonical_identity_merge")
     return "重复事件归并"
+  if (entry.reason === "event_snapshot_changed") {
+    if (isMaintenanceOnlySnapshotChange(getTimelineChangedFields(metadata)))
+      return "维护性更新"
+    return "事件信息更新"
+  }
   return summarizeTimelineState(entry.stateTo)
 }
 
@@ -998,9 +1139,7 @@ function summarizeTimelineReason(reason?: string, metadata?: Record<string, unkn
   const sourceName = sourceId ? sources[sourceId as keyof typeof sources]?.name ?? sourceId : undefined
   const mergedEventTitle = typeof metadata?.mergedEventTitle === "string" ? metadata.mergedEventTitle : undefined
   const mergedEventId = typeof metadata?.mergedEventId === "string" ? metadata.mergedEventId : undefined
-  const changedFields = Array.isArray(metadata?.changedFields)
-    ? metadata.changedFields.filter(field => typeof field === "string") as string[]
-    : []
+  const changedFields = getTimelineChangedFields(metadata)
   const changedLabel = changedFields.length
     ? changedFields.join("、")
     : "投资解读、评分或标签"
@@ -1009,6 +1148,8 @@ function summarizeTimelineReason(reason?: string, metadata?: Record<string, unkn
     case "new_event":
       return sourceName ? `首次由 ${sourceName} 识别到该事件` : "系统首次识别到该事件"
     case "event_snapshot_changed":
+      if (isMaintenanceOnlySnapshotChange(changedFields))
+        return "维护性重算"
       return sourceName ? `来自 ${sourceName} 的新证据刷新了${changedLabel}` : `${changedLabel}发生变化`
     case "authoritative_source_confirmation":
       return sourceName ? `${sourceName} 作为更高权威来源加入，事件可信度提升` : "更高权威来源加入，事件可信度提升"
@@ -1026,9 +1167,10 @@ function summarizeTimelineReason(reason?: string, metadata?: Record<string, unkn
 }
 
 function compressTimeline(entries: InvestmentTimelineEntry[]) {
+  const filtered = orderTimelineForDisplay(filterDuplicateInitialDetections(entries))
   const merged: InvestmentTimelineEntry[] = []
 
-  for (const entry of entries) {
+  for (const entry of filtered) {
     const prev = merged[merged.length - 1]
     if (
       prev
@@ -1063,6 +1205,73 @@ function compressTimeline(entries: InvestmentTimelineEntry[]) {
   }
 
   return merged
+}
+
+const INITIAL_DETECTION_REORDER_WINDOW_MS = 5 * 1000
+
+function filterDuplicateConfirmationEntries(entries: EventTimelineEntry[]) {
+  const keep = new Array(entries.length).fill(true)
+  let keptMultiSourceConfirmation = false
+  let keptAuthoritativeConfirmation = false
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]
+    if (entry.reason === "multi_source_confirmation") {
+      if (!keptMultiSourceConfirmation && !keptAuthoritativeConfirmation) {
+        keptMultiSourceConfirmation = true
+        continue
+      }
+      keep[index] = false
+      continue
+    }
+
+    if (entry.reason === "authoritative_source_confirmation") {
+      if (!keptAuthoritativeConfirmation) {
+        keptAuthoritativeConfirmation = true
+        continue
+      }
+      keep[index] = false
+    }
+  }
+
+  return entries.filter((_, index) => keep[index])
+}
+
+function filterDuplicateInitialDetections(entries: InvestmentTimelineEntry[]) {
+  const keep = new Array(entries.length).fill(true)
+  let seenInitialDetection = false
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]
+    if (entry.label !== "首次识别") continue
+    if (!seenInitialDetection) {
+      seenInitialDetection = true
+      continue
+    }
+    keep[index] = false
+  }
+
+  return entries.filter((_, index) => keep[index])
+}
+
+function orderTimelineForDisplay(entries: InvestmentTimelineEntry[]) {
+  const ordered = [...entries]
+
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const current = ordered[index]
+    const next = ordered[index + 1]
+
+    if (
+      current.label === "首次识别"
+      && next.label === "重复事件归并"
+      && Math.abs(current.changedAt - next.changedAt) <= INITIAL_DETECTION_REORDER_WINDOW_MS
+    ) {
+      ordered[index] = next
+      ordered[index + 1] = current
+    }
+  }
+
+  return ordered
 }
 
 export function projectInvestmentEventBrief(event: EventRecord): InvestmentEventBrief {
@@ -1140,6 +1349,9 @@ export function projectInvestmentEventBrief(event: EventRecord): InvestmentEvent
     riskOfMisread: deriveRiskOfMisread(event, eventFamily),
     latestLifecycleState: event.latestLifecycleState,
     latestLifecycleAt: event.latestLifecycleAt,
+    seriesKey: event.seriesKey,
+    periodKey: event.periodKey,
+    releaseCadence: event.releaseCadence,
     canonicalUrl: event.canonicalUrl,
     relatedTopics: event.topicTags,
     sourceSummary: {
@@ -1152,9 +1364,11 @@ export function projectInvestmentEventBrief(event: EventRecord): InvestmentEvent
 }
 
 export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEventDetail {
-  const entities = collapseDisplayEntities(dedupeEntities(detail.entities.map(toInvestmentEntity)))
+  const orderedEntities = orderProjectedEntities(collapseDisplayEntities(dedupeEntities(detail.entities
+    .filter(entity => !shouldSuppressDisplayEntityLink(detail, entity))
+    .map(toInvestmentEntity))), detail.title)
   const entityMap = new Map<string, InvestmentEntityRef>()
-  for (const entity of entities) {
+  for (const entity of orderedEntities) {
     for (const key of collectEntityLookupKeys(entity)) {
       if (!entityMap.has(key)) entityMap.set(key, entity)
     }
@@ -1162,19 +1376,19 @@ export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEve
 
   const brief = projectInvestmentEventBrief({
     ...detail,
-    primaryEntityName: entities[0]?.label ?? detail.primaryEntityName,
+    primaryEntityName: orderedEntities[0]?.label ?? detail.primaryEntityName,
   })
 
   const evidence = detail.evidences
     .filter(item => item.title || item.url)
     .map(item => toInvestmentEvidence(item, {
       sourceKind: detail.sourceKind,
-      primaryEntityName: entities[0]?.label ?? detail.primaryEntityName ?? undefined,
+      primaryEntityName: orderedEntities[0]?.label ?? detail.primaryEntityName ?? undefined,
     }))
 
   const sourceKinds = detail.sourceKind ? [detail.sourceKind] : []
   const primaryEvidence = evidence[0]
-  const projectedEntities = entities.length ? entities.slice(0, 8) : brief.affectedEntities
+  const projectedEntities = orderedEntities.length ? orderedEntities.slice(0, 8) : brief.affectedEntities
   const publisherInstitution = primaryEvidence?.sourceName ?? brief.publisherInstitution ?? brief.sourceSummary.primarySourceName
   const affectedMarketLabels = detail.affectedMarkets.map(formatAffectedMarketLabel)
   const whoIsAffected = deriveWhoIsAffected(projectedEntities, detail.affectedMarkets)
@@ -1196,12 +1410,12 @@ export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEve
     thesis: deriveThesis(brief),
     keyFacts: detail.facts.map(fact => toInvestmentFact(fact, entityMap)),
     evidence,
-    timelineSummary: compressTimeline(detail.timeline
+    timelineSummary: compressTimeline(filterDuplicateConfirmationEntries(detail.timeline)
       .map((entry): InvestmentTimelineEntry => ({
         timelineId: entry.timelineId,
         changedAt: entry.changedAt,
         state: entry.stateTo,
-        label: summarizeTimelineLabel(entry),
+        label: summarizeTimelineLabel(entry, entry.metadata),
         sourceName: typeof entry.metadata?.sourceId === "string" ? (sources[entry.metadata.sourceId as keyof typeof sources]?.name ?? entry.metadata.sourceId) : undefined,
         note: summarizeTimelineReason(entry.reason, entry.metadata),
         relatedEventId: typeof entry.metadata?.mergedEventId === "string" ? entry.metadata.mergedEventId : undefined,

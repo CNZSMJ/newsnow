@@ -191,6 +191,32 @@ export function createEastmoneyMarketMoveFixture() {
   })
 }
 
+export function createXueqiuHotstockFixture() {
+  const payload: NewsItem = {
+    id: "SH688256",
+    title: "寒武纪",
+    url: "https://xueqiu.com/s/SH688256",
+    extra: {
+      info: "12.5% SH",
+      raw: {
+        code: "SH688256",
+        name: "寒武纪",
+        percent: 12.5,
+        exchange: "SH",
+      },
+    },
+  }
+
+  return createFixtureRawRow({
+    sourceId: "xueqiu-hotstock",
+    itemId: "SH688256",
+    title: payload.title,
+    url: payload.url,
+    publishedAt: Date.parse("2026-04-12T10:36:00+08:00"),
+    payload,
+  })
+}
+
 export function createCninfoAnnouncementFixture(input: {
   itemId: string
   secCode: string

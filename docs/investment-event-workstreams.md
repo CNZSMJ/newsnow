@@ -1,7 +1,7 @@
 # Investment Event Workstreams
 
 Status: Active backlog
-Last updated: 2026-04-12
+Last updated: 2026-04-17
 Scope: long-running execution tracks for the investment event system
 
 ## 1. Purpose
@@ -22,6 +22,7 @@ The work is split into three sustained workstreams:
 For active execution status, current tranche scope, and milestone tracking, see:
 
 - [docs/investment-event-delivery-board.md](./investment-event-delivery-board.md)
+- [docs/investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
 
 These workstreams may progress in parallel, but they must follow one direction:
 
@@ -62,6 +63,17 @@ Goal:
 - maintain a single canonical event engine
 - maintain a single canonical investment semantics layer
 - produce facts, evidence, impact, and event interpretation once in the backend
+
+Current foundation phase:
+
+- Phase 1 `Semantic Baseline` completed on 2026-04-17
+- Phase 2 `Facts-First Depth` completed on 2026-04-17
+- Phase 3 `Identity and Series Model` completed on 2026-04-17
+- Phase 4 `Merge and Timeline Hardening` completed on 2026-04-17
+- Phase 5 `Query and Scan Foundation` completed on 2026-04-17
+- Phase 6 `Quality Gates and SLOs` completed on 2026-04-17
+- Phase 7 `Repair, Backfill, and Operations` completed on 2026-04-17
+- Foundation roadmap status: completed on 2026-04-17; active backend work now shifts to latency remediation and continued semantic precision hardening
 
 ### A1. Canonical investment projection
 

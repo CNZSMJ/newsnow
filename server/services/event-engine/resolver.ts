@@ -16,7 +16,9 @@ function classifyEventSubType(eventType: EventType, title: string, summary?: str
     if (hasAny("年度报告", "年报", "半年报", "季报", "一季度报告", "三季度报告", "中期报告", "业绩预告", "业绩快报")) return "earnings"
     if (hasAny("定增", "非公开发行", "向特定对象发行", "可转债", "配股", "募资", "融资", "发行股份", "募集说明书")) return "financing"
     if (hasAny("中标", "合同", "订单", "框架协议", "签署")) return "contract"
-    if (hasAny("减持", "增持", "股份变动", "持股变动", "股东")) return "shareholding_change"
+    if (hasAny("减持", "增持", "股份变动", "持股变动", "持股比例变动", "持股计划", "增持计划", "减持计划", "持股5%以上", "股权变动")) {
+      return "shareholding_change"
+    }
     if (hasAny("聘任", "辞任", "董事会", "监事会", "高级管理人员", "总经理", "董事长")) return "management_change"
     if (hasAny("问询函", "监管函", "纪律处分", "立案", "警示函", "处罚")) return "regulation"
     if (hasAny("回购")) return "buyback"
@@ -38,6 +40,15 @@ function classifyEventSubType(eventType: EventType, title: string, summary?: str
   }
 
   return "other"
+}
+
+function resolveProfileAlignedSubType(profile: EventProfile | undefined, classifiedSubType: EventSubType) {
+  if (profile?.sourceKind === "industry_report_release") {
+    if (classifiedSubType === "other" || classifiedSubType === "industry_data") return "industry_report" as const
+  }
+
+  if (classifiedSubType !== "other") return classifiedSubType
+  return profile?.defaultEventSubType as EventSubType | undefined
 }
 
 function inferMediaFastFeedClassification(title: string, summary?: string | null) {
@@ -156,7 +167,7 @@ export function resolveEventClassification(sourceId: SourceID, title: string, su
     ?? (sources[sourceId]?.column === "industry" ? "industry" : "news")
   const classifiedSubType = classifyEventSubType(eventType, title, summary)
   const eventSubType = inferredMediaClassification?.eventSubType
-    ?? (classifiedSubType !== "other" ? classifiedSubType : profile?.defaultEventSubType as EventSubType | undefined)
+    ?? resolveProfileAlignedSubType(profile, classifiedSubType)
     ?? "other"
 
   return {

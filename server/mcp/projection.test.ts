@@ -61,6 +61,9 @@ function makeInvestmentDetail(): InvestmentEventDetail {
     riskOfMisread: ["单日利率回落可能只是季末扰动缓解"],
     latestLifecycleState: "confirmed",
     latestLifecycleAt: Date.UTC(2026, 3, 12, 11, 31, 0),
+    seriesKey: "official_rate_fixing|fdr007",
+    periodKey: "2026-04-12",
+    releaseCadence: "daily",
     canonicalUrl: "https://example.com/rate",
     relatedTopics: [],
     sourceSummary: {
@@ -121,6 +124,10 @@ describe("mcp investment projection", () => {
     expect(detail.subjectSummary).toBe("影响市场：中国资金面")
     expect(detail.actionLabel).toBe("优先处理")
     expect(detail.eventFamilyLabel).toBe("资金与利率")
+    expect(detail.seriesKey).toBe("official_rate_fixing|fdr007")
+    expect(detail.periodKey).toBe("2026-04-12")
+    expect(detail.releaseCadence).toBe("daily")
+    expect(detail.seriesSummary).toBe("日度序列，当前期次：2026-04-12")
     expect(detail.keyFacts[0]?.label).toBe("FDR007 利率")
     expect(detail.keyFacts[0]?.debug).toBeUndefined()
     expect(detail.evidence[0]?.debug).toBeUndefined()
@@ -133,6 +140,7 @@ describe("mcp investment projection", () => {
 
     expect(detail.keyFacts[0]?.debug?.factType).toBe("macro_rate")
     expect(detail.keyFacts[0]?.debug?.evidenceId).toBe("raw_1")
+    expect(detail.seriesSummary).toBe("日度序列，当前期次：2026-04-12")
     expect(detail.evidence[0]?.debug?.evidenceId).toBe("raw_1")
     expect(detail.evidence[0]?.debug?.extractionStatus).toBe("ready")
     expect(detail.timelineSummary[0]?.debug?.timelineId).toBe("tl_1")
@@ -175,6 +183,7 @@ describe("mcp investment projection", () => {
 
     expect(brief.actionBucket).toBe("actionable")
     expect(brief.actionLabel).toBe("优先处理")
+    expect(brief.seriesSummary).toBe("日度序列，当前期次：2026-04-12")
     expect(watchlist.recentEvents[0]?.eventId).toBe("evt_1")
     expect(watchlist.recentEvents[0]?.sourceSummary.debug).toBeUndefined()
   })

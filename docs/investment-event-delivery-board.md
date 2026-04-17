@@ -1,8 +1,12 @@
 # Investment Event Delivery Board
 
 Status: Active execution board  
-Last updated: 2026-04-12 (late)  
+Last updated: 2026-04-17  
 Scope: project-management view of the investment event system upgrade
+
+Related roadmap:
+
+- [docs/investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
 
 ## 1. Operating rule
 
@@ -17,7 +21,7 @@ No task on this board is allowed to move business semantics into the frontend or
 
 | Workstream | Current stage | Status | What is already true | Next milestone |
 | --- | --- | --- | --- | --- |
-| Backend unified engine | Canonical investment projection | In progress | Canonical events, facts, evidence, impact, replay, shadow, observability, investment projection all exist | Increase semantic precision and projection quality |
+| Backend unified engine | Post-foundation operations and precision hardening | In progress | Canonical events, facts, evidence, impact, replay, shadow, observability, investment projection, recurring-series scan semantics, quality gates, and ops triage surfaces are in place; the current local blocker is priority-source latency P95 on real data | Use the new triage surfaces to reduce slow source families and continue semantic precision hardening |
 | Frontend investor surface | Investor workbench v1 | In progress | `/events`, `/events/:id`, `/watchlists`, `/watchlists/:id` are live, use provider-facing investment routes, and support action-bucket scanning | Deepen workbench behaviors and high-volume workflows |
 | Agent/provider interface | Provider contract v2 | In progress | Explicit provider routes exist and local MCP exposes task-oriented scan/detail tools over the same projection | Harden provider schema and reduce remaining downstream reconstruction |
 
@@ -153,7 +157,16 @@ Tasks:
 - [ ] Raise entity precision for issuer vs institution vs market display in more source families
 - [ ] Reduce remaining generic `general_news` fallback usage for high-value sources
 
-## 5. Definition of done for the current tranche
+## 5. Foundation phase status
+
+- [x] Phase 1 `Semantic Baseline` completed on 2026-04-17
+- [x] Phase 2 `Facts-First Depth` completed on 2026-04-17
+- [x] Phase 3 `Identity and Series Model` completed on 2026-04-17
+- [x] Phase 4 `Merge and Timeline Hardening` completed on 2026-04-17
+- [x] Phase 5 `Query and Scan Foundation` completed on 2026-04-17
+- [x] Phase 6 `Quality Gates and SLOs` completed on 2026-04-17
+- [x] Phase 7 `Repair, Backfill, and Operations` completed on 2026-04-17
+## 6. Definition of done for the current tranche
 
 The current tranche is complete when:
 
@@ -163,7 +176,7 @@ The current tranche is complete when:
 4. legacy `/api/events/*` read routes are removed from the public consumer surface, and event-engine operations are separated under `/api/ops/events/*`
 5. all of the above are covered by targeted tests and pass build validation
 
-## 6. Validation cadence
+## 7. Validation cadence
 
 Every completed task in the active tranche must pass:
 

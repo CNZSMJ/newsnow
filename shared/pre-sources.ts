@@ -23,6 +23,14 @@ const profile = {
     assetClasses: ["equity", "rates", "fx", "commodity", "credit", "fund"],
     markets: ["A", "HK", "CN_rates", "CN_macro", "global_macro"],
   } as const,
+  marketMoveFeed: {
+    sourceKind: "media_fast_feed",
+    defaultEventType: "market_move",
+    authorityLevel: "media",
+    parserFamily: "media_fast",
+    assetClasses: ["equity", "fund"],
+    markets: ["A", "HK"],
+  } as const,
   officialRateFixing: {
     sourceKind: "official_rate_fixing",
     defaultEventType: "macro",
@@ -78,7 +86,7 @@ const profile = {
   industryReportRelease: {
     sourceKind: "industry_report_release",
     defaultEventType: "industry",
-    defaultEventSubType: "industry_data",
+    defaultEventSubType: "industry_report",
     authorityLevel: "association",
     parserFamily: "industry_report",
     assetClasses: ["equity", "commodity"],
@@ -311,11 +319,13 @@ export const originSources = {
     color: "blue",
     home: "https://xueqiu.com",
     column: "finance",
+    eventProfile: profile.marketMoveFeed,
     sub: {
       hotstock: {
         title: "热门股票",
         interval: Time.Realtime,
         type: "hottest",
+        eventProfile: profile.marketMoveFeed,
       },
     },
   },
@@ -528,10 +538,18 @@ export const originSources = {
     color: "sky",
     column: "finance",
     home: "https://www.szse.cn/index/index.html",
+    eventProfile: {
+      ...profile.officialPolicyNotice,
+      markets: ["A"],
+    },
     sub: {
       news: {
         title: "交易所要闻",
         interval: Time.Default,
+        eventProfile: {
+          ...profile.officialPolicyNotice,
+          markets: ["A"],
+        },
       },
     },
   },

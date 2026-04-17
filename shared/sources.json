@@ -468,6 +468,20 @@
     "type": "hottest",
     "column": "finance",
     "home": "https://xueqiu.com",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "market_move",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "blue",
     "interval": 120000,
     "title": "热门股票"
@@ -477,6 +491,20 @@
     "type": "hottest",
     "column": "finance",
     "home": "https://xueqiu.com",
+    "eventProfile": {
+      "sourceKind": "media_fast_feed",
+      "defaultEventType": "market_move",
+      "authorityLevel": "media",
+      "parserFamily": "media_fast",
+      "assetClasses": [
+        "equity",
+        "fund"
+      ],
+      "markets": [
+        "A",
+        "HK"
+      ]
+    },
     "color": "blue",
     "interval": 120000,
     "title": "热门股票"
@@ -1226,6 +1254,23 @@
     "name": "深交所",
     "column": "finance",
     "home": "https://www.szse.cn/index/index.html",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A"
+      ]
+    },
     "color": "sky",
     "interval": 600000,
     "title": "交易所要闻"
@@ -1234,6 +1279,23 @@
     "name": "深交所",
     "column": "finance",
     "home": "https://www.szse.cn/index/index.html",
+    "eventProfile": {
+      "sourceKind": "official_policy_notice",
+      "defaultEventType": "policy",
+      "authorityLevel": "official",
+      "parserFamily": "policy",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "A"
+      ]
+    },
     "color": "sky",
     "interval": 600000,
     "title": "交易所要闻"
@@ -2420,7 +2482,7 @@
     "eventProfile": {
       "sourceKind": "industry_report_release",
       "defaultEventType": "industry",
-      "defaultEventSubType": "industry_data",
+      "defaultEventSubType": "industry_report",
       "authorityLevel": "association",
       "parserFamily": "industry_report",
       "assetClasses": [

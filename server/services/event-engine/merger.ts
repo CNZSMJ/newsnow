@@ -10,6 +10,81 @@ function toClusterBucket(eventType: EventType, publishedAt?: number) {
   return publishedAt ? Math.floor(publishedAt / bucketMs) : 0
 }
 
+function normalizeSeriesTitle(value: string) {
+  return normalizeReleaseTitle(value)
+    .replace(/[\d.]+%?/g, " ")
+    .replace(/[：:·、,，\-/]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+export function derivePeriodicSeriesMetadata(input: {
+  sourceId: SourceID
+  sourceKind?: EventSourceKind
+  eventSubType: EventSubType
+  raw: RawItemRow
+  payload: NewsItem
+}) {
+  const raw = (input.payload.extra?.raw ?? {}) as Record<string, unknown>
+  const publishedDay = getPublishedDay(input.raw.published_at)
+
+  if (input.sourceKind === "official_rate_fixing") {
+    const metric = typeof raw.termCode === "string"
+      ? raw.termCode
+      : typeof raw.productCode === "string"
+        ? raw.productCode
+        : null
+    const periodKey = typeof raw.showDateCN === "string"
+      ? raw.showDateCN.slice(0, 10)
+      : typeof raw.produceDate === "string"
+        ? raw.produceDate.slice(0, 10)
+        : publishedDay
+
+    return {
+      seriesKey: metric ? `official_rate_fixing|${metric}` : null,
+      periodKey,
+      releaseCadence: "daily",
+    }
+  }
+
+  if (input.sourceKind === "industry_stat_release" || input.sourceKind === "industry_report_release" || input.sourceKind === "industry_policy_notice") {
+    const text = `${input.payload.title} ${typeof input.payload.extra?.info === "string" ? input.payload.extra.info : ""}`
+    const periodKey = extractPeriodKey(text) ?? publishedDay
+    const releaseCadence = inferReleaseCadence(text)
+    const normalizedCore = normalizeSeriesTitle(input.payload.title) || normalizeReleaseTitle(input.payload.title) || normalizeTitleForClustering(input.payload.title)
+    const rawCategory = typeof raw.announcementTypeName === "string"
+      ? raw.announcementTypeName
+      : typeof raw.columnName === "string"
+        ? raw.columnName
+        : null
+
+    return {
+      seriesKey: [
+        input.sourceKind,
+        input.sourceId,
+        input.eventSubType,
+        sourceTagsForSeries(input.sourceId),
+        rawCategory,
+        releaseCadence,
+        normalizedCore.toLowerCase(),
+      ].filter(Boolean).join("|") || null,
+      periodKey,
+      releaseCadence,
+    }
+  }
+
+  return {
+    seriesKey: null,
+    periodKey: null,
+    releaseCadence: null,
+  }
+}
+
+function sourceTagsForSeries(sourceId: SourceID) {
+  const sourceTags = sources[sourceId]?.tags ?? []
+  return sourceTags.join(",")
+}
+
 export function buildEventIdentity(input: {
   eventType: EventType
   eventSubType: EventSubType

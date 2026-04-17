@@ -3,6 +3,24 @@ import { sourceKindAllowedEventTypes } from "@shared/event-profile"
 import type { SourceID } from "@shared/types"
 import sources from "@shared/sources"
 
+const marketMoveFeedLegacyProfile: EventProfile = {
+  sourceKind: "media_fast_feed",
+  defaultEventType: "market_move",
+  authorityLevel: "media",
+  parserFamily: "media_fast",
+  assetClasses: ["equity", "fund"],
+  markets: ["A", "HK"],
+}
+
+const officialExchangeNewsLegacyProfile: EventProfile = {
+  sourceKind: "official_policy_notice",
+  defaultEventType: "policy",
+  authorityLevel: "official",
+  parserFamily: "policy",
+  assetClasses: ["equity", "fund"],
+  markets: ["A"],
+}
+
 export function getExchangeDisclosureMarkets(sourceId: SourceID) {
   if (sourceId.startsWith("hkexnews") || sourceId.startsWith("cninfo-hk")) {
     return ["HK"] as const
@@ -19,6 +37,12 @@ export function getExchangeDisclosureMarkets(sourceId: SourceID) {
 
 function getLegacyProfile(sourceId: SourceID): EventProfile | undefined {
   const [mainId] = sourceId.split("-")
+  if (["xueqiu"].includes(mainId)) {
+    return marketMoveFeedLegacyProfile
+  }
+  if (["szse"].includes(mainId)) {
+    return officialExchangeNewsLegacyProfile
+  }
   if (["pbc", "safe", "csrc", "gov", "sasac", "mof", "mofcom"].includes(mainId)) {
     return {
       sourceKind: "official_policy_notice",

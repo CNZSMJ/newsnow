@@ -54,6 +54,9 @@ export interface EventRow {
   ingested_at: number
   canonical_url: string | null
   primary_entity_name: string | null
+  series_key?: string | null
+  period_key?: string | null
+  release_cadence?: string | null
   importance: EventImportance
   sentiment: EventSentiment | null
   directional_view: DirectionalView | null

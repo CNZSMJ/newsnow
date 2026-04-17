@@ -13,4 +13,16 @@ describe("event source profiles", () => {
     expect(getSourceEventProfile("sse-latest")?.markets).toEqual(["A"])
     expect(getSourceEventProfile("cninfo-hk-disclosure")?.markets).toEqual(["HK"])
   })
+
+  it("pins high-value finance feeds to explicit source profiles instead of leaving them generic", () => {
+    expect(getSourceEventProfile("xueqiu-hotstock")).toEqual(expect.objectContaining({
+      sourceKind: "media_fast_feed",
+      defaultEventType: "market_move",
+    }))
+    expect(getSourceEventProfile("szse-news")).toEqual(expect.objectContaining({
+      sourceKind: "official_policy_notice",
+      defaultEventType: "policy",
+      markets: ["A"],
+    }))
+  })
 })

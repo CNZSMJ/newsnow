@@ -134,6 +134,7 @@ export type EventSubType =
   | "industrial_policy"
   | "macro_data"
   | "industry_data"
+  | "industry_report"
   | "industry_news"
 export type EventImportance = "low" | "medium" | "high"
 export type EventSentiment = "positive" | "negative" | "neutral"
@@ -170,6 +171,9 @@ export interface EventRecord {
   ingestedAt: number
   canonicalUrl?: string
   primaryEntityName?: string
+  seriesKey?: string
+  periodKey?: string
+  releaseCadence?: string
   importance: EventImportance
   sentiment?: EventSentiment
   directionalView?: DirectionalView
@@ -402,6 +406,9 @@ export interface InvestmentEventBrief {
   riskOfMisread: string[]
   latestLifecycleState?: EventLifecycleState
   latestLifecycleAt?: number
+  seriesKey?: string
+  periodKey?: string
+  releaseCadence?: string
   canonicalUrl?: string
   relatedTopics: IndustryTag[]
   sourceSummary: {

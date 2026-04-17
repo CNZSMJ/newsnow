@@ -123,7 +123,98 @@ describe("resolveEventClassification", () => {
     )
 
     expect(resolved.eventType).toBe("industry")
-    expect(resolved.eventSubType).toBe("industry_data")
+    expect(resolved.eventSubType).toBe("industry_report")
     expect(resolved.profile?.sourceKind).toBe("industry_report_release")
+  })
+
+  it("treats xueqiu hot stock ranking as market move feed instead of generic news", () => {
+    const resolved = resolveEventClassification(
+      "xueqiu-hotstock",
+      "寒武纪",
+      "12.5% SH",
+    )
+
+    expect(resolved.eventType).toBe("market_move")
+    expect(resolved.eventSubType).toBe("other")
+    expect(resolved.profile?.sourceKind).toBe("media_fast_feed")
+  })
+
+  it("treats szse news as official exchange notice instead of generic news", () => {
+    const resolved = resolveEventClassification(
+      "szse-news",
+      "深交所发布关于优化创业板ETF申购赎回机制的通知",
+      null,
+    )
+
+    expect(resolved.eventType).toBe("policy")
+    expect(resolved.profile?.sourceKind).toBe("official_policy_notice")
+  })
+
+  it("keeps generic exchange disclosures on disclosure semantics instead of inventing subtype", () => {
+    const resolved = resolveEventClassification(
+      "cninfo-szse",
+      "宁德时代：关于召开2026年第一次临时股东大会的通知",
+      null,
+    )
+
+    expect(resolved.eventType).toBe("announcement")
+    expect(resolved.eventSubType).toBe("other")
+    expect(resolved.profile?.sourceKind).toBe("exchange_disclosure")
+  })
+
+  it("keeps explicit shareholding-change announcements classified as shareholding_change", () => {
+    const resolved = resolveEventClassification(
+      "cninfo-szse",
+      "宁德时代：控股股东及其一致行动人减持股份预披露公告",
+      null,
+    )
+
+    expect(resolved.eventType).toBe("announcement")
+    expect(resolved.eventSubType).toBe("shareholding_change")
+    expect(resolved.profile?.sourceKind).toBe("exchange_disclosure")
+  })
+
+  it("strips event-container suffixes from primary entity names in industry news titles", () => {
+    const resolved = resolveEventClassification(
+      "semi-semiconductor",
+      "台积电法说会：AI需求极为强劲，供不应求将持续至至少2027年",
+      "魏哲家称，对2026年台积全年营收以美元计成长超过30%充满信心。",
+    )
+
+    expect(resolved.eventType).toBe("industry")
+    expect(resolved.eventSubType).toBe("industry_news")
+    expect(resolved.primaryEntityName).toBe("台积电")
+  })
+
+  it("strips event-container variants such as 业绩会实录 and 电话会定调 from primary entities", () => {
+    const earningsCall = resolveEventClassification(
+      "wallstreetcn-quick",
+      "兴业证券业绩会实录：下一步怎么做？",
+      null,
+    )
+    const phoneCall = resolveEventClassification(
+      "wallstreetcn-quick",
+      "阿斯麦电话会定调：存储客户今年产能已售罄，长单托底，非EUV增长“周期性拐点确立”",
+      null,
+    )
+
+    expect(earningsCall.primaryEntityName).toBe("兴业证券")
+    expect(phoneCall.primaryEntityName).toBe("阿斯麦")
+  })
+
+  it("recovers issuer names from media fast release headlines and suppresses non-entity phone-call phrases", () => {
+    const huaweiRelease = resolveEventClassification(
+      "jin10",
+      "华为新款鸿蒙电脑4月20日发布",
+      "金十数据4月14日讯，4月14日，华为官宣华为MateBook 14鸿蒙版将于4月20日HUAWEI Pura系列及全场景新品发布会上正式发布，该机将搭载云晰柔光屏与波点艺术圆键盘设计。",
+    )
+    const ministerCall = resolveEventClassification(
+      "sina-7x24",
+      "伊朗外长与俄罗斯外长举行电话会谈 讨论地区局势发展 当地时间13日，伊朗外交部长阿拉格齐与俄罗斯外交部长拉夫罗夫通电话，双方就最新地区局势发展以及在巴基斯坦伊斯兰堡举行的伊美会谈交换了意见。（央视新闻）",
+      null,
+    )
+
+    expect(huaweiRelease.primaryEntityName).toBe("华为")
+    expect(ministerCall.primaryEntityName).toBeUndefined()
   })
 })

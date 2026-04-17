@@ -46,6 +46,177 @@ describe("investment event projection", () => {
     expect(brief.sourceSummary.primarySourceName).toBeTruthy()
   })
 
+  it("suppresses broad market descriptors as follow-up subjects for market-move fast feeds", () => {
+    const brief = projectInvestmentEventBrief({
+      eventId: "evt_crypto_board_move",
+      title: "加密货币板块集体走高 Strategy涨超12%",
+      summary: "盘中异动",
+      eventType: "market_move",
+      eventSubType: "other",
+      sourceKind: "media_fast_feed",
+      primaryEntityName: "加密货币板块集体走高",
+      publishedAt: Date.UTC(2026, 3, 17, 22, 33, 0),
+      ingestedAt: Date.UTC(2026, 3, 17, 22, 34, 0),
+      importance: "medium",
+      directionalView: "positive",
+      directionalConfidence: 69,
+      materialityScore: 74,
+      tradabilityScore: 72,
+      authorityScore: 60,
+      freshnessScore: 83,
+      surpriseScore: 36,
+      affectedMarkets: ["A", "HK"],
+      impactSummary: ["这类信息时效高，但持续性要结合成交额、板块扩散和后续公告确认。"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 2,
+      sourceIds: ["cls-telegraph", "eastmoney-7x24"],
+    })
+
+    expect(brief.affectedEntities).toEqual([])
+    expect(brief.primarySubject?.entityType).toBe("market")
+    expect(brief.primarySubject?.label).toBe("A股")
+    expect(brief.subjectSummary).toBe("影响市场：A股")
+    expect(brief.whoIsAffected).toEqual(["影响市场：A股", "影响市场：港股"])
+  })
+
+  it("filters broad market descriptor entity links out of detail follow-up targets", () => {
+    const detail: EventDetail = {
+      eventId: "evt_crypto_board_move_detail",
+      title: "加密货币板块集体走高 Strategy涨超12%",
+      summary: "盘中异动",
+      eventType: "market_move",
+      eventSubType: "other",
+      sourceKind: "media_fast_feed",
+      primaryEntityName: "加密货币板块集体走高",
+      publishedAt: Date.UTC(2026, 3, 17, 22, 33, 0),
+      ingestedAt: Date.UTC(2026, 3, 17, 22, 34, 0),
+      importance: "medium",
+      directionalView: "positive",
+      directionalConfidence: 69,
+      materialityScore: 74,
+      tradabilityScore: 72,
+      authorityScore: 60,
+      freshnessScore: 83,
+      surpriseScore: 36,
+      affectedMarkets: ["A", "HK"],
+      impactSummary: ["这类信息时效高，但持续性要结合成交额、板块扩散和后续公告确认。"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 2,
+      sourceIds: ["cls-telegraph", "eastmoney-7x24"],
+      evidences: [],
+      entities: [{
+        eventId: "evt_crypto_board_move_detail",
+        entityType: "company",
+        entityName: "加密货币板块集体走高",
+        confidence: 0.65,
+        resolver: "primary-entity-fallback",
+      }],
+      facts: [],
+      timeline: [],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.affectedEntities).toEqual([])
+    expect(projected.primarySubject?.entityType).toBe("market")
+    expect(projected.subjectSummary).toBe("影响市场：A股")
+    expect(projected.whoIsAffected).toEqual(["影响市场：A股", "影响市场：港股"])
+  })
+
+  it("keeps explicitly named offshore securities as follow-up targets and ranks title-mentioned names first", () => {
+    const detail: EventDetail = {
+      eventId: "evt_crypto_explicit_tickers",
+      title: "加密货币板块集体走高 Strategy涨超12%",
+      summary: "盘中异动",
+      eventType: "market_move",
+      eventSubType: "other",
+      sourceKind: "media_fast_feed",
+      primaryEntityName: "加密货币板块集体走高",
+      publishedAt: Date.UTC(2026, 3, 17, 22, 33, 0),
+      ingestedAt: Date.UTC(2026, 3, 17, 22, 34, 0),
+      importance: "medium",
+      directionalView: "positive",
+      directionalConfidence: 69,
+      materialityScore: 74,
+      tradabilityScore: 72,
+      authorityScore: 60,
+      freshnessScore: 83,
+      surpriseScore: 36,
+      affectedMarkets: ["A", "HK"],
+      impactSummary: ["这类信息时效高，但持续性要结合成交额、板块扩散和后续公告确认。"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 2,
+      sourceIds: ["cls-telegraph", "eastmoney-7x24"],
+      evidences: [],
+      entities: [
+        {
+          eventId: "evt_crypto_explicit_tickers",
+          entityType: "company",
+          entityName: "加密货币板块集体走高",
+          confidence: 0.65,
+          resolver: "primary-entity-fallback",
+        },
+        {
+          eventId: "evt_crypto_explicit_tickers",
+          entityType: "stock",
+          entityName: "Coinbase",
+          code: "COIN",
+          fullCode: "us:coin",
+          confidence: 0.93,
+          resolver: "explicit-ticker-mention",
+        },
+        {
+          eventId: "evt_crypto_explicit_tickers",
+          entityType: "stock",
+          entityName: "Strategy",
+          code: "MSTR",
+          fullCode: "us:mstr",
+          confidence: 0.93,
+          resolver: "explicit-ticker-mention",
+        },
+        {
+          eventId: "evt_crypto_explicit_tickers",
+          entityType: "stock",
+          entityName: "Bit Digital",
+          code: "BTBT",
+          fullCode: "us:btbt",
+          confidence: 0.93,
+          resolver: "explicit-ticker-mention",
+        },
+      ],
+      facts: [],
+      timeline: [],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.affectedEntities.slice(0, 3)).toEqual([
+      expect.objectContaining({
+        label: "Strategy",
+        entityType: "security",
+        market: "US",
+        code: "MSTR",
+      }),
+      expect.objectContaining({
+        label: "Bit Digital",
+        entityType: "security",
+        market: "US",
+        code: "BTBT",
+      }),
+      expect.objectContaining({
+        label: "Coinbase",
+        entityType: "security",
+        market: "US",
+        code: "COIN",
+      }),
+    ])
+    expect(projected.primarySubject?.label).toBe("Strategy")
+    expect(projected.subjectSummary).toBe("核心主体：Strategy")
+  })
+
   it("projects detail events with facts, evidence and readable timeline", () => {
     const evidences: EventEvidence[] = [{
       eventId: "evt_detail",
@@ -123,8 +294,55 @@ describe("investment event projection", () => {
     expect(projected.evidence[0]?.authorityLabel).toBe("协会/行业组织")
     expect(projected.evidence[0]?.extractionStatusLabel).toBe("已结构化")
     expect(projected.evidence[0]?.sourceName).toBe("中汽协")
+    expect(projected.timelineSummary[0]?.label).toBe("维护性更新")
+    expect(projected.timelineSummary[0]?.note).toBe("维护性重算")
+  })
+
+  it("keeps substantive snapshot refreshes visible in timeline notes", () => {
+    const detail: EventDetail = {
+      eventId: "evt_snapshot_substantive",
+      title: "新能源汽车行业出现新变化",
+      summary: "行业动态",
+      eventType: "industry",
+      eventSubType: "industry_news",
+      sourceKind: "industry_news_feed",
+      publishedAt: Date.UTC(2026, 3, 12, 9, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 12, 9, 1, 0),
+      importance: "medium",
+      directionalView: "unknown",
+      directionalConfidence: 28,
+      materialityScore: 56,
+      tradabilityScore: 48,
+      authorityScore: 75,
+      freshnessScore: 85,
+      surpriseScore: 40,
+      affectedMarkets: ["A", "HK"],
+      impactSummary: ["行业动态：新能源汽车行业出现新变化"],
+      degraded: false,
+      topicTags: ["new-energy-vehicle"],
+      evidenceCount: 1,
+      sourceIds: ["caam-nev-news"],
+      evidences: [],
+      entities: [],
+      facts: [],
+      timeline: [{
+        timelineId: "tl_substantive",
+        eventId: "evt_snapshot_substantive",
+        stateTo: "updated",
+        changedAt: Date.UTC(2026, 3, 12, 10, 0, 0),
+        reason: "event_snapshot_changed",
+        metadata: {
+          sourceId: "caam-nev-news",
+          changedFields: ["标题与摘要", "事件分类", "核心主体", "方向判断", "影响市场"],
+        },
+      }],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
     expect(projected.timelineSummary[0]?.label).toBe("事件信息更新")
-    expect(projected.timelineSummary[0]?.note).toContain("刷新了")
+    expect(projected.timelineSummary[0]?.note).toContain("标题与摘要")
+    expect(projected.timelineSummary[0]?.note).toContain("影响市场")
   })
 
   it("collapses duplicate security aliases into one follow-up target and keeps fact entity linkage", () => {
@@ -136,7 +354,13 @@ describe("investment event projection", () => {
       metricName: "shareholding_change",
       entityId: "603501",
       confidence: 0.9,
-      payload: {},
+      payload: {
+        announcementTypeName: "减持预披露",
+        actionKind: "shareholding_change",
+        announcementStage: "pre_disclosure",
+        ownershipDirection: "decrease",
+        isFormalDisclosure: true,
+      },
     }]
 
     const detail: EventDetail = {
@@ -209,6 +433,8 @@ describe("investment event projection", () => {
     expect(projected.primarySubject?.label).toBe("豪威集团")
     expect(projected.keyFacts[0]?.label).toBe("交易所公告")
     expect(projected.keyFacts[0]?.metricName).toBe("股东持股变动")
+    expect(projected.keyFacts[0]?.summary).toContain("减持")
+    expect(projected.keyFacts[0]?.summary).toContain("预披露阶段")
     expect(projected.keyFacts[0]?.entity?.label).toBe("豪威集团")
     expect(projected.keyFacts[0]?.entity?.code).toBe("603501")
   })
@@ -492,6 +718,341 @@ describe("investment event projection", () => {
     expect(brief.tradableNow).toBe("no")
   })
 
+  it("keeps only the earliest initial detection in timeline summary", () => {
+    const detail: EventDetail = {
+      eventId: "evt_duplicate_initial_detection",
+      title: "SEMI报告：2025年第二季度全球硅晶圆出货量同比增长10%",
+      summary: "产业数据更新",
+      eventType: "industry",
+      eventSubType: "industry_data",
+      sourceKind: "industry_stat_release",
+      publishedAt: Date.UTC(2026, 3, 18, 8, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 18, 8, 1, 0),
+      importance: "medium",
+      directionalView: "positive",
+      directionalConfidence: 48,
+      materialityScore: 70,
+      tradabilityScore: 54,
+      authorityScore: 75,
+      freshnessScore: 80,
+      surpriseScore: 42,
+      affectedMarkets: ["A", "HK", "CN_macro"],
+      impactSummary: ["产业数据更新：SEMI报告：2025年第二季度全球硅晶圆出货量同比增长10%"],
+      degraded: false,
+      topicTags: ["semiconductor", "ai-computing"],
+      evidenceCount: 1,
+      sourceIds: ["semi-data"],
+      evidences: [],
+      entities: [],
+      facts: [],
+      timeline: [
+        {
+          timelineId: "tl_updated",
+          eventId: "evt_duplicate_initial_detection",
+          stateTo: "updated",
+          changedAt: Date.UTC(2026, 3, 18, 9, 0, 0),
+          reason: "event_snapshot_changed",
+          metadata: {
+            sourceId: "semi-data",
+            changedFields: ["赛道标签"],
+          },
+        },
+        {
+          timelineId: "tl_detected_latest",
+          eventId: "evt_duplicate_initial_detection",
+          stateTo: "detected",
+          changedAt: Date.UTC(2026, 3, 18, 8, 30, 0),
+          reason: "new_event",
+          metadata: {
+            sourceId: "semi-data",
+          },
+        },
+        {
+          timelineId: "tl_merge",
+          eventId: "evt_duplicate_initial_detection",
+          stateTo: "updated",
+          changedAt: Date.UTC(2026, 3, 18, 8, 29, 59),
+          reason: "canonical_identity_merge",
+          metadata: {
+            mergedEventId: "evt_old_duplicate",
+          },
+        },
+        {
+          timelineId: "tl_detected_earliest",
+          eventId: "evt_duplicate_initial_detection",
+          stateTo: "detected",
+          changedAt: Date.UTC(2026, 3, 18, 8, 0, 0),
+          reason: "new_event",
+          metadata: {
+            sourceId: "semi-data",
+          },
+        },
+      ],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+    const initialDetections = projected.timelineSummary.filter(entry => entry.label === "首次识别")
+
+    expect(initialDetections).toHaveLength(1)
+    expect(initialDetections[0]?.timelineId).toBe("tl_detected_earliest")
+  })
+
+  it("shows duplicate merge provenance above initial detection when they happen together", () => {
+    const detail: EventDetail = {
+      eventId: "evt_simultaneous_origin",
+      title: "SEMI报告：2025年第二季度全球硅晶圆出货量同比增长10%",
+      summary: "产业数据更新",
+      eventType: "industry",
+      eventSubType: "industry_data",
+      sourceKind: "industry_stat_release",
+      publishedAt: Date.UTC(2026, 3, 18, 8, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 18, 8, 1, 0),
+      importance: "medium",
+      directionalView: "positive",
+      directionalConfidence: 48,
+      materialityScore: 70,
+      tradabilityScore: 54,
+      authorityScore: 75,
+      freshnessScore: 80,
+      surpriseScore: 42,
+      affectedMarkets: ["A", "HK", "CN_macro"],
+      impactSummary: ["产业数据更新：SEMI报告：2025年第二季度全球硅晶圆出货量同比增长10%"],
+      degraded: false,
+      topicTags: ["semiconductor", "ai-computing"],
+      evidenceCount: 1,
+      sourceIds: ["semi-data"],
+      evidences: [],
+      entities: [],
+      facts: [],
+      timeline: [
+        {
+          timelineId: "tl_updated",
+          eventId: "evt_simultaneous_origin",
+          stateTo: "updated",
+          changedAt: Date.UTC(2026, 3, 18, 9, 0, 0),
+          reason: "event_snapshot_changed",
+          metadata: {
+            sourceId: "semi-data",
+            changedFields: ["赛道标签"],
+          },
+        },
+        {
+          timelineId: "tl_detected",
+          eventId: "evt_simultaneous_origin",
+          stateTo: "detected",
+          changedAt: Date.UTC(2026, 3, 18, 8, 0, 0) + 2,
+          reason: "new_event",
+          metadata: {
+            sourceId: "semi-data",
+          },
+        },
+        {
+          timelineId: "tl_merge",
+          eventId: "evt_simultaneous_origin",
+          stateTo: "updated",
+          changedAt: Date.UTC(2026, 3, 18, 8, 0, 0),
+          reason: "canonical_identity_merge",
+          metadata: {
+            mergedEventId: "evt_old_duplicate",
+          },
+        },
+      ],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.timelineSummary.map(entry => entry.label)).toEqual([
+      "维护性更新",
+      "重复事件归并",
+      "首次识别",
+    ])
+  })
+
+  it("keeps only the first confirmation and collapses repeated refreshes after an event is already confirmed", () => {
+    const detail: EventDetail = {
+      eventId: "evt_repeated_confirmation_noise",
+      title: "盘中快讯：某产业链传来新进展",
+      summary: "产业跟踪",
+      eventType: "industry",
+      eventSubType: "industry_news",
+      sourceKind: "media_fast_feed",
+      publishedAt: Date.UTC(2026, 3, 18, 8, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 18, 8, 1, 0),
+      importance: "medium",
+      directionalView: "unknown",
+      directionalConfidence: 36,
+      materialityScore: 52,
+      tradabilityScore: 40,
+      authorityScore: 48,
+      freshnessScore: 85,
+      surpriseScore: 30,
+      affectedMarkets: ["A"],
+      impactSummary: ["产业链快讯需要结合后续证据进一步确认"],
+      degraded: false,
+      topicTags: ["ai-computing"],
+      evidenceCount: 2,
+      sourceIds: ["cls-telegraph", "eastmoney-7x24"],
+      evidences: [],
+      entities: [],
+      facts: [],
+      timeline: [
+        {
+          timelineId: "tl_confirm_noise_latest",
+          eventId: "evt_repeated_confirmation_noise",
+          stateTo: "confirmed",
+          changedAt: Date.UTC(2026, 3, 18, 8, 30, 0),
+          reason: "multi_source_confirmation",
+          metadata: {
+            sourceId: "cls-telegraph",
+          },
+        },
+        {
+          timelineId: "tl_update_latest",
+          eventId: "evt_repeated_confirmation_noise",
+          stateTo: "updated",
+          changedAt: Date.UTC(2026, 3, 18, 8, 30, 0),
+          reason: "event_snapshot_changed",
+          metadata: {
+            sourceId: "cls-telegraph",
+            changedFields: ["标题与摘要"],
+          },
+        },
+        {
+          timelineId: "tl_confirm_noise_mid",
+          eventId: "evt_repeated_confirmation_noise",
+          stateTo: "confirmed",
+          changedAt: Date.UTC(2026, 3, 18, 8, 20, 0),
+          reason: "multi_source_confirmation",
+          metadata: {
+            sourceId: "eastmoney-7x24",
+          },
+        },
+        {
+          timelineId: "tl_update_mid",
+          eventId: "evt_repeated_confirmation_noise",
+          stateTo: "updated",
+          changedAt: Date.UTC(2026, 3, 18, 8, 20, 0),
+          reason: "event_snapshot_changed",
+          metadata: {
+            sourceId: "cls-telegraph",
+            changedFields: ["标题与摘要"],
+          },
+        },
+        {
+          timelineId: "tl_confirm_first",
+          eventId: "evt_repeated_confirmation_noise",
+          stateTo: "confirmed",
+          changedAt: Date.UTC(2026, 3, 18, 8, 10, 0),
+          reason: "multi_source_confirmation",
+          metadata: {
+            sourceId: "eastmoney-7x24",
+          },
+        },
+        {
+          timelineId: "tl_update_first",
+          eventId: "evt_repeated_confirmation_noise",
+          stateTo: "updated",
+          changedAt: Date.UTC(2026, 3, 18, 8, 10, 0),
+          reason: "event_snapshot_changed",
+          metadata: {
+            sourceId: "eastmoney-7x24",
+            changedFields: ["标题与摘要"],
+          },
+        },
+        {
+          timelineId: "tl_detected",
+          eventId: "evt_repeated_confirmation_noise",
+          stateTo: "detected",
+          changedAt: Date.UTC(2026, 3, 18, 8, 0, 0),
+          reason: "new_event",
+          metadata: {
+            sourceId: "cls-telegraph",
+          },
+        },
+      ],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.timelineSummary.map(entry => entry.label)).toEqual([
+      "事件信息更新",
+      "事件确认",
+      "事件信息更新",
+      "首次识别",
+    ])
+    expect(projected.timelineSummary[1]?.note).toContain("东方财富")
+  })
+
+  it("prefers the earlier authoritative confirmation over later multi-source duplicates", () => {
+    const detail: EventDetail = {
+      eventId: "evt_authoritative_first",
+      title: "官方口径确认某政策安排",
+      summary: "政策确认",
+      eventType: "policy",
+      eventSubType: "regulation",
+      sourceKind: "official_policy_notice",
+      publishedAt: Date.UTC(2026, 3, 18, 8, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 18, 8, 1, 0),
+      importance: "high",
+      directionalView: "neutral",
+      directionalConfidence: 52,
+      materialityScore: 68,
+      tradabilityScore: 44,
+      authorityScore: 92,
+      freshnessScore: 82,
+      surpriseScore: 28,
+      affectedMarkets: ["A"],
+      impactSummary: ["官方政策确认"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 2,
+      sourceIds: ["pbc-news", "eastmoney-7x24"],
+      evidences: [],
+      entities: [],
+      facts: [],
+      timeline: [
+        {
+          timelineId: "tl_multi_after_authoritative",
+          eventId: "evt_authoritative_first",
+          stateTo: "confirmed",
+          changedAt: Date.UTC(2026, 3, 18, 8, 10, 0),
+          reason: "multi_source_confirmation",
+          metadata: {
+            sourceId: "eastmoney-7x24",
+          },
+        },
+        {
+          timelineId: "tl_authoritative_first",
+          eventId: "evt_authoritative_first",
+          stateTo: "confirmed",
+          changedAt: Date.UTC(2026, 3, 18, 8, 0, 0),
+          reason: "authoritative_source_confirmation",
+          metadata: {
+            sourceId: "pbc-news",
+          },
+        },
+        {
+          timelineId: "tl_detected_authoritative_first",
+          eventId: "evt_authoritative_first",
+          stateTo: "detected",
+          changedAt: Date.UTC(2026, 3, 18, 7, 55, 0),
+          reason: "new_event",
+          metadata: {
+            sourceId: "eastmoney-7x24",
+          },
+        },
+      ],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.timelineSummary.map(entry => entry.label)).toEqual([
+      "事件确认",
+      "首次识别",
+    ])
+    expect(projected.timelineSummary[0]?.note).toContain("人民银行")
+  })
+
   it("projects financing events with investor-oriented next checks and risk notes", () => {
     const brief = projectInvestmentEventBrief({
       eventId: "evt_financing",
@@ -519,6 +1080,35 @@ describe("investment event projection", () => {
     expect(brief.whyItMatters).toContain("股权融资")
     expect(brief.whatToWatchNext.join(" ")).toContain("发行价格")
     expect(brief.riskOfMisread.join(" ")).toContain("关键条款")
+  })
+
+  it("keeps generic exchange disclosures in disclosure family instead of dropping to general news", () => {
+    const brief = projectInvestmentEventBrief({
+      eventId: "evt_generic_disclosure",
+      title: "豪威集团：关于召开2026年第一次临时股东大会的通知",
+      eventType: "announcement",
+      eventSubType: "other",
+      sourceKind: "exchange_disclosure",
+      ingestedAt: Date.UTC(2026, 3, 12, 12, 0, 0),
+      importance: "medium",
+      directionalView: "unknown",
+      directionalConfidence: 20,
+      materialityScore: 55,
+      tradabilityScore: 42,
+      authorityScore: 90,
+      freshnessScore: 78,
+      surpriseScore: 34,
+      affectedMarkets: ["A"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 1,
+      sourceIds: ["cninfo-szse"],
+    })
+
+    expect(brief.eventFamily).toBe("disclosure_signal")
+    expect(brief.eventFamilyLabel).toBe("公告线索")
+    expect(brief.whatHappened).toContain("公告线索")
+    expect(brief.actionBucket).toBe("watch")
   })
 
   it("treats media fast policy items as policy signals instead of confirmed policy events", () => {
@@ -645,7 +1235,7 @@ describe("investment event projection", () => {
       eventId: "evt_report",
       title: "中国算力发展指数白皮书（2026年）发布",
       eventType: "industry",
-      eventSubType: "industry_data",
+      eventSubType: "industry_report",
       sourceKind: "industry_report_release",
       ingestedAt: Date.UTC(2026, 3, 12, 12, 0, 0),
       importance: "medium",

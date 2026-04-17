@@ -12,7 +12,7 @@ import { extractEntityLinks } from "#/services/event-engine/entity"
 import { normalizeEntityLinks, normalizeFactEntityIds, normalizePrimaryEntityName } from "#/services/event-engine/entity-normalization"
 import { extractEventFacts } from "#/services/event-engine/extractors"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
-import { buildEventIdentity, buildEventIdentityHints } from "#/services/event-engine/merger"
+import { buildEventIdentity, buildEventIdentityHints, derivePeriodicSeriesMetadata } from "#/services/event-engine/merger"
 import { EVENT_ENGINE_METRICS, incrementEventEngineMetric, toMetricLabels } from "#/services/event-engine/metrics"
 import { getSourceEventProfile, validateSourceEventProfile } from "#/services/event-engine/profiles"
 import { resolveRequestedSourceSeedIds } from "#/services/event-engine/request-scope"
@@ -76,6 +76,13 @@ function buildEventRow(sourceId: SourceID, raw: RawItemRow): {
     raw,
     payload,
   })
+  const seriesMetadata = derivePeriodicSeriesMetadata({
+    sourceId,
+    sourceKind: resolved.profile?.sourceKind,
+    eventSubType: resolved.eventSubType,
+    raw,
+    payload,
+  })
   const identity = buildEventIdentity({
     eventType: resolved.eventType,
     eventSubType: resolved.eventSubType,
@@ -118,6 +125,9 @@ function buildEventRow(sourceId: SourceID, raw: RawItemRow): {
       ingested_at: now,
       canonical_url: raw.url,
       primary_entity_name: resolved.primaryEntityName ?? null,
+      series_key: seriesMetadata.seriesKey,
+      period_key: seriesMetadata.periodKey,
+      release_cadence: seriesMetadata.releaseCadence,
       importance: resolved.importance,
       sentiment: null,
       directional_view: impact.directionalView,
@@ -147,6 +157,7 @@ async function persistResolvedEvent(input: {
     const { eventRow, facts, payload, resolved } = buildEventRow(input.sourceId, input.rawRow)
     const normalizedEntityLinks = normalizeEntityLinks(
       await extractEntityLinks(eventRow.event_id, input.rawRow.title, JSON.parse(eventRow.topic_tags_json), {
+        primaryEntityName: resolved.primaryEntityName,
         summary: eventRow.summary,
         payload,
       }),
@@ -288,7 +299,9 @@ async function addLifecycleEntry(input: {
     reason = "new_event"
   } else if (hasMeaningfulEventChange(input.previousEvent, input.nextEvent)) {
     stateFrom = (latestTimeline.state as EventLifecycleState | undefined) ?? "detected"
-    stateTo = "updated"
+    // Once an event has reached confirmed, later snapshot refreshes should keep that
+    // lifecycle truth instead of repeatedly downgrading to updated and re-confirming.
+    stateTo = stateFrom === "confirmed" ? "confirmed" : "updated"
     reason = "event_snapshot_changed"
   }
 

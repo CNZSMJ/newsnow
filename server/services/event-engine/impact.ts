@@ -310,6 +310,177 @@ function buildIndustryFactImpact(facts: EventFactRow[], eventSubType: EventSubTy
   }
 }
 
+function toText(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function includesAny(text: string, patterns: RegExp[]) {
+  return patterns.some(pattern => pattern.test(text))
+}
+
+function describeAnnouncementStage(stage: string) {
+  if (/预披露|预案|草案|draft|preliminary|proposal/i.test(stage)) return "前置披露阶段"
+  if (/进展|实施|执行|结果|落实|生效|完成|落地|implementation|result|executed/i.test(stage)) return "执行或结果阶段"
+  return stage
+}
+
+function describeFinancingPath(path: string) {
+  if (/股权|定增|配股|增发|可转债|转股|股份发行|private placement|equity|issuance/i.test(path)) return "股权融资路径"
+  if (/债|票据|贷款|借款|bond|debt|loan/i.test(path)) return "债务融资路径"
+  return path
+}
+
+function describeOwnershipDirection(direction: string) {
+  if (/增持|增加|上升|increase|up|buy/i.test(direction)) return "增持"
+  if (/减持|下降|下调|reduce|decrease|down|sell/i.test(direction)) return "减持"
+  return direction
+}
+
+function buildExchangeAnnouncementImpact(facts: EventFactRow[], eventSubType: EventSubType) {
+  const announcementFact = facts.find(fact => fact.fact_type === "exchange_announcement")
+  if (!announcementFact) return undefined
+
+  const payload = JSON.parse(announcementFact.payload_json || "{}") as {
+    announcementTitle?: string
+    announcementTypeName?: string
+    securityCode?: string
+    securityName?: string
+    market?: string
+    actionKind?: string
+    announcementStage?: string | null
+    financingPath?: string | null
+    ownershipDirection?: string | null
+    isFormalDisclosure?: boolean
+    raw?: object
+  }
+
+  const securityLabel = payload.securityName || payload.securityCode || "相关标的"
+  const announcementType = payload.announcementTypeName || "交易所公告"
+  const impactSummary = [
+    `${securityLabel}：${announcementType}`,
+  ]
+  const title = toText(payload.announcementTitle)
+  if (title && title !== announcementType) impactSummary.push(`标题：${title}`)
+  if (payload.market) impactSummary.push(`市场：${payload.market}`)
+  if (payload.isFormalDisclosure) impactSummary.push("属于正式披露，优先级高于媒体解读")
+
+  const stage = toText(payload.announcementStage)
+  if (stage) impactSummary.push(`阶段：${describeAnnouncementStage(stage)}`)
+
+  const actionKind = toText(payload.actionKind)
+  if (actionKind) impactSummary.push(`动作：${actionKind}`)
+
+  const financingPath = toText(payload.financingPath)
+  if (financingPath) impactSummary.push(`融资路径：${describeFinancingPath(financingPath)}`)
+
+  const ownershipDirection = toText(payload.ownershipDirection)
+  if (ownershipDirection) impactSummary.push(`持股方向：${describeOwnershipDirection(ownershipDirection)}`)
+
+  let directionalView: DirectionalView = "unknown"
+  let directionalConfidence = 28
+  let materialityScore = 54
+  let tradabilityScore = 42
+  let surpriseScore = 42
+
+  const preStage = stage !== "" && includesAny(stage, [/预披露/i, /预案/i, /草案/i, /draft/i, /preliminary/i, /proposal/i])
+  const confirmStage = stage !== "" && includesAny(stage, [/进展/i, /实施/i, /执行/i, /结果/i, /落实/i, /生效/i, /完成/i, /落地/i, /implementation/i, /result/i, /executed/i])
+  const formalBoost = payload.isFormalDisclosure ? 4 : 0
+
+  if (eventSubType === "buyback" || /回购|buyback/i.test(`${announcementType} ${actionKind} ${title}`)) {
+    directionalView = "positive"
+    directionalConfidence = 66
+    materialityScore = 70 + formalBoost
+    tradabilityScore = 64 + formalBoost
+    surpriseScore = 50
+    impactSummary.push("回购通常提供价格支撑，但执行节奏和回购规模更关键")
+  } else if (eventSubType === "dividend" || /分红|派息|送转|dividend/i.test(`${announcementType} ${actionKind} ${title}`)) {
+    directionalView = "positive"
+    directionalConfidence = 60
+    materialityScore = 63 + formalBoost
+    tradabilityScore = 48 + formalBoost
+    surpriseScore = 45
+    impactSummary.push("分红更偏股东回报确认，通常利好确定性但短线弹性弱于回购")
+  } else if (eventSubType === "shareholding_change" || /增持|减持|持股变动|股份变动|ownership/i.test(`${announcementType} ${actionKind} ${title}`)) {
+    if (/增持|increase|up|buy/i.test(`${ownershipDirection} ${actionKind} ${title}`)) {
+      directionalView = "positive"
+      directionalConfidence = 68
+      impactSummary.push("增持通常反映主体对当前估值或经营前景更有信心")
+    } else if (/减持|decrease|down|sell/i.test(`${ownershipDirection} ${actionKind} ${title}`)) {
+      directionalView = "negative"
+      directionalConfidence = 68
+      impactSummary.push("减持通常增加供给压力，需要结合主体属性和减持比例判断")
+    } else {
+      directionalView = "unknown"
+      directionalConfidence = 30
+      impactSummary.push("持股变动需要先确认是增持还是减持，再判断对供需和预期的影响")
+    }
+    materialityScore = 66 + formalBoost
+    tradabilityScore = 58 + formalBoost
+    surpriseScore = 48
+  } else if (eventSubType === "financing" || /融资|再融资|定增|配股|可转债|募资|发行|placement|convertible|rights/i.test(`${announcementType} ${actionKind} ${financingPath} ${title}`)) {
+    if (includesAny(`${financingPath} ${actionKind} ${title}`, [/股权|定增|配股|增发|可转债|转股|股份发行|equity|issuance|placement/i])) {
+      directionalView = "negative"
+      directionalConfidence = 58
+      impactSummary.push("股权融资路径通常带来稀释压力，需结合规模、价格和资金用途判断")
+      materialityScore = 72 + formalBoost
+      tradabilityScore = 55 + formalBoost
+      surpriseScore = 52
+    } else if (includesAny(`${financingPath} ${actionKind} ${title}`, [/债|票据|贷款|借款|bond|debt|loan/i])) {
+      directionalView = "neutral"
+      directionalConfidence = 52
+      impactSummary.push("债务融资路径对股本稀释更弱，重点看杠杆和现金流约束")
+      materialityScore = 66 + formalBoost
+      tradabilityScore = 46 + formalBoost
+      surpriseScore = 46
+    } else {
+      directionalView = "unknown"
+      directionalConfidence = 34
+      impactSummary.push("融资公告需要结合规模、用途和价格条款继续确认")
+      materialityScore = 68 + formalBoost
+      tradabilityScore = 50 + formalBoost
+      surpriseScore = 48
+    }
+  } else {
+    if (payload.isFormalDisclosure) {
+      directionalView = "neutral"
+      directionalConfidence = 34
+      materialityScore = 58 + formalBoost
+      tradabilityScore = 42 + formalBoost
+      surpriseScore = 40
+      impactSummary.push("正式披露优先级高于媒体解读，但方向仍需看具体条款")
+    } else {
+      directionalView = "unknown"
+      directionalConfidence = 26
+      materialityScore = 52
+      tradabilityScore = 38
+      surpriseScore = 38
+      impactSummary.push("更适合作为跟踪线索，后续仍需观察正式文件和关键条款")
+    }
+  }
+
+  if (preStage) {
+    materialityScore -= 4
+    tradabilityScore -= 5
+    impactSummary.push("前置披露阶段的不确定性更高，优先等待正式版本或执行进展")
+  } else if (confirmStage) {
+    materialityScore += 3
+    tradabilityScore += 2
+    impactSummary.push("进入执行或结果阶段后，信息确认度更高")
+  }
+
+  if (directionalView !== "unknown") impactSummary.push(formatDirectionalNarrative(directionalView))
+
+  return {
+    directionalView,
+    directionalConfidence: clamp(directionalConfidence, 20, 88),
+    materialityScore: clamp(materialityScore, 35, 90),
+    tradabilityScore: clamp(tradabilityScore, 25, 84),
+    surpriseScore: clamp(surpriseScore, 20, 78),
+    affectedMarkets: payload.market ? [payload.market as AffectedMarket] : [],
+    impactSummary,
+  }
+}
+
 export function buildImpactSnapshot(input: {
   eventType: EventType
   eventSubType: EventSubType
@@ -335,6 +506,8 @@ export function buildImpactSnapshot(input: {
       ? buildCentralBankOperationImpact(facts) ?? buildMediaFastImpact(facts, input.eventSubType)
       : input.eventType === "industry" || input.eventSubType === "industrial_policy"
         ? buildIndustryFactImpact(facts, input.eventSubType, input.profile?.parserFamily)
+        : facts.some(fact => fact.fact_type === "exchange_announcement")
+          ? buildExchangeAnnouncementImpact(facts, input.eventSubType)
         : input.profile?.parserFamily === "media_fast"
           ? buildMediaFastImpact(facts, input.eventSubType)
           : undefined

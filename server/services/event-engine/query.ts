@@ -8,13 +8,16 @@ export async function listLatestEvents(options?: {
   eventSubType?: EventSubType
   sourceId?: SourceID
   topic?: string
-  latest?: boolean
   sourceIds?: SourceID[]
   market?: AffectedMarket
   directionalView?: DirectionalView
   minMaterialityScore?: number
   minAuthorityScore?: number
-  sortBy?: "latest" | "investment"
+  changedSince?: number
+  lifecycleAfter?: number
+  seriesKey?: string
+  periodKey?: string
+  sortBy?: "latest" | "investment" | "changed"
 }) {
   const eventTable = await getEventTable()
   if (!eventTable) return { updatedAt: Date.now(), items: [], totalCount: 0 }
@@ -29,6 +32,10 @@ export async function listLatestEvents(options?: {
     directionalView: options?.directionalView,
     minMaterialityScore: options?.minMaterialityScore,
     minAuthorityScore: options?.minAuthorityScore,
+    changedSince: options?.changedSince,
+    lifecycleAfter: options?.lifecycleAfter,
+    seriesKey: options?.seriesKey,
+    periodKey: options?.periodKey,
     sortBy: options?.sortBy ?? "investment",
   } as const
   const [items, totalCount] = await Promise.all([
@@ -45,13 +52,16 @@ export async function listLatestEvents(options?: {
 export async function searchEvents(options: {
   q: string
   limit?: number
-  latest?: boolean
   sourceIds?: SourceID[]
   market?: AffectedMarket
   directionalView?: DirectionalView
   minMaterialityScore?: number
   minAuthorityScore?: number
-  sortBy?: "latest" | "investment"
+  changedSince?: number
+  lifecycleAfter?: number
+  seriesKey?: string
+  periodKey?: string
+  sortBy?: "latest" | "investment" | "changed"
 }) {
   const eventTable = await getEventTable()
   if (!eventTable) return { updatedAt: Date.now(), items: [], totalCount: 0 }
@@ -63,6 +73,10 @@ export async function searchEvents(options: {
     directionalView: options.directionalView,
     minMaterialityScore: options.minMaterialityScore,
     minAuthorityScore: options.minAuthorityScore,
+    changedSince: options.changedSince,
+    lifecycleAfter: options.lifecycleAfter,
+    seriesKey: options.seriesKey,
+    periodKey: options.periodKey,
     sortBy: options.sortBy ?? "investment",
   } as const
   const [items, totalCount] = await Promise.all([
@@ -79,13 +93,16 @@ export async function searchEvents(options: {
 export async function getEntityEvents(options: {
   entity: string
   limit?: number
-  latest?: boolean
   sourceIds?: SourceID[]
   market?: AffectedMarket
   directionalView?: DirectionalView
   minMaterialityScore?: number
   minAuthorityScore?: number
-  sortBy?: "latest" | "investment"
+  changedSince?: number
+  lifecycleAfter?: number
+  seriesKey?: string
+  periodKey?: string
+  sortBy?: "latest" | "investment" | "changed"
 }) {
   const eventTable = await getEventTable()
   if (!eventTable) return { updatedAt: Date.now(), items: [], totalCount: 0 }
@@ -97,6 +114,10 @@ export async function getEntityEvents(options: {
     directionalView: options.directionalView,
     minMaterialityScore: options.minMaterialityScore,
     minAuthorityScore: options.minAuthorityScore,
+    changedSince: options.changedSince,
+    lifecycleAfter: options.lifecycleAfter,
+    seriesKey: options.seriesKey,
+    periodKey: options.periodKey,
     sortBy: options.sortBy ?? "investment",
   } as const
   const [items, totalCount] = await Promise.all([
