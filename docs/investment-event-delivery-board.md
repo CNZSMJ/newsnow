@@ -1,7 +1,7 @@
 # Investment Event Delivery Board
 
-Status: Active execution board  
-Last updated: 2026-04-17  
+Status: Active execution board
+Last updated: 2026-04-18
 Scope: project-management view of the investment event system upgrade
 
 Related roadmap:
@@ -12,7 +12,7 @@ Related roadmap:
 
 This board exists to keep execution aligned with one architectural rule:
 
-> the backend event engine is the single source of truth and the single source of investment semantics  
+> the backend event engine is the single source of truth and the single source of investment semantics
 > frontend investor views and agent-facing interfaces are projections of that same truth
 
 No task on this board is allowed to move business semantics into the frontend or into agent-specific wrappers.
@@ -21,7 +21,7 @@ No task on this board is allowed to move business semantics into the frontend or
 
 | Workstream | Current stage | Status | What is already true | Next milestone |
 | --- | --- | --- | --- | --- |
-| Backend unified engine | Post-foundation operations and precision hardening | In progress | Canonical events, facts, evidence, impact, replay, shadow, observability, investment projection, recurring-series scan semantics, quality gates, and ops triage surfaces are in place; the current local blocker is priority-source latency P95 on real data | Use the new triage surfaces to reduce slow source families and continue semantic precision hardening |
+| Backend unified engine | Post-foundation latency remediation and precision hardening | In progress | Canonical events, facts, evidence, impact, replay, shadow, observability, investment projection, recurring-series scan semantics, quality gates, and ops triage surfaces are in place; the current local blockers are stratified priority-source latency on real data and residual subject/entity ambiguity in high-value families | Use the new triage surfaces to burn down slow source families, harden high-value semantics, and institutionalize runbook-driven operations |
 | Frontend investor surface | Investor workbench v1 | In progress | `/events`, `/events/:id`, `/watchlists`, `/watchlists/:id` are live, use provider-facing investment routes, and support action-bucket scanning | Deepen workbench behaviors and high-volume workflows |
 | Agent/provider interface | Provider contract v2 | In progress | Explicit provider routes exist and local MCP exposes task-oriented scan/detail tools over the same projection | Harden provider schema and reduce remaining downstream reconstruction |
 
@@ -157,6 +157,38 @@ Tasks:
 - [ ] Raise entity precision for issuer vs institution vs market display in more source families
 - [ ] Reduce remaining generic `general_news` fallback usage for high-value sources
 
+### Tranche G: post-foundation latency remediation and runbook discipline
+
+Objective:
+
+- make the event base operationally reliable for real investment use by reducing high-value source latency, keeping semantic hardening focused on high-value families, and formalizing repeatable repair/backfill workflows
+
+Execution rules:
+
+- use stratified latency thresholds instead of one flat aggregate target
+- keep a hard `P95 <= 5 minutes` expectation for trade-critical source families
+- allow slower thresholds for non-intraday macro and long-form policy sources, but only when explicitly classified and separately measured
+- prioritize semantic hardening on high-value source families first
+- allow long-tail sources to stay conservative, but do not let long-tail fallback pollute canonical entity truth
+- keep operational workflow documentation in-repo under [`docs/event-operations-runbook.md`](./event-operations-runbook.md)
+
+Latency tiers:
+
+- Tier A `Trade-critical`: exchange disclosures, intraday market flashes, central-bank operations, rate fixes; target `initial canonical event P95 <= 5 minutes`
+- Tier B `High-value non-intraday`: key macro releases and important policy notices; target `initial canonical event P95 <= 10-15 minutes`
+- Tier C `Long-form / heavy parsing`: long policy documents and complex deep-parsing sources; target `initial canonical event P95 <= 30 minutes`
+- for all tiers, track `full semantic enrichment latency` separately from `initial canonical latency`, so deep parsing does not hide time-to-first-truth performance
+
+Tasks:
+
+- [ ] Classify high-value source families into latency tiers and expose tier-aware thresholds in the quality-gate path
+- [ ] Reduce Tier A latency until trade-critical families consistently approach the hard target
+- [ ] Reduce Tier B and Tier C latency without letting heavy parsing dominate Tier A alerting
+- [ ] Continue issuer vs institution vs market precision hardening only on high-value families first
+- [ ] Ensure long-tail fallback remains conservative and cannot write incorrect canonical subjects or entity links
+- [ ] Land a repo-owned event operations runbook and link it from roadmap and delivery docs
+- [ ] Require every latency or semantic remediation batch to run replay, targeted tests, quality checks, and runbook-recorded operator review
+
 ## 5. Foundation phase status
 
 - [x] Phase 1 `Semantic Baseline` completed on 2026-04-17
@@ -185,3 +217,7 @@ Every completed task in the active tranche must pass:
 - `pnpm build`
 
 If a change alters event meaning, it should also be checked against replay fixtures before the tranche is closed.
+
+Operational guidance for the current tranche lives in:
+
+- [docs/event-operations-runbook.md](./event-operations-runbook.md)

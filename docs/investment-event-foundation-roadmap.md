@@ -1,7 +1,7 @@
 # Investment Event Foundation Roadmap
 
-Status: Active roadmap  
-Last updated: 2026-04-17  
+Status: Active roadmap
+Last updated: 2026-04-17
 Scope: staged evolution of the `newsnow` events system into a professional, reliable investment-grade structured event base
 
 ## 1. Purpose
@@ -574,6 +574,47 @@ Residual post-foundation risks:
 Post-foundation entry point:
 
 - use the new diagnostics to burn down priority-source latency blockers, formalize repair/backfill runbooks, and continue semantic precision hardening without reopening the foundation model
+- execute the next tranche under stratified latency thresholds instead of one flat aggregate target
+- keep semantic hardening focused on high-value source families first, while preventing long-tail fallback from polluting canonical entity truth
+- keep operational workflow in-repo under [`docs/event-operations-runbook.md`](./event-operations-runbook.md)
+
+### Post-foundation execution rules
+
+#### 1. Stratified latency thresholds
+
+The next tranche should not use one flat latency target for every source family.
+
+Use:
+
+- Tier A `Trade-critical`: exchange disclosures, intraday market flashes, central-bank operations, rate fixings; target `initial canonical event P95 <= 5 minutes`
+- Tier B `High-value non-intraday`: key macro releases and important policy notices; target `initial canonical event P95 <= 10-15 minutes`
+- Tier C `Long-form / heavy parsing`: long policy documents and complex deep-parsing sources; target `initial canonical event P95 <= 30 minutes`
+
+Latency should be measured in two stages:
+
+- `initial canonical latency`
+- `full semantic enrichment latency`
+
+The event base should optimize time-to-first-truth before time-to-full-depth.
+
+#### 2. High-value semantic hardening first
+
+The next tranche should prioritize high-value source families for semantic precision work.
+
+Long-tail sources may remain conservative, but they must not:
+
+- write incorrect canonical subjects
+- write incorrect entity links
+- write incorrect market links
+- poison the canonical entity registry through aggressive fallback
+
+#### 3. Runbook-driven operations
+
+Post-foundation operation should be runbook-driven, not ad hoc.
+
+The default workflow for latency triage, repair, backfill, and manual review lives in:
+
+- [docs/event-operations-runbook.md](./event-operations-runbook.md)
 
 ## 9. Deferred Work
 

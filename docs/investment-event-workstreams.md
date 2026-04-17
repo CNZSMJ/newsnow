@@ -1,7 +1,7 @@
 # Investment Event Workstreams
 
 Status: Active backlog
-Last updated: 2026-04-17
+Last updated: 2026-04-18
 Scope: long-running execution tracks for the investment event system
 
 ## 1. Purpose
@@ -23,6 +23,7 @@ For active execution status, current tranche scope, and milestone tracking, see:
 
 - [docs/investment-event-delivery-board.md](./investment-event-delivery-board.md)
 - [docs/investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
+- [docs/event-operations-runbook.md](./event-operations-runbook.md)
 
 These workstreams may progress in parallel, but they must follow one direction:
 
@@ -73,7 +74,7 @@ Current foundation phase:
 - Phase 5 `Query and Scan Foundation` completed on 2026-04-17
 - Phase 6 `Quality Gates and SLOs` completed on 2026-04-17
 - Phase 7 `Repair, Backfill, and Operations` completed on 2026-04-17
-- Foundation roadmap status: completed on 2026-04-17; active backend work now shifts to latency remediation and continued semantic precision hardening
+- Foundation roadmap status: completed on 2026-04-17; active backend work now shifts to stratified latency remediation, continued semantic precision hardening for high-value families, and runbook-driven operations
 
 ### A1. Canonical investment projection
 
