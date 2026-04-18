@@ -89,11 +89,20 @@ export function evaluateEventQualityGates(
   options?: { evaluatedAt?: number },
 ) {
   const slo = evaluateEventBaseSLOs(snapshot)
-  const automatedGates: EventQualityGate[] = slo.gates.map(gate => ({
-    ...gate,
-    source: "runtime_snapshot",
-    releaseBlocker: gate.automated && gate.blocking && gate.status === "fail",
-  }))
+  const runtimeAutomatedGates: EventQualityGate[] = slo.gates
+    .filter(gate => gate.automated)
+    .map(gate => ({
+      ...gate,
+      source: "runtime_snapshot",
+      releaseBlocker: gate.blocking && gate.status === "fail",
+    }))
+  const runtimeVisibleNonAutomatedGates: EventQualityGate[] = slo.gates
+    .filter(gate => !gate.automated)
+    .map(gate => ({
+      ...gate,
+      source: "runtime_snapshot",
+      releaseBlocker: false,
+    }))
   const declaredManualGates: EventQualityGate[] = DECLARED_MANUAL_GATES.map(gate => ({
     ...gate,
     automated: false,
@@ -101,11 +110,11 @@ export function evaluateEventQualityGates(
     status: "not_automated",
     releaseBlocker: false,
   }))
-  const blockingFailures = automatedGates.filter(gate => gate.releaseBlocker)
-  const automatedPending = automatedGates.filter(gate => gate.status === "pending").length
+  const blockingFailures = runtimeAutomatedGates.filter(gate => gate.releaseBlocker)
+  const automatedPending = runtimeAutomatedGates.filter(gate => gate.status === "pending").length
 
   return {
-    contractVersion: "event-quality-gates-v1" as const,
+    contractVersion: "event-quality-gates-v2" as const,
     evaluatedAt: options?.evaluatedAt ?? Date.now(),
     enforcement: {
       command: "pnpm events:check-quality",
@@ -120,18 +129,19 @@ export function evaluateEventQualityGates(
     releaseBlocked: blockingFailures.length > 0,
     blockingGateKeys: blockingFailures.map(gate => gate.key),
     summary: {
-      declaredTotal: automatedGates.length + declaredManualGates.length,
-      automatedTotal: automatedGates.length,
-      automatedPass: automatedGates.filter(gate => gate.status === "pass").length,
-      automatedFail: automatedGates.filter(gate => gate.status === "fail").length,
+      declaredTotal: runtimeAutomatedGates.length + runtimeVisibleNonAutomatedGates.length + declaredManualGates.length,
+      automatedTotal: runtimeAutomatedGates.length,
+      automatedPass: runtimeAutomatedGates.filter(gate => gate.status === "pass").length,
+      automatedFail: runtimeAutomatedGates.filter(gate => gate.status === "fail").length,
       automatedPending,
       automatedBlockingFailures: blockingFailures.length,
-      notAutomated: declaredManualGates.length,
-      manualReviewRequired: declaredManualGates.filter(gate => gate.blocking).length,
+      notAutomated: runtimeVisibleNonAutomatedGates.length + declaredManualGates.length,
+      manualReviewRequired: runtimeVisibleNonAutomatedGates.filter(gate => gate.blocking).length + declaredManualGates.filter(gate => gate.blocking).length,
     },
     slo,
     gates: [
-      ...automatedGates,
+      ...runtimeAutomatedGates,
+      ...runtimeVisibleNonAutomatedGates,
       ...declaredManualGates,
     ],
   }

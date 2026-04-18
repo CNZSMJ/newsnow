@@ -483,6 +483,12 @@ export async function ingestEventSources(options?: {
       await upsertSourceProfile(sourceId, profile)
       const items = (await getters[sourceId]()).slice(0, 50)
       const fetchedAt = Date.now()
+      await eventTable.recordSourceFetchRun({
+        source_id: sourceId,
+        fetched_at: fetchedAt,
+        status: "success",
+        item_count: items.length,
+      })
       let rank = 0
       for (const item of items) {
         try {
@@ -509,6 +515,13 @@ export async function ingestEventSources(options?: {
       ingestedSources.push(sourceId)
       logger.success(`ingest ${sourceId} events (${EVENT_ENGINE_VERSIONS.resolver})`)
     } catch (error) {
+      await eventTable.recordSourceFetchRun({
+        source_id: sourceId,
+        fetched_at: Date.now(),
+        status: "error",
+        item_count: 0,
+        error: error instanceof Error ? error.message : String(error),
+      })
       const failureMetricLabels = toMetricLabels({
         source_id: sourceId,
       })

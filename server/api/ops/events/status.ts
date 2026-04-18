@@ -1,6 +1,7 @@
 import { getEventBusWorkerStatus } from "#/services/event-bus"
 import { getEventTable } from "#/database/events"
 import { evaluateEventQualityGates } from "#/services/event-engine/quality-gates"
+import type { EventBaseQualitySnapshot } from "#/services/event-engine/slo"
 import { EVENT_ENGINE_VERSIONS } from "#/services/event-engine/versions"
 
 const DEFAULT_OPERATIONAL_WINDOW_HOURS = 24
@@ -84,6 +85,7 @@ export default defineEventHandler(async (event) => {
         generatedAt: updatedTime,
         windowStartAt: operationalWindowStartAt,
         staleThresholdMs,
+        tierBreakdown: [],
         sourceKindBreakdown: [],
         sourceBreakdown: [],
       }
@@ -93,7 +95,7 @@ export default defineEventHandler(async (event) => {
     staleThresholdMinutes,
     ...rawLatencyDiagnostics,
   }
-  const qualitySnapshot = eventTable
+  const qualitySnapshot: EventBaseQualitySnapshot = eventTable
     ? await eventTable.getQualitySnapshot()
     : {
         generatedAt: 0,
@@ -106,18 +108,38 @@ export default defineEventHandler(async (event) => {
           genericFallbackEventCount: 0,
           structuredCoveragePct: null,
           genericFallbackSharePct: null,
+          coarsePublicationClockEventCount: 0,
+          backlogCatchupEventCount: 0,
           latencySampleCount: 0,
           avgIngestLatencyMs: null,
           p95IngestLatencyMs: null,
+          initialCanonicalLatency: {
+            instrumentation: "automated",
+            latencySampleCount: 0,
+            avgLatencyMs: null,
+            p95LatencyMs: null,
+          },
+          fullSemanticEnrichmentLatency: {
+            instrumentation: "not_instrumented",
+            latencySampleCount: 0,
+            avgLatencyMs: null,
+            p95LatencyMs: null,
+          },
         },
+        latencyTiers: [],
         highValueSourceEventCount: 0,
         highValueStructuredEventCount: 0,
         highValueStructuredCoveragePct: null,
         highValueDegradedEventCount: 0,
         highValueGenericFallbackEventCount: 0,
         highValueGenericFallbackSharePct: null,
+        highValueCoarsePublicationClockEventCount: 0,
+        highValueBacklogCatchupEventCount: 0,
         prioritySourceAvgIngestLatencyMs: null,
         prioritySourceIngestLatencyP95Ms: null,
+        tradeCriticalInitialCanonicalLatencyP95Ms: null,
+        highValueNonIntradayInitialCanonicalLatencyP95Ms: null,
+        longFormHeavyParsingInitialCanonicalLatencyP95Ms: null,
       }
   const extractorSuccess = Number(metrics.totals.event_engine_extractor_success_total ?? 0)
   const extractorFailure = Number(metrics.totals.event_engine_extractor_failure_total ?? 0)

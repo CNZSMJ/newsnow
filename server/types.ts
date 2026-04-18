@@ -116,6 +116,16 @@ export interface EventSourceRow {
   updated_at: number
 }
 
+export interface SourceFetchRunRow {
+  source_id: SourceID
+  fetched_at: number
+  status: "success" | "error"
+  item_count: number
+  error: string | null
+  prev_successful_fetched_at: number | null
+  fetch_gap_ms: number | null
+}
+
 export interface EventFactRow {
   fact_id: string
   event_id: string

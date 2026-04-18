@@ -69,6 +69,15 @@ describe("event table migration", () => {
       "extraction_status",
       "extraction_error",
     ]))
+    expect(getColumnNames(instance, "source_fetch_runs")).toEqual(expect.arrayContaining([
+      "source_id",
+      "fetched_at",
+      "status",
+      "item_count",
+      "error",
+      "prev_successful_fetched_at",
+      "fetch_gap_ms",
+    ]))
     expect(instance.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='event_timeline'`).get()).toBeTruthy()
     expect(instance.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='event_facts'`).get()).toBeTruthy()
   })
@@ -158,6 +167,7 @@ describe("event table migration", () => {
       "extraction_status",
       "extraction_error",
     ]))
+    expect(instance.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='source_fetch_runs'`).get()).toBeTruthy()
     expect(instance.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='event_sources'`).get()).toBeTruthy()
     expect(instance.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='event_metrics'`).get()).toBeTruthy()
     expect(instance.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='event_timeline'`).get()).toBeTruthy()
@@ -275,6 +285,37 @@ describe("event table migration", () => {
     await expect(table.getEventById("evt_child")).resolves.toBeUndefined()
   })
 
+  it("tracks latest source poll time from source fetch runs instead of raw item arrivals", async () => {
+    const db = createTempDb("source-fetch-runs-last-fetched")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertRawItem({
+      raw_id: "raw_last_fetched_old_item",
+      source_id: "pbc-omo",
+      source_item_id: "raw_last_fetched_old_item",
+      title: "旧批次",
+      url: "https://example.com/old-batch",
+      mobile_url: null,
+      published_at: now - 60 * 60 * 1000,
+      fetched_at: now - 60 * 60 * 1000,
+      fingerprint: "old-batch",
+      payload_json: "{}",
+      status: "active",
+    })
+    await table.recordSourceFetchRun({
+      source_id: "pbc-omo",
+      fetched_at: now - 5 * 60 * 1000,
+      status: "success",
+      item_count: 0,
+    })
+
+    const lastFetched = await table.getLastFetchedAtBySourceIds(["pbc-omo"])
+
+    expect(lastFetched["pbc-omo"]).toBe(now - 5 * 60 * 1000)
+  })
+
   it("narrows topic filtering to sector-relevant events instead of broad-tagged macro noise", async () => {
     const db = createTempDb("topic-filter")
     const table = new EventTable(db as any)
@@ -348,6 +389,157 @@ describe("event table migration", () => {
     })
 
     expect(results.map(item => item.eventId)).toEqual(["evt_semiconductor"])
+  })
+
+  it("preserves the first canonical ingested_at when refreshing an existing event", async () => {
+    const db = createTempDb("preserve-ingested-at")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const firstIngestedAt = Date.UTC(2026, 3, 17, 9, 0, 0)
+    const laterIngestedAt = Date.UTC(2026, 3, 17, 9, 12, 0)
+
+    await table.upsertEvent({
+      event_id: "evt_preserve_ingested",
+      cluster_key: "cluster_preserve_ingested",
+      title: "首次入库事件",
+      summary: null,
+      event_type: "policy",
+      event_subtype: "monetary_policy",
+      source_kind: "official_central_bank_operation",
+      published_at: firstIngestedAt - 60_000,
+      ingested_at: firstIngestedAt,
+      canonical_url: "https://example.com/preserve-ingested",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 60,
+      materiality_score: 70,
+      tradability_score: 65,
+      authority_score: 95,
+      freshness_score: 85,
+      surprise_score: 25,
+      affected_markets_json: JSON.stringify(["CN_rates"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: firstIngestedAt,
+      status: "active",
+    })
+
+    await table.upsertEvent({
+      event_id: "evt_preserve_ingested",
+      cluster_key: "cluster_preserve_ingested",
+      title: "刷新后的同一事件",
+      summary: "later snapshot",
+      event_type: "policy",
+      event_subtype: "monetary_policy",
+      source_kind: "official_central_bank_operation",
+      published_at: firstIngestedAt - 60_000,
+      ingested_at: laterIngestedAt,
+      canonical_url: "https://example.com/preserve-ingested",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 60,
+      materiality_score: 70,
+      tradability_score: 65,
+      authority_score: 95,
+      freshness_score: 85,
+      surprise_score: 25,
+      affected_markets_json: JSON.stringify(["CN_rates"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: laterIngestedAt,
+      status: "active",
+    })
+
+    const row = await table.getEventById("evt_preserve_ingested")
+    expect(row?.ingested_at).toBe(firstIngestedAt)
+    expect(row?.last_seen_at).toBe(laterIngestedAt)
+    expect(row?.summary).toBe("later snapshot")
+  })
+
+  it("repairs inflated ingested_at timestamps back to the first canonical detection time", async () => {
+    const db = createTempDb("repair-ingested-at")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const publishedAt = Date.UTC(2026, 3, 17, 9, 0, 0)
+    const firstDetectedAt = Date.UTC(2026, 3, 17, 9, 3, 0)
+    const inflatedIngestedAt = Date.UTC(2026, 3, 17, 18, 0, 0)
+
+    await table.upsertEvent({
+      event_id: "evt_repair_ingested",
+      cluster_key: "cluster_repair_ingested",
+      title: "需要修正的入库时间",
+      summary: null,
+      event_type: "announcement",
+      event_subtype: "earnings",
+      source_kind: "exchange_disclosure",
+      published_at: publishedAt,
+      ingested_at: inflatedIngestedAt,
+      canonical_url: "https://example.com/repair-ingested",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 70,
+      materiality_score: 80,
+      tradability_score: 75,
+      authority_score: 95,
+      freshness_score: 90,
+      surprise_score: 35,
+      affected_markets_json: JSON.stringify(["A"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: inflatedIngestedAt,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_repair_ingested",
+      raw_id: "raw_repair_ingested",
+      source_id: "cninfo-sse",
+      source_item_id: "raw_repair_ingested",
+      title: "需要修正的入库时间",
+      summary: null,
+      canonical_url: "https://example.com/repair-ingested",
+      published_at: publishedAt,
+      fetched_at: firstDetectedAt,
+      source_priority: 100,
+      authority_level: "exchange",
+      parser_family: "exchange_announcement",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+    await table.addTimeline({
+      timeline_id: "timeline_repair_ingested",
+      event_id: "evt_repair_ingested",
+      state_from: null,
+      state_to: "detected",
+      changed_at: firstDetectedAt,
+      trigger_evidence_id: "raw_repair_ingested",
+      actor: "event-engine",
+      reason: "new_event",
+      metadata_json: "{}",
+    })
+
+    const repair = await table.repairInitialCanonicalIngestedAt({
+      eventIds: ["evt_repair_ingested"],
+    })
+    const repairedRow = await table.getEventById("evt_repair_ingested")
+
+    expect(repair).toMatchObject({
+      scannedEvents: 1,
+      updatedEvents: 1,
+    })
+    expect(repairedRow?.ingested_at).toBe(firstDetectedAt)
   })
 
   it("counts topic-filtered events using the same narrowing logic as the list view", async () => {
@@ -856,12 +1048,28 @@ describe("event table migration", () => {
       cluster_key: "cluster_quality_1",
       title: "高价值事件1",
       summary: null,
+      event_type: "policy",
+      event_subtype: "monetary_policy",
+      source_kind: "official_central_bank_operation",
       published_at: now - 300000,
       ingested_at: now,
       canonical_url: "https://example.com/q1",
       primary_entity_name: null,
       last_seen_at: now,
-      ...highValueBase,
+      importance: highValueBase.importance,
+      sentiment: highValueBase.sentiment,
+      directional_view: highValueBase.directional_view,
+      directional_confidence: highValueBase.directional_confidence,
+      materiality_score: highValueBase.materiality_score,
+      tradability_score: highValueBase.tradability_score,
+      authority_score: highValueBase.authority_score,
+      freshness_score: highValueBase.freshness_score,
+      surprise_score: highValueBase.surprise_score,
+      affected_markets_json: highValueBase.affected_markets_json,
+      impact_summary_json: highValueBase.impact_summary_json,
+      degraded: highValueBase.degraded,
+      topic_tags_json: highValueBase.topic_tags_json,
+      status: highValueBase.status,
     })
     await table.addEvidence({
       event_id: "evt_quality_1",
@@ -875,7 +1083,7 @@ describe("event table migration", () => {
       fetched_at: now,
       source_priority: 100,
       authority_level: "official",
-      parser_family: "official_macro_release",
+      parser_family: "central_bank_operation",
       passthrough_payload_json: "{}",
       extraction_status: "ready",
       extraction_error: null,
@@ -1047,17 +1255,26 @@ describe("event table migration", () => {
     expect(highValue.genericFallbackEventCount).toBe(1)
     expect(highValue.structuredCoveragePct).toBeCloseTo(50, 2)
     expect(highValue.genericFallbackSharePct).toBeCloseTo(25, 2)
-    expect(highValue.latencySampleCount).toBe(4)
-    expect(highValue.avgIngestLatencyMs).toBe(165000)
+    expect(highValue.coarsePublicationClockEventCount).toBe(3)
+    expect(highValue.backlogCatchupEventCount).toBe(0)
+    expect(highValue.latencySampleCount).toBe(1)
+    expect(highValue.avgIngestLatencyMs).toBe(300000)
     expect(highValue.p95IngestLatencyMs).toBe(300000)
+    expect(highValue.initialCanonicalLatency.p95LatencyMs).toBe(300000)
+    expect(highValue.fullSemanticEnrichmentLatency.instrumentation).toBe("not_instrumented")
     expect(snapshot.highValueSourceEventCount).toBe(4)
     expect(snapshot.highValueStructuredEventCount).toBe(2)
     expect(snapshot.highValueDegradedEventCount).toBe(1)
     expect(snapshot.highValueStructuredCoveragePct).toBeCloseTo(50, 2)
     expect(snapshot.highValueGenericFallbackEventCount).toBe(1)
     expect(snapshot.highValueGenericFallbackSharePct).toBeCloseTo(25, 2)
-    expect(snapshot.prioritySourceAvgIngestLatencyMs).toBe(165000)
+    expect(snapshot.highValueCoarsePublicationClockEventCount).toBe(3)
+    expect(snapshot.highValueBacklogCatchupEventCount).toBe(0)
+    expect(snapshot.prioritySourceAvgIngestLatencyMs).toBe(300000)
     expect(snapshot.prioritySourceIngestLatencyP95Ms).toBe(300000)
+    expect(snapshot.tradeCriticalInitialCanonicalLatencyP95Ms).toBe(300000)
+    expect(snapshot.highValueNonIntradayInitialCanonicalLatencyP95Ms).toBeNull()
+    expect(snapshot.longFormHeavyParsingInitialCanonicalLatencyP95Ms).toBeNull()
   })
 
   it("limits quality snapshots to the requested ingest window", async () => {
@@ -1156,8 +1373,451 @@ describe("event table migration", () => {
     expect(highValue.totalEventCount).toBe(1)
     expect(highValue.structuredEventCount).toBe(1)
     expect(highValue.structuredCoveragePct).toBe(100)
-    expect(snapshot.prioritySourceAvgIngestLatencyMs).toBe(30000)
-    expect(snapshot.prioritySourceIngestLatencyP95Ms).toBe(30000)
+    expect(highValue.coarsePublicationClockEventCount).toBe(1)
+    expect(highValue.backlogCatchupEventCount).toBe(0)
+    expect(highValue.latencySampleCount).toBe(0)
+    expect(snapshot.prioritySourceAvgIngestLatencyMs).toBeNull()
+    expect(snapshot.prioritySourceIngestLatencyP95Ms).toBeNull()
+    expect(snapshot.highValueNonIntradayInitialCanonicalLatencyP95Ms).toBeNull()
+  })
+
+  it("excludes backlog catch-up batches from automated latency samples while keeping them visible", async () => {
+    const db = createTempDb("quality-snapshot-backlog-catchup")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    const since = now - 60 * 60 * 1000
+
+    await table.recordSourceFetchRun({
+      source_id: "pbc-omo",
+      fetched_at: now - 2 * 60 * 60 * 1000,
+      status: "success",
+      item_count: 0,
+    })
+
+    await table.recordSourceFetchRun({
+      source_id: "pbc-omo",
+      fetched_at: now - 5 * 60 * 1000,
+      status: "success",
+      item_count: 1,
+    })
+
+    await table.upsertEvent({
+      event_id: "evt_backlog_precise",
+      cluster_key: "cluster_backlog_precise",
+      title: "公开市场操作回补批次",
+      summary: null,
+      event_type: "policy",
+      event_subtype: "monetary_policy",
+      source_kind: "official_central_bank_operation",
+      published_at: now - 45 * 60 * 1000,
+      ingested_at: now - 5 * 60 * 1000,
+      canonical_url: "https://example.com/backlog-current-batch",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 70,
+      materiality_score: 75,
+      tradability_score: 55,
+      authority_score: 95,
+      freshness_score: 80,
+      surprise_score: 35,
+      affected_markets_json: JSON.stringify(["CN_rates"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now - 5 * 60 * 1000,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_backlog_precise",
+      raw_id: "raw_backlog_current_batch",
+      source_id: "pbc-omo",
+      source_item_id: "raw_backlog_current_batch",
+      title: "公开市场操作回补批次",
+      summary: null,
+      canonical_url: "https://example.com/backlog-current-batch",
+      published_at: now - 45 * 60 * 1000,
+      fetched_at: now - 5 * 60 * 1000,
+      source_priority: 100,
+      authority_level: "official",
+      parser_family: "central_bank_operation",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+
+    const snapshot = await table.getQualitySnapshot({ since })
+    const highValue = snapshot.highValue!
+    const tradeCriticalTier = snapshot.latencyTiers?.find(tier => tier.tier === "trade_critical")
+
+    expect(highValue.totalEventCount).toBe(1)
+    expect(highValue.coarsePublicationClockEventCount).toBe(0)
+    expect(highValue.backlogCatchupEventCount).toBe(1)
+    expect(highValue.latencySampleCount).toBe(0)
+    expect(snapshot.tradeCriticalInitialCanonicalLatencyP95Ms).toBeNull()
+    expect(snapshot.highValueBacklogCatchupEventCount).toBe(1)
+    expect(tradeCriticalTier).toMatchObject({
+      totalEventCount: 1,
+      coarsePublicationClockEventCount: 0,
+      backlogCatchupEventCount: 1,
+    })
+    expect(tradeCriticalTier?.initialCanonicalLatency.latencySampleCount).toBe(0)
+  })
+
+  it("falls back to legacy raw-item batch gaps for exchange disclosures until poll history is available", async () => {
+    const db = createTempDb("quality-snapshot-legacy-disclosure-gap")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    const since = now - 60 * 60 * 1000
+
+    await table.upsertRawItem({
+      raw_id: "raw_legacy_disclosure_previous_batch",
+      source_id: "cninfo-sse",
+      source_item_id: "raw_legacy_disclosure_previous_batch",
+      title: "上一公告批次",
+      url: "https://example.com/legacy-disclosure-previous-batch",
+      mobile_url: null,
+      published_at: now - 3 * 60 * 60 * 1000,
+      fetched_at: now - 2 * 60 * 60 * 1000,
+      fingerprint: "legacy-disclosure-previous-batch",
+      payload_json: "{}",
+      status: "active",
+    })
+    await table.upsertRawItem({
+      raw_id: "raw_legacy_disclosure_current_batch",
+      source_id: "cninfo-sse",
+      source_item_id: "raw_legacy_disclosure_current_batch",
+      title: "回补公告批次",
+      url: "https://example.com/legacy-disclosure-current-batch",
+      mobile_url: null,
+      published_at: now - 45 * 60 * 1000,
+      fetched_at: now - 5 * 60 * 1000,
+      fingerprint: "legacy-disclosure-current-batch",
+      payload_json: "{}",
+      status: "active",
+    })
+
+    await table.upsertEvent({
+      event_id: "evt_legacy_disclosure_backlog",
+      cluster_key: "cluster_legacy_disclosure_backlog",
+      title: "回补公告批次",
+      summary: null,
+      event_type: "announcement",
+      event_subtype: "other",
+      source_kind: "exchange_disclosure",
+      published_at: now - 45 * 60 * 1000,
+      ingested_at: now - 5 * 60 * 1000,
+      canonical_url: "https://example.com/legacy-disclosure-current-batch",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 70,
+      materiality_score: 75,
+      tradability_score: 55,
+      authority_score: 95,
+      freshness_score: 80,
+      surprise_score: 35,
+      affected_markets_json: JSON.stringify(["A"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now - 5 * 60 * 1000,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_legacy_disclosure_backlog",
+      raw_id: "raw_legacy_disclosure_current_batch",
+      source_id: "cninfo-sse",
+      source_item_id: "raw_legacy_disclosure_current_batch",
+      title: "回补公告批次",
+      summary: null,
+      canonical_url: "https://example.com/legacy-disclosure-current-batch",
+      published_at: now - 45 * 60 * 1000,
+      fetched_at: now - 5 * 60 * 1000,
+      source_priority: 100,
+      authority_level: "official",
+      parser_family: "exchange_disclosure",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+
+    const snapshot = await table.getQualitySnapshot({ since })
+    const highValue = snapshot.highValue!
+
+    expect(highValue.backlogCatchupEventCount).toBe(1)
+    expect(highValue.latencySampleCount).toBe(0)
+  })
+
+  it("does not infer backlog from legacy raw-item gaps for sparse precise sources", async () => {
+    const db = createTempDb("quality-snapshot-no-legacy-sparse-gap")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    const since = now - 60 * 60 * 1000
+
+    await table.upsertRawItem({
+      raw_id: "raw_sparse_legacy_previous_batch",
+      source_id: "pbc-omo",
+      source_item_id: "raw_sparse_legacy_previous_batch",
+      title: "上一批有内容批次",
+      url: "https://example.com/sparse-legacy-previous-batch",
+      mobile_url: null,
+      published_at: now - 3 * 60 * 60 * 1000,
+      fetched_at: now - 2 * 60 * 60 * 1000,
+      fingerprint: "sparse-legacy-previous-batch",
+      payload_json: "{}",
+      status: "active",
+    })
+    await table.upsertRawItem({
+      raw_id: "raw_sparse_legacy_current_batch",
+      source_id: "pbc-omo",
+      source_item_id: "raw_sparse_legacy_current_batch",
+      title: "正常公开市场操作批次",
+      url: "https://example.com/sparse-legacy-current-batch",
+      mobile_url: null,
+      published_at: now - 12 * 60 * 1000,
+      fetched_at: now - 5 * 60 * 1000,
+      fingerprint: "sparse-legacy-current-batch",
+      payload_json: "{}",
+      status: "active",
+    })
+
+    await table.upsertEvent({
+      event_id: "evt_sparse_legacy_gap",
+      cluster_key: "cluster_sparse_legacy_gap",
+      title: "正常公开市场操作批次",
+      summary: null,
+      event_type: "policy",
+      event_subtype: "monetary_policy",
+      source_kind: "official_central_bank_operation",
+      published_at: now - 12 * 60 * 1000,
+      ingested_at: now - 5 * 60 * 1000,
+      canonical_url: "https://example.com/sparse-legacy-current-batch",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 70,
+      materiality_score: 75,
+      tradability_score: 55,
+      authority_score: 95,
+      freshness_score: 80,
+      surprise_score: 35,
+      affected_markets_json: JSON.stringify(["CN_rates"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now - 5 * 60 * 1000,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_sparse_legacy_gap",
+      raw_id: "raw_sparse_legacy_current_batch",
+      source_id: "pbc-omo",
+      source_item_id: "raw_sparse_legacy_current_batch",
+      title: "正常公开市场操作批次",
+      summary: null,
+      canonical_url: "https://example.com/sparse-legacy-current-batch",
+      published_at: now - 12 * 60 * 1000,
+      fetched_at: now - 5 * 60 * 1000,
+      source_priority: 100,
+      authority_level: "official",
+      parser_family: "central_bank_operation",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+
+    const snapshot = await table.getQualitySnapshot({ since })
+    const highValue = snapshot.highValue!
+
+    expect(highValue.backlogCatchupEventCount).toBe(0)
+    expect(highValue.latencySampleCount).toBe(1)
+    expect(snapshot.tradeCriticalInitialCanonicalLatencyP95Ms).toBe(7 * 60 * 1000)
+  })
+
+  it("keeps precise sparse sources in automated latency samples when empty polls continued normally", async () => {
+    const db = createTempDb("quality-snapshot-sparse-precise-source")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    const since = now - 60 * 60 * 1000
+
+    await table.upsertRawItem({
+      raw_id: "raw_sparse_previous_item_batch",
+      source_id: "pbc-omo",
+      source_item_id: "raw_sparse_previous_item_batch",
+      title: "上一批有内容批次",
+      url: "https://example.com/sparse-previous-item-batch",
+      mobile_url: null,
+      published_at: now - 3 * 60 * 60 * 1000,
+      fetched_at: now - 2 * 60 * 60 * 1000,
+      fingerprint: "sparse-previous-item-batch",
+      payload_json: "{}",
+      status: "active",
+    })
+    await table.recordSourceFetchRun({
+      source_id: "pbc-omo",
+      fetched_at: now - 15 * 60 * 1000,
+      status: "success",
+      item_count: 0,
+    })
+    await table.recordSourceFetchRun({
+      source_id: "pbc-omo",
+      fetched_at: now - 10 * 60 * 1000,
+      status: "success",
+      item_count: 0,
+    })
+    await table.recordSourceFetchRun({
+      source_id: "pbc-omo",
+      fetched_at: now - 5 * 60 * 1000,
+      status: "success",
+      item_count: 1,
+    })
+
+    await table.upsertEvent({
+      event_id: "evt_sparse_precise",
+      cluster_key: "cluster_sparse_precise",
+      title: "公开市场操作正常批次",
+      summary: null,
+      event_type: "policy",
+      event_subtype: "monetary_policy",
+      source_kind: "official_central_bank_operation",
+      published_at: now - 12 * 60 * 1000,
+      ingested_at: now - 5 * 60 * 1000,
+      canonical_url: "https://example.com/sparse-current-batch",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 70,
+      materiality_score: 75,
+      tradability_score: 55,
+      authority_score: 95,
+      freshness_score: 80,
+      surprise_score: 35,
+      affected_markets_json: JSON.stringify(["CN_rates"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now - 5 * 60 * 1000,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_sparse_precise",
+      raw_id: "raw_sparse_current_batch",
+      source_id: "pbc-omo",
+      source_item_id: "raw_sparse_current_batch",
+      title: "公开市场操作正常批次",
+      summary: null,
+      canonical_url: "https://example.com/sparse-current-batch",
+      published_at: now - 12 * 60 * 1000,
+      fetched_at: now - 5 * 60 * 1000,
+      source_priority: 100,
+      authority_level: "official",
+      parser_family: "central_bank_operation",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+
+    const snapshot = await table.getQualitySnapshot({ since })
+    const highValue = snapshot.highValue!
+
+    expect(highValue.totalEventCount).toBe(1)
+    expect(highValue.backlogCatchupEventCount).toBe(0)
+    expect(highValue.latencySampleCount).toBe(1)
+    expect(snapshot.tradeCriticalInitialCanonicalLatencyP95Ms).toBe(7 * 60 * 1000)
+  })
+
+  it("retains backlog classification beyond a seven-day gap when the source poll history is persisted", async () => {
+    const db = createTempDb("quality-snapshot-long-gap-backlog")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    const since = now - 60 * 60 * 1000
+
+    await table.recordSourceFetchRun({
+      source_id: "pbc-mlf",
+      fetched_at: now - 10 * 24 * 60 * 60 * 1000,
+      status: "success",
+      item_count: 0,
+    })
+    await table.recordSourceFetchRun({
+      source_id: "pbc-mlf",
+      fetched_at: now - 5 * 60 * 1000,
+      status: "success",
+      item_count: 1,
+    })
+
+    await table.upsertEvent({
+      event_id: "evt_long_gap_precise",
+      cluster_key: "cluster_long_gap_precise",
+      title: "中期借贷便利回补批次",
+      summary: null,
+      event_type: "policy",
+      event_subtype: "monetary_policy",
+      source_kind: "official_central_bank_operation",
+      published_at: now - 45 * 60 * 1000,
+      ingested_at: now - 5 * 60 * 1000,
+      canonical_url: "https://example.com/long-gap-current-batch",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 70,
+      materiality_score: 75,
+      tradability_score: 55,
+      authority_score: 95,
+      freshness_score: 80,
+      surprise_score: 35,
+      affected_markets_json: JSON.stringify(["CN_rates"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now - 5 * 60 * 1000,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_long_gap_precise",
+      raw_id: "raw_long_gap_current_batch",
+      source_id: "pbc-mlf",
+      source_item_id: "raw_long_gap_current_batch",
+      title: "中期借贷便利回补批次",
+      summary: null,
+      canonical_url: "https://example.com/long-gap-current-batch",
+      published_at: now - 45 * 60 * 1000,
+      fetched_at: now - 5 * 60 * 1000,
+      source_priority: 100,
+      authority_level: "official",
+      parser_family: "central_bank_operation",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+
+    const snapshot = await table.getQualitySnapshot({ since })
+    const highValue = snapshot.highValue!
+
+    expect(highValue.totalEventCount).toBe(1)
+    expect(highValue.backlogCatchupEventCount).toBe(1)
+    expect(highValue.latencySampleCount).toBe(0)
+    expect(snapshot.tradeCriticalInitialCanonicalLatencyP95Ms).toBeNull()
   })
 
   it("reports operational latency diagnostics by source kind and source id", async () => {
@@ -1290,16 +1950,26 @@ describe("event table migration", () => {
     })
 
     expect(diagnostics.windowStartAt).toBe(since)
+    expect(diagnostics.tierBreakdown[0]).toMatchObject({
+      sourceKind: "Tier A 交易关键源",
+      latencyTier: "trade_critical",
+      latencyTargetMs: 300000,
+    })
     expect(diagnostics.sourceKindBreakdown[0]).toMatchObject({
       sourceKind: "official_policy_notice",
+      latencyTier: "high_value_non_intraday",
+      publicationClockPrecision: "coarse_day",
+      automatedLatencyEligible: false,
+      excludedCoarseClockEventCount: 2,
+      excludedBacklogCatchupEventCount: 0,
       totalEvents: 2,
-      latencySampleCount: 2,
-      staleEventCount: 2,
+      latencySampleCount: 0,
+      staleEventCount: 0,
       freshEventCount: 0,
-      staleSharePct: 100,
-      avgIngestLatencyMs: 750000,
-      p95IngestLatencyMs: 900000,
-      maxIngestLatencyMs: 900000,
+      staleSharePct: null,
+      avgIngestLatencyMs: null,
+      p95IngestLatencyMs: null,
+      maxIngestLatencyMs: null,
       avgPublicationAgeMs: 1050000,
       p95PublicationAgeMs: 1200000,
       maxPublicationAgeMs: 1200000,
@@ -1310,11 +1980,19 @@ describe("event table migration", () => {
     expect(diagnostics.sourceBreakdown[0]).toMatchObject({
       sourceKind: "official_policy_notice",
       sourceId: "pbc-news",
+      latencyTier: "high_value_non_intraday",
+      publicationClockPrecision: "coarse_day",
+      automatedLatencyEligible: false,
+      excludedCoarseClockEventCount: 2,
+      excludedBacklogCatchupEventCount: 0,
       totalEvents: 2,
-      latencySampleCount: 2,
-      staleEventCount: 2,
+      latencySampleCount: 0,
+      staleEventCount: 0,
       freshEventCount: 0,
-      staleSharePct: 100,
+      staleSharePct: null,
+      avgIngestLatencyMs: null,
+      p95IngestLatencyMs: null,
+      maxIngestLatencyMs: null,
       avgPublicationAgeMs: 1050000,
       p95PublicationAgeMs: 1200000,
       maxPublicationAgeMs: 1200000,
@@ -1325,14 +2003,19 @@ describe("event table migration", () => {
     expect(diagnostics.sourceBreakdown[1]).toMatchObject({
       sourceKind: "official_macro_release",
       sourceId: "stats-industry",
+      latencyTier: "high_value_non_intraday",
+      publicationClockPrecision: "coarse_day",
+      automatedLatencyEligible: false,
+      excludedCoarseClockEventCount: 1,
+      excludedBacklogCatchupEventCount: 0,
       totalEvents: 1,
-      latencySampleCount: 1,
+      latencySampleCount: 0,
       staleEventCount: 0,
-      freshEventCount: 1,
-      staleSharePct: 0,
-      avgIngestLatencyMs: 60000,
-      p95IngestLatencyMs: 60000,
-      maxIngestLatencyMs: 60000,
+      freshEventCount: 0,
+      staleSharePct: null,
+      avgIngestLatencyMs: null,
+      p95IngestLatencyMs: null,
+      maxIngestLatencyMs: null,
       avgPublicationAgeMs: 600000,
       p95PublicationAgeMs: 600000,
       maxPublicationAgeMs: 600000,
@@ -1456,9 +2139,15 @@ describe("event table migration", () => {
       staleThresholdMs: 5 * 60 * 1000,
     })
 
+    expect(diagnostics.tierBreakdown).toHaveLength(3)
     expect(diagnostics.sourceKindBreakdown).toHaveLength(1)
     expect(diagnostics.sourceKindBreakdown[0]).toMatchObject({
       sourceKind: "official_macro_release",
+      latencyTier: "high_value_non_intraday",
+      publicationClockPrecision: "precise",
+      automatedLatencyEligible: true,
+      excludedCoarseClockEventCount: 0,
+      excludedBacklogCatchupEventCount: 0,
       totalEvents: 1,
       latencySampleCount: 1,
       staleEventCount: 1,
@@ -1472,6 +2161,11 @@ describe("event table migration", () => {
     expect(diagnostics.sourceBreakdown[0]).toMatchObject({
       sourceKind: "official_macro_release",
       sourceId: "pbc-omo",
+      latencyTier: "high_value_non_intraday",
+      publicationClockPrecision: "precise",
+      automatedLatencyEligible: true,
+      excludedCoarseClockEventCount: 0,
+      excludedBacklogCatchupEventCount: 0,
       totalEvents: 1,
       latencySampleCount: 1,
       staleEventCount: 1,
@@ -1480,6 +2174,105 @@ describe("event table migration", () => {
       avgIngestLatencyMs: 420000,
       avgPublicationAgeMs: 900000,
       avgLastSeenDelayMs: 120000,
+    })
+  })
+
+  it("reports backlog catch-up exclusions separately from coarse publication clock exclusions", async () => {
+    const db = createTempDb("latency-diagnostics-backlog")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = 1_760_000_200_000
+    vi.spyOn(Date, "now").mockReturnValue(now)
+    const since = now - 60 * 60 * 1000
+
+    await table.recordSourceFetchRun({
+      source_id: "pbc-omo",
+      fetched_at: now - 2 * 60 * 60 * 1000,
+      status: "success",
+      item_count: 0,
+    })
+    await table.recordSourceFetchRun({
+      source_id: "pbc-omo",
+      fetched_at: now - 5 * 60 * 1000,
+      status: "success",
+      item_count: 1,
+    })
+
+    await table.upsertEvent({
+      event_id: "evt_diag_backlog",
+      cluster_key: "cluster_diag_backlog",
+      title: "回补批次",
+      summary: null,
+      event_type: "policy",
+      event_subtype: "monetary_policy",
+      source_kind: "official_central_bank_operation",
+      published_at: now - 45 * 60 * 1000,
+      ingested_at: now - 5 * 60 * 1000,
+      canonical_url: "https://example.com/diag-backlog-current",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 60,
+      materiality_score: 70,
+      tradability_score: 50,
+      authority_score: 95,
+      freshness_score: 80,
+      surprise_score: 30,
+      affected_markets_json: JSON.stringify(["CN_rates"]),
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now - 5 * 60 * 1000,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_diag_backlog",
+      raw_id: "raw_diag_backlog_current",
+      source_id: "pbc-omo",
+      source_item_id: "raw_diag_backlog_current",
+      title: "回补批次",
+      summary: null,
+      canonical_url: "https://example.com/diag-backlog-current",
+      published_at: now - 45 * 60 * 1000,
+      fetched_at: now - 5 * 60 * 1000,
+      source_priority: 100,
+      authority_level: "official",
+      parser_family: "central_bank_operation",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+
+    const diagnostics = await table.getOperationalLatencyDiagnostics({
+      since,
+      limit: 5,
+      staleThresholdMs: 5 * 60 * 1000,
+    })
+
+    expect(diagnostics.tierBreakdown[0]).toMatchObject({
+      sourceKind: "Tier A 交易关键源",
+      latencyTier: "trade_critical",
+      publicationClockPrecision: "precise",
+      automatedLatencyEligible: false,
+      excludedCoarseClockEventCount: 0,
+      excludedBacklogCatchupEventCount: 1,
+      totalEvents: 1,
+      latencySampleCount: 0,
+    })
+    expect(diagnostics.sourceKindBreakdown[0]).toMatchObject({
+      sourceKind: "official_central_bank_operation",
+      excludedCoarseClockEventCount: 0,
+      excludedBacklogCatchupEventCount: 1,
+      latencySampleCount: 0,
+    })
+    expect(diagnostics.sourceBreakdown[0]).toMatchObject({
+      sourceId: "pbc-omo",
+      excludedCoarseClockEventCount: 0,
+      excludedBacklogCatchupEventCount: 1,
+      latencySampleCount: 0,
     })
   })
 
@@ -1558,6 +2351,82 @@ describe("event table migration", () => {
 
     expect(merged?.impact_summary_json).toBe("[\"业绩改善带动风险偏好修复\"]")
     expect(duplicate).toBeUndefined()
+  })
+
+  it("carries forward the earliest published and ingested timestamps when merging duplicates", async () => {
+    const db = createTempDb("merge-earliest-ingest")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertEvent({
+      event_id: "evt_canonical_latency",
+      cluster_key: "cluster_canonical_latency",
+      title: "canonical title",
+      summary: null,
+      event_type: "announcement",
+      event_subtype: "earnings",
+      source_kind: "exchange_disclosure",
+      published_at: now - 10 * 60 * 1000,
+      ingested_at: now - 2 * 60 * 1000,
+      canonical_url: "https://example.com/canonical-latency",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 70,
+      materiality_score: 60,
+      tradability_score: 50,
+      authority_score: 90,
+      freshness_score: 80,
+      surprise_score: 40,
+      affected_markets_json: "[]",
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now - 2 * 60 * 1000,
+      status: "active",
+    })
+    await table.upsertEvent({
+      event_id: "evt_duplicate_latency",
+      cluster_key: "cluster_duplicate_latency",
+      title: "duplicate title",
+      summary: null,
+      event_type: "announcement",
+      event_subtype: "earnings",
+      source_kind: "exchange_disclosure",
+      published_at: now - 20 * 60 * 1000,
+      ingested_at: now - 18 * 60 * 1000,
+      canonical_url: "https://example.com/duplicate-latency",
+      primary_entity_name: null,
+      importance: "high",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 70,
+      materiality_score: 60,
+      tradability_score: 50,
+      authority_score: 90,
+      freshness_score: 80,
+      surprise_score: 40,
+      affected_markets_json: "[]",
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now - 2 * 60 * 1000,
+      status: "active",
+    })
+
+    await table.mergeEventIntoCanonical({
+      canonicalEventId: "evt_canonical_latency",
+      duplicateEventId: "evt_duplicate_latency",
+      reason: "test_merge_latency",
+      mergedAt: now + 1,
+    })
+
+    const merged = await table.getEventById("evt_canonical_latency")
+
+    expect(merged?.published_at).toBe(now - 20 * 60 * 1000)
+    expect(merged?.ingested_at).toBe(now - 18 * 60 * 1000)
   })
 
   it("keeps confirmed lifecycle truth visible after merge provenance is appended", async () => {

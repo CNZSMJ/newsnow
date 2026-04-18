@@ -29,9 +29,19 @@ import { getEntityLookupTerms } from "#/services/event-engine/entity-registry"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
 import { getExchangeDisclosureMarkets, getSourceEventProfile } from "#/services/event-engine/profiles"
 import { resolveEventClassification } from "#/services/event-engine/resolver"
-import { HIGH_VALUE_SOURCE_KINDS, type EventBaseQualitySnapshot } from "#/services/event-engine/slo"
+import {
+  type EventBaseQualitySnapshot,
+  type EventLatencyTier,
+  HIGH_VALUE_SOURCE_KINDS,
+  getInitialLatencyAutomationExclusionReason,
+  getLatencyTierDefinition,
+  getLatencyTierForSourceKind,
+  getPublicationClockPrecision,
+  listLatencyTierDefinitions,
+  shouldUseLegacyRawItemFetchGap,
+} from "#/services/event-engine/slo"
 import { inferIndustryTagsFromText } from "#/services/event-engine/text"
-import type { EntityLinkRow, EventEvidenceRow, EventFactRow, EventRow, EventSourceRow, EventTimelineRow, RawItemRow } from "#/types"
+import type { EntityLinkRow, EventEvidenceRow, EventFactRow, EventRow, EventSourceRow, EventTimelineRow, RawItemRow, SourceFetchRunRow } from "#/types"
 import { getEventRecencyAnchor, scoreInvestmentEvent } from "#/services/event-engine/ranking"
 
 function getEventTableLogger() {
@@ -74,6 +84,12 @@ export interface EventOperationalLatencyDiagnosticBucket {
   sourceKind: string
   sourceId?: SourceID
   sourceName?: string
+  latencyTier?: EventLatencyTier
+  latencyTargetMs?: number
+  publicationClockPrecision: "precise" | "coarse_day" | "mixed"
+  automatedLatencyEligible: boolean
+  excludedCoarseClockEventCount: number
+  excludedBacklogCatchupEventCount: number
   totalEvents: number
   latencySampleCount: number
   staleEventCount: number
@@ -94,6 +110,7 @@ export interface EventOperationalLatencyDiagnostics {
   generatedAt: number
   windowStartAt: number
   staleThresholdMs: number
+  tierBreakdown: EventOperationalLatencyDiagnosticBucket[]
   sourceKindBreakdown: EventOperationalLatencyDiagnosticBucket[]
   sourceBreakdown: EventOperationalLatencyDiagnosticBucket[]
 }
@@ -107,6 +124,24 @@ function percentileFromSorted(values: number[], percentile: number) {
   if (!values.length) return null
   const index = Math.min(values.length - 1, Math.max(0, Math.ceil(values.length * percentile) - 1))
   return values[index] ?? null
+}
+
+function classifyInitialLatencyAutomation(input: {
+  sourceId?: SourceID | null
+  sourceKind?: string | null
+  fetchGapMs?: number | null
+}) {
+  const exclusionReason = getInitialLatencyAutomationExclusionReason({
+    sourceId: input.sourceId,
+    sourceKind: input.sourceKind,
+    fetchGapMs: input.fetchGapMs,
+  })
+
+  return {
+    publicationClockPrecision: getPublicationClockPrecision(input.sourceId, input.sourceKind),
+    automatedLatencyEligible: !exclusionReason,
+    exclusionReason,
+  }
 }
 
 function summarizeOperationalDurations(values: number[]) {
@@ -184,6 +219,20 @@ export class EventTable {
     `).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_raw_items_source_fetched ON raw_items(source_id, fetched_at DESC);`).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_raw_items_fingerprint ON raw_items(fingerprint);`).run()
+
+    await this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS source_fetch_runs (
+        source_id TEXT NOT NULL,
+        fetched_at INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        item_count INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        prev_successful_fetched_at INTEGER,
+        fetch_gap_ms INTEGER
+      );
+    `).run()
+    await this.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_source_fetch_runs_source_fetched ON source_fetch_runs(source_id, fetched_at DESC);`).run()
+    await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_source_fetch_runs_status_source_fetched ON source_fetch_runs(source_id, status, fetched_at DESC);`).run()
 
     await this.db.prepare(`
       CREATE TABLE IF NOT EXISTS events (
@@ -374,13 +423,52 @@ export class EventTable {
     )
   }
 
+  async recordSourceFetchRun(input: {
+    source_id: SourceID
+    fetched_at: number
+    status: SourceFetchRunRow["status"]
+    item_count: number
+    error?: string | null
+  }) {
+    const previousSuccessfulRun = input.status === "success"
+      ? await this.db.prepare(`
+          SELECT fetched_at
+          FROM source_fetch_runs
+          WHERE source_id = ?
+            AND status = 'success'
+            AND fetched_at < ?
+          ORDER BY fetched_at DESC
+          LIMIT 1
+        `).get(input.source_id, input.fetched_at) as { fetched_at?: number | null } | undefined
+      : undefined
+
+    const prevSuccessfulFetchedAt = previousSuccessfulRun?.fetched_at ?? null
+    const fetchGapMs = typeof prevSuccessfulFetchedAt === "number"
+      ? Math.max(0, input.fetched_at - prevSuccessfulFetchedAt)
+      : null
+
+    await this.db.prepare(`
+      INSERT OR REPLACE INTO source_fetch_runs (
+        source_id, fetched_at, status, item_count, error, prev_successful_fetched_at, fetch_gap_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      input.source_id,
+      input.fetched_at,
+      input.status,
+      input.item_count,
+      input.error ?? null,
+      prevSuccessfulFetchedAt,
+      fetchGapMs,
+    )
+  }
+
   async getLastFetchedAtBySourceIds(ids: SourceID[]) {
     if (!ids.length) return {} as Partial<Record<SourceID, number>>
     const where = ids.map(() => "?").join(", ")
     const rows = getRows<{ source_id: SourceID, fetched_at: number }>(
       await this.db.prepare(`
         SELECT source_id, MAX(fetched_at) AS fetched_at
-        FROM raw_items
+        FROM source_fetch_runs
         WHERE source_id IN (${where})
         GROUP BY source_id
       `).all(...ids),
@@ -412,7 +500,7 @@ export class EventTable {
         event_subtype = excluded.event_subtype,
         source_kind = COALESCE(excluded.source_kind, events.source_kind),
         published_at = COALESCE(events.published_at, excluded.published_at),
-        ingested_at = excluded.ingested_at,
+        ingested_at = COALESCE(events.ingested_at, excluded.ingested_at),
         canonical_url = COALESCE(events.canonical_url, excluded.canonical_url),
         primary_entity_name = COALESCE(events.primary_entity_name, excluded.primary_entity_name),
         series_key = COALESCE(events.series_key, excluded.series_key),
@@ -684,21 +772,83 @@ export class EventTable {
       FROM events e
       ${filter}
     `).get(since, ...HIGH_VALUE_SOURCE_KINDS) as {
-      high_value_source_event_count?: number | null
-      high_value_structured_event_count?: number | null
-      high_value_generic_fallback_event_count?: number | null
-      high_value_degraded_event_count?: number | null
-    } | undefined
+        high_value_source_event_count?: number | null
+        high_value_structured_event_count?: number | null
+        high_value_generic_fallback_event_count?: number | null
+        high_value_degraded_event_count?: number | null
+      } | undefined
 
-    const latencyRows = getRows<{ ingest_latency_ms: number | null }>(await this.db.prepare(`
-      SELECT MAX(0, e.ingested_at - e.published_at) AS ingest_latency_ms
+    const measurementRows = getRows<{
+      source_kind?: string | null
+      source_id?: SourceID | null
+      published_at?: number | null
+      ingested_at?: number | null
+      fetched_at?: number | null
+      recorded_fetch_gap_ms?: number | null
+      legacy_fetch_gap_ms?: number | null
+    }>(await this.db.prepare(`
+      WITH primary_evidence AS (
+        SELECT
+          ee.event_id,
+          ee.source_id,
+          ee.fetched_at,
+          ee.published_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY ee.event_id
+            ORDER BY
+              ee.rank ASC,
+              COALESCE(ee.source_priority, 0) DESC,
+              COALESCE(ee.published_at, ee.fetched_at) DESC,
+              ee.raw_id ASC
+          ) AS rn
+        FROM event_evidence ee
+      )
+      SELECT
+        e.source_kind,
+        pe.source_id,
+        e.published_at,
+        e.ingested_at,
+        pe.fetched_at,
+        sfr.fetch_gap_ms AS recorded_fetch_gap_ms,
+        pe.fetched_at - (
+          SELECT MAX(ri_prev.fetched_at)
+          FROM raw_items ri_prev
+          WHERE ri_prev.source_id = pe.source_id
+            AND ri_prev.fetched_at < pe.fetched_at
+        ) AS legacy_fetch_gap_ms
       FROM events e
+      LEFT JOIN primary_evidence pe
+        ON pe.event_id = e.event_id
+       AND pe.rn = 1
+      LEFT JOIN source_fetch_runs sfr
+        ON sfr.source_id = pe.source_id
+       AND sfr.fetched_at = pe.fetched_at
       ${filter}
-        AND e.published_at IS NOT NULL
-      ORDER BY ingest_latency_ms ASC
-    `).all(since, ...HIGH_VALUE_SOURCE_KINDS))
-      .map(row => row.ingest_latency_ms)
-      .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    `).all(since, ...HIGH_VALUE_SOURCE_KINDS)).map((row) => {
+      const sourceKind = row.source_kind ?? undefined
+      const latencyTier = getLatencyTierForSourceKind(sourceKind)
+      const fetchGapMs = typeof row.recorded_fetch_gap_ms === "number" && Number.isFinite(row.recorded_fetch_gap_ms)
+        ? row.recorded_fetch_gap_ms
+        : shouldUseLegacyRawItemFetchGap(row.source_id, sourceKind)
+          ? row.legacy_fetch_gap_ms ?? null
+          : null
+      const ingestLatencyMs = typeof row.published_at === "number" && typeof row.ingested_at === "number"
+        ? Math.max(0, row.ingested_at - row.published_at)
+        : null
+      const automation = classifyInitialLatencyAutomation({
+        sourceId: row.source_id,
+        sourceKind,
+        fetchGapMs,
+      })
+      return {
+        sourceKind,
+        sourceId: row.source_id ?? undefined,
+        latencyTier,
+        ingestLatencyMs,
+        automatedLatencyEligible: automation.automatedLatencyEligible,
+        automationExclusionReason: automation.exclusionReason,
+      }
+    })
 
     const highValueSourceEventCount = Number(coverageRow?.high_value_source_event_count) || 0
     const highValueStructuredEventCount = Number(coverageRow?.high_value_structured_event_count) || 0
@@ -706,10 +856,53 @@ export class EventTable {
     const highValueDegradedEventCount = Number(coverageRow?.high_value_degraded_event_count) || 0
     const highValueStructuredCoveragePct = percentageOrNull(highValueStructuredEventCount, highValueSourceEventCount)
     const highValueGenericFallbackSharePct = percentageOrNull(highValueGenericFallbackEventCount, highValueSourceEventCount)
-    const prioritySourceAvgIngestLatencyMs = latencyRows.length
-      ? Math.round(latencyRows.reduce((sum, value) => sum + value, 0) / latencyRows.length)
+    const automatedLatencyRows = measurementRows
+      .map(row => row.automatedLatencyEligible ? row.ingestLatencyMs : null)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+      .sort((left, right) => left - right)
+    const highValueCoarsePublicationClockEventCount = measurementRows.filter(row => row.automationExclusionReason === "coarse_publication_clock").length
+    const highValueBacklogCatchupEventCount = measurementRows.filter(row => row.automationExclusionReason === "backlog_catchup").length
+    const prioritySourceAvgIngestLatencyMs = automatedLatencyRows.length
+      ? Math.round(automatedLatencyRows.reduce((sum, value) => sum + value, 0) / automatedLatencyRows.length)
       : null
-    const prioritySourceIngestLatencyP95Ms = percentileFromSorted(latencyRows, 0.95)
+    const prioritySourceIngestLatencyP95Ms = percentileFromSorted(automatedLatencyRows, 0.95)
+    const latencyTiers = listLatencyTierDefinitions().map((definition) => {
+      const tierRows = measurementRows.filter(row => row.latencyTier === definition.tier)
+      const tierLatencies = tierRows
+        .map(row => row.automatedLatencyEligible ? row.ingestLatencyMs : null)
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+        .sort((left, right) => left - right)
+      const tierAvgIngestLatencyMs = tierLatencies.length
+        ? Math.round(tierLatencies.reduce((sum, value) => sum + value, 0) / tierLatencies.length)
+        : null
+      const tierP95IngestLatencyMs = percentileFromSorted(tierLatencies, 0.95)
+
+      return {
+        tier: definition.tier,
+        label: definition.label,
+        sourceKinds: [...definition.sourceKinds],
+        targetInitialCanonicalP95Ms: definition.targetInitialCanonicalP95Ms,
+        automated: definition.automated,
+        totalEventCount: tierRows.length,
+        coarsePublicationClockEventCount: tierRows.filter(row => row.automationExclusionReason === "coarse_publication_clock").length,
+        backlogCatchupEventCount: tierRows.filter(row => row.automationExclusionReason === "backlog_catchup").length,
+        initialCanonicalLatency: {
+          instrumentation: "automated" as const,
+          latencySampleCount: tierLatencies.length,
+          avgLatencyMs: tierAvgIngestLatencyMs,
+          p95LatencyMs: tierP95IngestLatencyMs,
+        },
+        fullSemanticEnrichmentLatency: {
+          instrumentation: "not_instrumented" as const,
+          latencySampleCount: 0,
+          avgLatencyMs: null,
+          p95LatencyMs: null,
+        },
+      }
+    })
+    const tradeCriticalInitialCanonicalLatencyP95Ms = latencyTiers.find(tier => tier.tier === "trade_critical")?.initialCanonicalLatency.p95LatencyMs ?? null
+    const highValueNonIntradayInitialCanonicalLatencyP95Ms = latencyTiers.find(tier => tier.tier === "high_value_non_intraday")?.initialCanonicalLatency.p95LatencyMs ?? null
+    const longFormHeavyParsingInitialCanonicalLatencyP95Ms = latencyTiers.find(tier => tier.tier === "long_form_heavy_parsing")?.initialCanonicalLatency.p95LatencyMs ?? null
 
     return {
       generatedAt: Date.now(),
@@ -722,18 +915,38 @@ export class EventTable {
         genericFallbackEventCount: highValueGenericFallbackEventCount,
         structuredCoveragePct: highValueStructuredCoveragePct,
         genericFallbackSharePct: highValueGenericFallbackSharePct,
-        latencySampleCount: latencyRows.length,
+        coarsePublicationClockEventCount: highValueCoarsePublicationClockEventCount,
+        backlogCatchupEventCount: highValueBacklogCatchupEventCount,
+        latencySampleCount: automatedLatencyRows.length,
         avgIngestLatencyMs: prioritySourceAvgIngestLatencyMs,
         p95IngestLatencyMs: prioritySourceIngestLatencyP95Ms,
+        initialCanonicalLatency: {
+          instrumentation: "automated",
+          latencySampleCount: automatedLatencyRows.length,
+          avgLatencyMs: prioritySourceAvgIngestLatencyMs,
+          p95LatencyMs: prioritySourceIngestLatencyP95Ms,
+        },
+        fullSemanticEnrichmentLatency: {
+          instrumentation: "not_instrumented",
+          latencySampleCount: 0,
+          avgLatencyMs: null,
+          p95LatencyMs: null,
+        },
       },
+      latencyTiers,
       highValueSourceEventCount,
       highValueStructuredEventCount,
       highValueStructuredCoveragePct,
       highValueDegradedEventCount,
       highValueGenericFallbackEventCount,
       highValueGenericFallbackSharePct,
+      highValueCoarsePublicationClockEventCount,
+      highValueBacklogCatchupEventCount,
       prioritySourceAvgIngestLatencyMs,
       prioritySourceIngestLatencyP95Ms,
+      tradeCriticalInitialCanonicalLatencyP95Ms,
+      highValueNonIntradayInitialCanonicalLatencyP95Ms,
+      longFormHeavyParsingInitialCanonicalLatencyP95Ms,
     }
   }
 
@@ -753,32 +966,73 @@ export class EventTable {
       published_at?: number | null
       ingested_at?: number | null
       last_seen_at?: number | null
+      fetched_at?: number | null
+      recorded_fetch_gap_ms?: number | null
+      legacy_fetch_gap_ms?: number | null
       ingest_latency_ms?: number | null
     }>(await this.db.prepare(`
+      WITH primary_evidence AS (
+        SELECT
+          ee.event_id,
+          ee.source_id,
+          ee.fetched_at,
+          ee.published_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY ee.event_id
+            ORDER BY
+              ee.rank ASC,
+              COALESCE(ee.source_priority, 0) DESC,
+              COALESCE(ee.published_at, ee.fetched_at) DESC,
+              ee.raw_id ASC
+          ) AS rn
+        FROM event_evidence ee
+      )
       SELECT
         e.source_kind,
-        (
-          SELECT ee.source_id
-          FROM event_evidence ee
-          WHERE ee.event_id = e.event_id
-          ORDER BY
-            ee.rank ASC,
-            COALESCE(ee.source_priority, 0) DESC,
-            COALESCE(ee.published_at, ee.fetched_at) DESC,
-            ee.raw_id ASC
-          LIMIT 1
-        ) AS source_id,
+        pe.source_id,
         e.published_at,
         e.ingested_at,
         e.last_seen_at,
+        pe.fetched_at,
+        sfr.fetch_gap_ms AS recorded_fetch_gap_ms,
+        pe.fetched_at - (
+          SELECT MAX(ri_prev.fetched_at)
+          FROM raw_items ri_prev
+          WHERE ri_prev.source_id = pe.source_id
+            AND ri_prev.fetched_at < pe.fetched_at
+        ) AS legacy_fetch_gap_ms,
         MAX(0, e.ingested_at - e.published_at) AS ingest_latency_ms
       FROM events e
+      LEFT JOIN primary_evidence pe
+        ON pe.event_id = e.event_id
+       AND pe.rn = 1
+      LEFT JOIN source_fetch_runs sfr
+        ON sfr.source_id = pe.source_id
+       AND sfr.fetched_at = pe.fetched_at
       WHERE e.status = 'active'
         AND COALESCE(e.published_at, e.ingested_at) >= ?
         AND COALESCE(e.source_kind, '') IN (${placeholders})
       ORDER BY ingest_latency_ms DESC
-    `).all(since, ...HIGH_VALUE_SOURCE_KINDS))
+    `).all(since, ...HIGH_VALUE_SOURCE_KINDS)).map((row) => {
+      const fetchGapMs = typeof row.recorded_fetch_gap_ms === "number" && Number.isFinite(row.recorded_fetch_gap_ms)
+        ? row.recorded_fetch_gap_ms
+        : shouldUseLegacyRawItemFetchGap(row.source_id, row.source_kind)
+          ? row.legacy_fetch_gap_ms ?? null
+          : null
+      const automation = classifyInitialLatencyAutomation({
+        sourceId: row.source_id,
+        sourceKind: row.source_kind,
+        fetchGapMs,
+      })
+      return {
+        ...row,
+        publicationClockPrecision: automation.publicationClockPrecision,
+        automatedLatencyEligible: automation.automatedLatencyEligible,
+        automationExclusionReason: automation.exclusionReason,
+      }
+    })
 
+    const byTier = new Map<EventLatencyTier, typeof rows>()
     const bySourceKind = new Map<string, typeof rows>()
     const bySource = new Map<string, {
       sourceKind: string
@@ -788,6 +1042,12 @@ export class EventTable {
 
     for (const row of rows) {
       const sourceKind = row.source_kind ?? "unknown"
+      const latencyTier = getLatencyTierForSourceKind(sourceKind)
+      if (latencyTier) {
+        const tierBucket = byTier.get(latencyTier) ?? []
+        tierBucket.push(row)
+        byTier.set(latencyTier, tierBucket)
+      }
       const sourceKindBucket = bySourceKind.get(sourceKind) ?? []
       sourceKindBucket.push(row)
       bySourceKind.set(sourceKind, sourceKindBucket)
@@ -808,7 +1068,13 @@ export class EventTable {
       bucketRows: typeof rows,
       sourceId?: SourceID,
     ): EventOperationalLatencyDiagnosticBucket => {
-      const latencies = bucketRows
+      const latencyTier = getLatencyTierForSourceKind(sourceKind)
+      const publicationClockPrecisionSet = new Set(bucketRows.map(row => row.publicationClockPrecision))
+      const publicationClockPrecision = publicationClockPrecisionSet.size <= 1
+        ? publicationClockPrecisionSet.values().next().value ?? "coarse_day"
+        : "mixed"
+      const automatedEligibleLatencies = bucketRows
+        .filter(row => row.automatedLatencyEligible)
         .map(row => row.ingest_latency_ms)
         .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
       const publicationAges = bucketRows
@@ -825,20 +1091,27 @@ export class EventTable {
           return Math.max(0, generatedAt - lastSeenAt)
         })
         .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
-      const latencySummary = summarizeOperationalDurations(latencies)
+      const latencySummary = summarizeOperationalDurations(automatedEligibleLatencies)
       const publicationAgeSummary = summarizeOperationalDurations(publicationAges)
       const lastSeenDelaySummary = summarizeOperationalDurations(lastSeenDelays)
-      const staleEventCount = latencies.filter(value => value > staleThresholdMs).length
-      const freshEventCount = Math.max(0, latencies.length - staleEventCount)
+      const staleEventCount = automatedEligibleLatencies.filter(value => value > staleThresholdMs).length
+      const freshEventCount = Math.max(0, automatedEligibleLatencies.length - staleEventCount)
+      const latencyDefinition = latencyTier ? getLatencyTierDefinition(latencyTier) : undefined
       return {
         sourceKind,
         sourceId,
         sourceName: sourceId ? sources[sourceId]?.name : undefined,
+        latencyTier,
+        latencyTargetMs: latencyDefinition?.targetInitialCanonicalP95Ms,
+        publicationClockPrecision,
+        automatedLatencyEligible: automatedEligibleLatencies.length > 0,
+        excludedCoarseClockEventCount: bucketRows.filter(row => row.automationExclusionReason === "coarse_publication_clock").length,
+        excludedBacklogCatchupEventCount: bucketRows.filter(row => row.automationExclusionReason === "backlog_catchup").length,
         totalEvents: bucketRows.length,
-        latencySampleCount: latencies.length,
+        latencySampleCount: automatedEligibleLatencies.length,
         staleEventCount,
         freshEventCount,
-        staleSharePct: percentageOrNull(staleEventCount, latencies.length),
+        staleSharePct: percentageOrNull(staleEventCount, automatedEligibleLatencies.length),
         avgIngestLatencyMs: latencySummary.avgMs,
         p95IngestLatencyMs: latencySummary.p95Ms,
         maxIngestLatencyMs: latencySummary.maxMs,
@@ -851,11 +1124,27 @@ export class EventTable {
       }
     }
 
+    const tierBreakdown = listLatencyTierDefinitions()
+      .map((definition) => {
+        const bucket = toBucket(definition.label, byTier.get(definition.tier) ?? [])
+        return {
+          ...bucket,
+          latencyTier: definition.tier,
+          latencyTargetMs: definition.targetInitialCanonicalP95Ms,
+        }
+      })
+
     const sourceKindBreakdown = [...bySourceKind.entries()]
       .map(([sourceKind, bucketRows]) => toBucket(sourceKind, bucketRows))
       .sort((a, b) => {
         if ((b.p95IngestLatencyMs ?? 0) !== (a.p95IngestLatencyMs ?? 0)) {
           return (b.p95IngestLatencyMs ?? 0) - (a.p95IngestLatencyMs ?? 0)
+        }
+        if (b.excludedBacklogCatchupEventCount !== a.excludedBacklogCatchupEventCount) {
+          return b.excludedBacklogCatchupEventCount - a.excludedBacklogCatchupEventCount
+        }
+        if (b.excludedCoarseClockEventCount !== a.excludedCoarseClockEventCount) {
+          return b.excludedCoarseClockEventCount - a.excludedCoarseClockEventCount
         }
         if (b.totalEvents !== a.totalEvents) return b.totalEvents - a.totalEvents
         return a.sourceKind.localeCompare(b.sourceKind)
@@ -868,6 +1157,12 @@ export class EventTable {
         if ((b.p95IngestLatencyMs ?? 0) !== (a.p95IngestLatencyMs ?? 0)) {
           return (b.p95IngestLatencyMs ?? 0) - (a.p95IngestLatencyMs ?? 0)
         }
+        if (b.excludedBacklogCatchupEventCount !== a.excludedBacklogCatchupEventCount) {
+          return b.excludedBacklogCatchupEventCount - a.excludedBacklogCatchupEventCount
+        }
+        if (b.excludedCoarseClockEventCount !== a.excludedCoarseClockEventCount) {
+          return b.excludedCoarseClockEventCount - a.excludedCoarseClockEventCount
+        }
         if (b.totalEvents !== a.totalEvents) return b.totalEvents - a.totalEvents
         return (a.sourceId ?? "").localeCompare(b.sourceId ?? "")
       })
@@ -877,6 +1172,7 @@ export class EventTable {
       generatedAt,
       windowStartAt: since,
       staleThresholdMs,
+      tierBreakdown,
       sourceKindBreakdown,
       sourceBreakdown,
     }
@@ -1114,7 +1410,12 @@ export class EventTable {
           series_key = COALESCE(series_key, ?),
           period_key = COALESCE(period_key, ?),
           release_cadence = COALESCE(release_cadence, ?),
-          published_at = COALESCE(published_at, ?),
+          published_at = CASE
+            WHEN published_at IS NULL THEN ?
+            WHEN ? IS NULL THEN published_at
+            ELSE MIN(published_at, ?)
+          END,
+          ingested_at = MIN(ingested_at, ?),
           canonical_url = COALESCE(canonical_url, ?),
           impact_summary_json = CASE
             WHEN impact_summary_json IS NULL OR impact_summary_json = '[]' THEN COALESCE(?, impact_summary_json)
@@ -1129,6 +1430,9 @@ export class EventTable {
         duplicate.period_key,
         duplicate.release_cadence,
         duplicate.published_at,
+        duplicate.published_at,
+        duplicate.published_at,
+        duplicate.ingested_at,
         duplicate.canonical_url,
         duplicate.impact_summary_json,
         duplicate.last_seen_at,
@@ -1679,8 +1983,10 @@ export class EventTable {
         `).get(sourceId) as { markets_json?: string | null, profile_json?: string | null } | undefined
         if (
           !existingRow
-          || (existingRow.markets_json ?? "") === marketsJson
-          && (existingRow.profile_json ?? "") === profileJson
+          || (
+            (existingRow.markets_json ?? "") === marketsJson
+            && (existingRow.profile_json ?? "") === profileJson
+          )
         ) {
           continue
         }
@@ -1698,6 +2004,73 @@ export class EventTable {
       updatedEvents,
       normalizedAffectedMarkets,
       updatedSourceProfiles,
+    }
+  }
+
+  async repairInitialCanonicalIngestedAt(options?: {
+    eventIds?: string[]
+    limit?: number
+  }) {
+    const candidateEventIds = options?.eventIds?.length
+      ? options.eventIds.slice(0, options.limit ?? options.eventIds.length)
+      : getRows<{ event_id: string }>(await this.db.prepare(`
+        SELECT event_id
+        FROM events
+        WHERE status = 'active'
+        ORDER BY event_id ASC
+        LIMIT ?
+      `).all(options?.limit ?? 100000)).map(row => row.event_id)
+
+    let updatedEvents = 0
+
+    await this.withTransaction(async () => {
+      for (const eventId of candidateEventIds) {
+        const row = await this.db.prepare(`
+          SELECT
+            e.ingested_at,
+            (
+              SELECT MIN(changed_at)
+              FROM event_timeline
+              WHERE event_id = e.event_id
+                AND reason = 'new_event'
+            ) AS first_new_event_at,
+            (
+              SELECT MIN(changed_at)
+              FROM event_timeline
+              WHERE event_id = e.event_id
+            ) AS first_timeline_at,
+            (
+              SELECT MIN(COALESCE(fetched_at, published_at))
+              FROM event_evidence
+              WHERE event_id = e.event_id
+            ) AS first_evidence_at
+          FROM events e
+          WHERE e.event_id = ?
+        `).get(eventId) as {
+          ingested_at?: number | null
+          first_new_event_at?: number | null
+          first_timeline_at?: number | null
+          first_evidence_at?: number | null
+        } | undefined
+        if (!row?.ingested_at) continue
+
+        const nextIngestedAt = [row.first_new_event_at, row.first_timeline_at, row.first_evidence_at]
+          .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+          .sort((left, right) => left - right)[0]
+        if (!nextIngestedAt || nextIngestedAt >= row.ingested_at) continue
+
+        await this.db.prepare(`
+          UPDATE events
+          SET ingested_at = ?
+          WHERE event_id = ?
+        `).run(nextIngestedAt, eventId)
+        updatedEvents += 1
+      }
+    })
+
+    return {
+      scannedEvents: candidateEventIds.length,
+      updatedEvents,
     }
   }
 

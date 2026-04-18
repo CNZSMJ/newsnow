@@ -22,6 +22,7 @@
     "service:status": "bash ./scripts/service.sh status",
     "service:logs": "bash ./scripts/service.sh logs",
     "service:build-start": "bash ./scripts/service.sh build-start",
+    "events:repair-ingested-at": "tsx --tsconfig tsconfig.node.json ./scripts/repair-event-ingested-at.ts",
     "events:repair-entities": "tsx --tsconfig tsconfig.node.json ./scripts/repair-event-entities.ts",
     "events:repair-explicit-tickers": "tsx --tsconfig tsconfig.node.json ./scripts/repair-explicit-ticker-entities.ts",
     "events:repair-timeline": "tsx --tsconfig tsconfig.node.json ./scripts/repair-event-timeline.ts",

@@ -33,6 +33,40 @@ Long-tail sources may stay on generic fallback longer than high-value families, 
 
 When this workflow changes, update this document in the same repo and under version control. Do not split operational truth into an external handbook.
 
+### 2.5 Initial canonical latency only uses trustworthy publication clocks
+
+Minute-level latency automation is only valid for source families whose publication timestamps are precise enough to support minute-level reasoning.
+
+Rules:
+
+- if a source exposes precise publication time, use it in automated `initial canonical latency` gates
+- if a source only exposes day-level publication date, do not let that coarse clock distort minute-level release blocking
+- coarse-clock sources must remain visible in diagnostics and be tracked for future timestamp enrichment, but they must not poison Tier A automation
+
+### 2.6 `ingested_at` means first canonical detection, not latest refresh
+
+`events.ingested_at` is the first trustworthy canonical ingest time for an event.
+
+`events.last_seen_at` is the refresh marker for later polling passes.
+
+Do not overwrite `ingested_at` on routine refresh. If old data was polluted by refresh overwrites, repair it before trusting latency diagnostics.
+
+### 2.7 Steady-state latency automation must exclude outage catch-up batches
+
+Minute-level latency automation is meant to measure steady-state pipeline behavior, not restart backlog catch-up after the source has gone unpolled for a long gap.
+
+Rules:
+
+- if a precise-clock source is fetched after an unusually long gap, mark those rows as `backlog catch-up`
+- backlog catch-up rows stay visible in diagnostics and ops review
+- backlog catch-up rows do not enter automated Tier A release blocking samples
+- use source-specific fetch interval as the baseline, with a conservative grace window before treating a batch as outage catch-up
+- base backlog detection on persisted source poll history, not on `raw_items` arrival gaps
+- record source fetch runs even when a poll returns zero items, otherwise sparse precise-clock sources will be misclassified as outage catch-up
+- for legacy history that predates `source_fetch_runs`, only use `raw_items` batch-gap fallback on dense exchange-disclosure families; do not reuse that fallback for sparse precise-clock sources such as central-bank operations or rate fixings
+
+This preserves honest runtime visibility without letting recovery batches permanently poison steady-state release gating.
+
 ## 3. Latency tiers
 
 Use stratified thresholds instead of one flat target.
@@ -96,6 +130,9 @@ Record:
 - slowest source ids
 - current quality-gate failures
 - which latency tier is affected
+- whether the source bucket is using a precise publication clock or a coarse day-level clock
+- how many rows are excluded from automated latency sampling because they only have coarse publication clocks
+- how many rows are excluded from automated latency sampling because they belong to backlog catch-up batches after long fetch gaps
 
 ### Step 2: Classify the issue
 
@@ -103,6 +140,8 @@ Decide whether the problem is mainly:
 
 - source polling cadence
 - worker scheduling / backlog
+- coarse publication timestamp precision
+- outage catch-up after a long source fetch gap
 - parsing cost
 - persistence bottleneck
 - semantic reprocessing / repair side effects
@@ -139,6 +178,8 @@ Run repair when one of the following is true:
 - canonical entity truth was polluted by a known extraction bug
 - event timeline or merge history contains systematic duplicate or malformed records
 - a semantic fix should be applied to historical local data, not just future ingest
+- refresh loops previously overwrote `ingested_at`, causing latency diagnostics to measure event age instead of initial canonical ingest latency
+- merge logic previously failed to carry the earliest canonical ingest time into the surviving event row
 
 ### When to run backfill
 
@@ -157,6 +198,13 @@ Run backfill when:
 5. run repair or backfill if historical data is affected
 6. rerun quality and ops checks
 7. record the remaining risk in the roadmap or delivery board if the tranche is not yet closed
+
+### Standard repair commands
+
+- `pnpm events:repair-ingested-at`
+- `pnpm events:repair-timeline`
+- `pnpm events:repair-entities`
+- `pnpm events:repair-explicit-tickers`
 
 ## 6. Manual review workflow
 
