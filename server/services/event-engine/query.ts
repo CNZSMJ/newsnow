@@ -4,6 +4,7 @@ import { getEventTable } from "#/database/events"
 
 export async function listLatestEvents(options?: {
   limit?: number
+  scanLimit?: number
   eventType?: EventType
   eventSubType?: EventSubType
   sourceId?: SourceID
@@ -18,11 +19,13 @@ export async function listLatestEvents(options?: {
   seriesKey?: string
   periodKey?: string
   sortBy?: "latest" | "investment" | "changed"
+  includeTotalCount?: boolean
 }) {
   const eventTable = await getEventTable()
   if (!eventTable) return { updatedAt: Date.now(), items: [], totalCount: 0 }
   const filters = {
     limit: options?.limit ?? 20,
+    scanLimit: options?.scanLimit,
     eventType: options?.eventType,
     eventSubType: options?.eventSubType,
     sourceId: options?.sourceId,
@@ -38,10 +41,10 @@ export async function listLatestEvents(options?: {
     periodKey: options?.periodKey,
     sortBy: options?.sortBy ?? "investment",
   } as const
-  const [items, totalCount] = await Promise.all([
-    eventTable.listEvents(filters),
-    eventTable.countEvents(filters),
-  ])
+  const items = await eventTable.listEvents(filters)
+  const totalCount = options?.includeTotalCount === false
+    ? items.length
+    : await eventTable.countEvents(filters)
   return {
     updatedAt: Date.now(),
     items,
@@ -52,6 +55,7 @@ export async function listLatestEvents(options?: {
 export async function searchEvents(options: {
   q: string
   limit?: number
+  scanLimit?: number
   sourceIds?: SourceID[]
   market?: AffectedMarket
   directionalView?: DirectionalView
@@ -62,11 +66,13 @@ export async function searchEvents(options: {
   seriesKey?: string
   periodKey?: string
   sortBy?: "latest" | "investment" | "changed"
+  includeTotalCount?: boolean
 }) {
   const eventTable = await getEventTable()
   if (!eventTable) return { updatedAt: Date.now(), items: [], totalCount: 0 }
   const filters = {
     limit: options.limit ?? 20,
+    scanLimit: options.scanLimit,
     q: options.q.trim(),
     sourceIds: options.sourceIds,
     market: options.market,
@@ -79,10 +85,10 @@ export async function searchEvents(options: {
     periodKey: options.periodKey,
     sortBy: options.sortBy ?? "investment",
   } as const
-  const [items, totalCount] = await Promise.all([
-    eventTable.listEvents(filters),
-    eventTable.countEvents(filters),
-  ])
+  const items = await eventTable.listEvents(filters)
+  const totalCount = options.includeTotalCount === false
+    ? items.length
+    : await eventTable.countEvents(filters)
   return {
     updatedAt: Date.now(),
     items,
@@ -93,6 +99,7 @@ export async function searchEvents(options: {
 export async function getEntityEvents(options: {
   entity: string
   limit?: number
+  scanLimit?: number
   sourceIds?: SourceID[]
   market?: AffectedMarket
   directionalView?: DirectionalView
@@ -103,11 +110,13 @@ export async function getEntityEvents(options: {
   seriesKey?: string
   periodKey?: string
   sortBy?: "latest" | "investment" | "changed"
+  includeTotalCount?: boolean
 }) {
   const eventTable = await getEventTable()
   if (!eventTable) return { updatedAt: Date.now(), items: [], totalCount: 0 }
   const filters = {
     limit: options.limit ?? 20,
+    scanLimit: options.scanLimit,
     entity: options.entity.trim(),
     sourceIds: options.sourceIds,
     market: options.market,
@@ -120,10 +129,10 @@ export async function getEntityEvents(options: {
     periodKey: options.periodKey,
     sortBy: options.sortBy ?? "investment",
   } as const
-  const [items, totalCount] = await Promise.all([
-    eventTable.listEvents(filters),
-    eventTable.countEvents(filters),
-  ])
+  const items = await eventTable.listEvents(filters)
+  const totalCount = options.includeTotalCount === false
+    ? items.length
+    : await eventTable.countEvents(filters)
   return {
     updatedAt: Date.now(),
     items,

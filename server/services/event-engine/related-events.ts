@@ -19,6 +19,11 @@ function getEntityLookupValue(entity: EventEntityLink) {
   return entity.fullCode || entity.code || entity.entityName
 }
 
+const RELATED_ENTITY_SCAN_LIMIT = 24
+const RELATED_TOPIC_SCAN_LIMIT = 48
+const RELATED_MARKET_SCAN_LIMIT = 24
+const RELATED_FAMILY_SCAN_LIMIT = 24
+
 function takeProjectedSection(
   items: EventRecord[],
   seen: Set<string>,
@@ -40,17 +45,60 @@ export async function buildInvestmentRelatedEvents(
     listLatestEvents,
   },
 ): Promise<InvestmentRelatedEventsSection[]> {
-  const sections: InvestmentRelatedEventsSection[] = []
   const seen = new Set<string>([detail.eventId])
-
   const primaryEntity = getPrimaryEntity(detail)
-  if (primaryEntity) {
-    const result = await deps.getEntityEvents({
-      entity: getEntityLookupValue(primaryEntity),
-      limit: 6,
-      sortBy: "investment",
-    })
-    const items = takeProjectedSection(result.items, seen)
+  const primaryTopic = detail.topicTags[0]
+  const primaryMarket = detail.affectedMarkets[0]
+  const familyQuery = detail.eventSubType !== "other"
+    ? { eventSubType: detail.eventSubType, label: detail.eventSubType }
+    : detail.eventType !== "news"
+      ? { eventType: detail.eventType, label: detail.eventType }
+      : undefined
+
+  const [entityResult, topicResult, marketResult, familyResult] = await Promise.all([
+    primaryEntity
+      ? deps.getEntityEvents({
+          entity: getEntityLookupValue(primaryEntity),
+          limit: 6,
+          scanLimit: RELATED_ENTITY_SCAN_LIMIT,
+          sortBy: "investment",
+          includeTotalCount: false,
+        })
+      : Promise.resolve(null),
+    primaryTopic
+      ? deps.listLatestEvents({
+          topic: primaryTopic,
+          limit: 6,
+          scanLimit: RELATED_TOPIC_SCAN_LIMIT,
+          sortBy: "investment",
+          includeTotalCount: false,
+        })
+      : Promise.resolve(null),
+    primaryMarket
+      ? deps.listLatestEvents({
+          market: primaryMarket,
+          limit: 6,
+          scanLimit: RELATED_MARKET_SCAN_LIMIT,
+          sortBy: "investment",
+          includeTotalCount: false,
+        })
+      : Promise.resolve(null),
+    familyQuery
+      ? deps.listLatestEvents({
+          eventType: "eventType" in familyQuery ? familyQuery.eventType : undefined,
+          eventSubType: "eventSubType" in familyQuery ? familyQuery.eventSubType : undefined,
+          limit: 6,
+          scanLimit: RELATED_FAMILY_SCAN_LIMIT,
+          sortBy: "investment",
+          includeTotalCount: false,
+        })
+      : Promise.resolve(null),
+  ])
+
+  const sections: InvestmentRelatedEventsSection[] = []
+
+  if (primaryEntity && entityResult) {
+    const items = takeProjectedSection(entityResult.items, seen)
     if (items.length) {
       sections.push({
         context: "entity",
@@ -61,14 +109,8 @@ export async function buildInvestmentRelatedEvents(
     }
   }
 
-  const primaryTopic = detail.topicTags[0]
-  if (primaryTopic) {
-    const result = await deps.listLatestEvents({
-      topic: primaryTopic,
-      limit: 6,
-      sortBy: "investment",
-    })
-    const items = takeProjectedSection(result.items, seen)
+  if (primaryTopic && topicResult) {
+    const items = takeProjectedSection(topicResult.items, seen)
     if (items.length) {
       sections.push({
         context: "topic",
@@ -79,14 +121,8 @@ export async function buildInvestmentRelatedEvents(
     }
   }
 
-  const primaryMarket = detail.affectedMarkets[0]
-  if (primaryMarket) {
-    const result = await deps.listLatestEvents({
-      market: primaryMarket,
-      limit: 6,
-      sortBy: "investment",
-    })
-    const items = takeProjectedSection(result.items, seen)
+  if (primaryMarket && marketResult) {
+    const items = takeProjectedSection(marketResult.items, seen)
     if (items.length) {
       sections.push({
         context: "market",
@@ -97,19 +133,8 @@ export async function buildInvestmentRelatedEvents(
     }
   }
 
-  const familyQuery = detail.eventSubType !== "other"
-    ? { eventSubType: detail.eventSubType, label: detail.eventSubType }
-    : detail.eventType !== "news"
-      ? { eventType: detail.eventType, label: detail.eventType }
-      : undefined
-  if (familyQuery) {
-    const result = await deps.listLatestEvents({
-      eventType: "eventType" in familyQuery ? familyQuery.eventType : undefined,
-      eventSubType: "eventSubType" in familyQuery ? familyQuery.eventSubType : undefined,
-      limit: 6,
-      sortBy: "investment",
-    })
-    const items = takeProjectedSection(result.items, seen)
+  if (familyQuery && familyResult) {
+    const items = takeProjectedSection(familyResult.items, seen)
     if (items.length) {
       sections.push({
         context: "family",

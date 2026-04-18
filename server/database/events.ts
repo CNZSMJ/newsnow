@@ -2180,6 +2180,7 @@ export class EventTable {
 
   async listEvents(options: {
     limit: number
+    scanLimit?: number
     q?: string
     eventType?: EventType
     eventSubType?: EventSubType
@@ -2294,12 +2295,17 @@ export class EventTable {
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
-    const baseFetchLimit = options.sortBy === "investment"
+    const defaultBaseFetchLimit = options.sortBy === "investment"
       ? Math.max(options.limit * 5, 100)
       : options.limit
-    const fetchLimit = options.topic
-      ? Math.max(baseFetchLimit * 4, 300)
-      : baseFetchLimit
+    const baseFetchLimit = options.scanLimit !== undefined
+      ? Math.max(options.limit, options.scanLimit)
+      : defaultBaseFetchLimit
+    const fetchLimit = options.scanLimit !== undefined
+      ? baseFetchLimit
+      : options.topic
+        ? Math.max(baseFetchLimit * 4, 300)
+        : baseFetchLimit
     const orderBy = options.sortBy === "changed"
       ? "ORDER BY COALESCE(latest_lifecycle_at, COALESCE(e.published_at, e.ingested_at)) DESC, COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC"
       : "ORDER BY COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC"

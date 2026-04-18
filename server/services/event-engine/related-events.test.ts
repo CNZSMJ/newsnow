@@ -31,15 +31,15 @@ function makeDetail(overrides: Partial<EventDetail>): EventDetail {
     evidenceCount: overrides.evidenceCount ?? 1,
     sourceIds: overrides.sourceIds ?? ["cninfo-szse"],
     evidences: overrides.evidences ?? [],
-      entities: overrides.entities ?? [{
-        eventId: "evt_target",
-        entityType: "stock",
-        entityName: "中际旭创",
-        code: "300308",
-        fullCode: "sz300308",
-        confidence: 0.95,
-        resolver: "unit-test",
-      }],
+    entities: overrides.entities ?? [{
+      eventId: "evt_target",
+      entityType: "stock",
+      entityName: "中际旭创",
+      code: "300308",
+      fullCode: "sz300308",
+      confidence: 0.95,
+      resolver: "unit-test",
+    }],
     facts: overrides.facts ?? [],
     timeline: overrides.timeline ?? [],
     ...overrides,
@@ -149,5 +149,34 @@ describe("buildInvestmentRelatedEvents", () => {
 
     expect(sections.at(-1)?.context).toBe("family")
     expect(sections.at(-1)?.items[0]?.eventId).toBe("evt_policy_peer")
+  })
+
+  it("skips total-count queries when loading related event sections", async () => {
+    const detail = makeDetail({
+      affectedMarkets: ["A"],
+      topicTags: ["semiconductor"],
+    })
+    const entityCalls: Array<Record<string, unknown>> = []
+    const latestCalls: Array<Record<string, unknown>> = []
+
+    await buildInvestmentRelatedEvents(detail, {
+      async getEntityEvents(options) {
+        entityCalls.push(options as Record<string, unknown>)
+        return { updatedAt: Date.now(), items: [], totalCount: 0 }
+      },
+      async listLatestEvents(options) {
+        latestCalls.push(options as Record<string, unknown>)
+        return { updatedAt: Date.now(), items: [], totalCount: 0 }
+      },
+    })
+
+    expect(entityCalls).toHaveLength(1)
+    expect(entityCalls[0]?.includeTotalCount).toBe(false)
+    expect(entityCalls[0]?.scanLimit).toBe(24)
+    expect(latestCalls).toHaveLength(3)
+    expect(latestCalls.every(call => call.includeTotalCount === false)).toBe(true)
+    expect(latestCalls.find(call => "topic" in call)?.scanLimit).toBe(48)
+    expect(latestCalls.find(call => "market" in call)?.scanLimit).toBe(24)
+    expect(latestCalls.find(call => "eventSubType" in call)?.scanLimit).toBe(24)
   })
 })
