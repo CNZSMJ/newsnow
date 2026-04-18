@@ -133,8 +133,9 @@ Do not push core event-engine responsibilities into external skill repositories 
 
 ## Reference documents
 
-- [docs/investment-event-engine-upgrade-plan.md](./docs/investment-event-engine-upgrade-plan.md)
+- [docs/README.md](./docs/README.md)
+- [docs/investment-event-foundation-roadmap.md](./docs/investment-event-foundation-roadmap.md)
 - [docs/investment-event-agent-interface-plan.md](./docs/investment-event-agent-interface-plan.md)
 - [docs/investment-event-workstreams.md](./docs/investment-event-workstreams.md)
 - [docs/investment-event-delivery-board.md](./docs/investment-event-delivery-board.md)
-- [docs/investment-event-engine-code-review.md](./docs/investment-event-engine-code-review.md)
+- [docs/event-operations-runbook.md](./docs/event-operations-runbook.md)

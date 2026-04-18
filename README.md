@@ -111,7 +111,7 @@ For detailed instructions on how to add new sources, see [CONTRIBUTING.md](CONTR
 
 ### Architecture Notes
 
-- Investment event engine upgrade plan: [docs/investment-event-engine-upgrade-plan.md](docs/investment-event-engine-upgrade-plan.md)
+- Documentation index: [docs/README.md](docs/README.md)
 
 ## Roadmap
 

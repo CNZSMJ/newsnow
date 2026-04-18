@@ -1,51 +1,53 @@
-# Investment Event Provider Handoff
+# 投资事件提供方交接说明
 
-Status: Active  
-Last updated: 2026-04-12  
-Scope: operational handoff notes for `nexus-fi-mcp` to consume `newsnow` investment event outputs
+状态：使用中
+最后更新：2026-04-19
+范围：`nexus-fi-mcp` 消费 `newsnow` investment event outputs 时的 handoff 说明
+文档角色：当前 provider 消费说明
+更新时机：稳定 provider routes、canonical 字段或下游消费约定变化时
 
-## 1. Purpose
+## 1. 目的
 
-This document is the practical provider handoff note for the `newsnow -> nexus-fi-mcp` boundary.
+这份文档是 `newsnow -> nexus-fi-mcp` 边界的实操 handoff 说明。
 
-It does not restate the full architecture. It defines:
+它不重复整套架构，而是回答下面 4 个问题：
 
-- what `newsnow` already guarantees
-- which HTTP and MCP outputs are stable enough to consume
-- which fields are canonical investment semantics
-- which fields are default-safe vs debug-only
+- `newsnow` 现在已经保证了什么
+- 哪些 HTTP / MCP 输出已经稳定到可以消费
+- 哪些字段是 canonical investment semantics
+- 哪些字段默认安全，哪些字段只应该放在 debug 模式下
 
-## 2. Boundary rule
+## 2. 边界规则
 
-`newsnow` is the provider.
+`newsnow` 是 provider。
 
-It is responsible for:
+它负责：
 
 - canonical events
 - facts
 - evidence
-- impact and investment interpretation
+- impact 与 investment interpretation
 - canonical investment projection
 
-`nexus-fi-mcp` is the public agent boundary.
+`nexus-fi-mcp` 是最终 public agent boundary。
 
-It should:
+它应该：
 
-- consume the canonical investment projection from `newsnow`
-- normalize naming to its own public tool contract
-- avoid rebuilding event meaning from raw text
+- 消费 `newsnow` 的 canonical investment projection
+- 将命名规范化到自己的 public tool contract
+- 避免从 raw text 重建事件意义
 
-It should not:
+它不应该：
 
-- parse raw `event-bus` internals
-- derive event family from source ids or titles
-- reconstruct `whyItMatters`, `whatToWatchNext`, or `riskOfMisread`
+- 解析 raw `event-bus` internals
+- 从 source id 或标题重新推 event family
+- 自己重建 `whyItMatters`、`whatToWatchNext`、`riskOfMisread`
 
-## 3. Stable provider surfaces
+## 3. 稳定的 provider surface
 
 ### 3.1 HTTP
 
-The stable provider-facing HTTP layer now uses explicit provider routes and carries contract metadata:
+当前稳定的 provider-facing HTTP 层使用显式 provider routes，并带有 contract metadata：
 
 - `/api/investment-events/latest`
 - `/api/investment-events/search`
@@ -54,30 +56,34 @@ The stable provider-facing HTTP layer now uses explicit provider routes and carr
 - `/api/investment-watchlists/:id`
 - `/api/investment-watchlists/:id/events`
 
-Route boundary note:
+边界说明：
 
-- downstream provider consumers should use the explicit `/api/investment-*` routes only
-- event-engine operational endpoints now live under `/api/ops/events/*` for refresh, shadow, backfill, and status
+- 下游 provider consumer 应只使用显式 `/api/investment-*` routes
+- 事件引擎运维接口统一放在 `/api/ops/events/*`，用于 refresh、shadow、backfill、status 等操作
 
-### 3.2 Local MCP
+### 3.2 本地 MCP
 
-The local MCP server in `newsnow` is a provider-facing adapter, not the final public tool boundary.
+`newsnow` 仓库内的本地 MCP server 是 provider-facing adapter，不是最终 public tool boundary。
 
-Relevant tools:
+相关工具：
 
-- `event_get_latest_events`
-- `event_search_events`
-- `event_get_entity_events`
-- `event_get_event`
-- `watchlist_get_events`
-- `watchlist_get_detail`
+- 优先使用的任务型工具：
+  - `event_scan`
+  - `event_get_detail`
+  - `watchlist_scan`
+- 本地仍保留的兼容工具：
+  - `event_get_latest_events`
+  - `event_search_events`
+  - `event_get_entity_events`
+  - `event_get_event`
+  - `watchlist_get_events`
+  - `watchlist_get_detail`
 
-These tools now consume the same canonical investment projection used by the frontend.
-They also now consume explicit provider-contract routes rather than relying on implicit projection query parameters.
+这些工具都已经消费与 frontend 相同的 canonical investment projection，并通过显式 provider-contract routes 读取数据，而不是依赖隐式 `projection` 参数。
 
 ## 4. Canonical investment semantics
 
-The following fields should be treated as canonical and reusable by `nexus-fi-mcp`:
+下面这些字段应被 `nexus-fi-mcp` 视为可复用的 canonical semantics：
 
 - `eventFamily`
 - `actionBucket`
@@ -95,53 +101,54 @@ The following fields should be treated as canonical and reusable by `nexus-fi-mc
 - `keyFacts`
 - `evidence`
 
-These values come from the backend event engine and should not be recomputed downstream unless explicitly versioned and agreed.
+这些值都来自 backend event engine。
+除非显式版本化并达成一致，否则下游不应自行重算。
 
-## 5. Default-safe vs debug-only
+## 5. 默认安全字段与 debug-only 字段
 
 ### 5.1 Default-safe
 
-Default provider payloads should include:
+默认 provider payload 应包含：
 
 - investment interpretation
 - structured facts
 - evidence trail
-- high-level lifecycle view
+- 高层 lifecycle view
 - related events
 
-This is sufficient for:
+这已经足以支撑：
 
 - morning reports
 - watchlist scans
-- single-event analysis
-- topic/entity tracking
+- 单事件分析
+- topic / entity tracking
 
 ### 5.2 Debug-only
 
-The following should remain debug-only and should not be required by downstream workflows:
+下面这些字段应保留为 debug-only，不应成为下游工作流的必需输入：
 
-- internal fact type ids when a user-facing label already exists
-- evidence ids
+- 在已有用户友好 label 时仍暴露的内部 fact type id
+- evidence id
 - extraction status
 - source kind internals
-- timeline ids
-- resolver or merger internals
+- timeline id
+- resolver / merger internals
 
-In local MCP these fields are available only when `debug=true` is set on detail-style tools.
+在本地 MCP 中，这些字段只有在 detail-style 工具传入 `debug=true` 时才会出现。
 
-## 6. Consumption guidance for `nexus-fi-mcp`
+## 6. `nexus-fi-mcp` 的消费建议
 
-`nexus-fi-mcp` should map the provider contract into public `event.*` tools with the following rules:
+`nexus-fi-mcp` 在映射 provider contract 时，应遵循：
 
-1. Keep the backend interpretation as the primary source of investment meaning.
-2. Preserve facts and evidence in structured form.
-3. Do not expose `newsnow` private implementation terms unless a debug path explicitly requests them.
-4. Prefer agent-facing labels over engine-facing labels.
-5. Treat `actionBucket` as a first-class downstream prioritization signal.
+1. backend interpretation 是投资语义的主来源
+2. facts 和 evidence 必须保留结构化形态
+3. 默认情况下不要暴露 `newsnow` 的私有实现术语
+4. 优先使用 agent-facing label，而不是 engine-facing label
+5. 将 `actionBucket` 视为下游优先级排序的一等信号
 
-## 7. Minimum mapping recommendation
+## 7. 最低映射建议
 
-The public tool layer should preserve these concepts:
+public tool layer 至少应保留下面这些概念：
 
 - `what happened`
 - `why it matters`
@@ -152,22 +159,22 @@ The public tool layer should preserve these concepts:
 - `facts`
 - `evidence`
 
-If `nexus-fi-mcp` collapses or renames fields, it should do so without losing those concepts.
+如果 `nexus-fi-mcp` 需要改名或折叠字段，也不应丢失这些核心概念。
 
-## 8. Current readiness
+## 8. 当前 readiness
 
-Ready now:
+现在已经 ready 的部分：
 
 - provider-side investment projection
-- explicit provider-side HTTP contract routes
-- provider-side contract metadata (`investment-provider-v1`)
+- provider-side 显式 HTTP contract routes
+- provider-side contract metadata（`investment-provider-v1`）
 - provider-side related event sections
 - provider-side action bucket
-- provider-side investment interpretation and evidence
-- local MCP debug gating for detail-style outputs
+- provider-side investment interpretation 与 evidence
+- 本地 MCP detail-style 输出的 debug gating
 
-Still downstream work:
+仍留给下游的工作：
 
-- final public `event.*` contract normalization in `nexus-fi-mcp`
-- cross-provider composition rules when multiple event providers exist
-- public MCP tests in the `nexus-fi-mcp` repository itself
+- `nexus-fi-mcp` 中最终 public `event.*` contract 的归一化
+- 多个 event provider 共存时的跨 provider 组合规则
+- `nexus-fi-mcp` 仓库内自己的 public MCP tests

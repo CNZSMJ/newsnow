@@ -1,111 +1,113 @@
-# Investment Event Workstreams
+# 投资事件工作流
 
-Status: Active backlog
-Last updated: 2026-04-18
-Scope: long-running execution tracks for the investment event system
+状态：使用中 backlog
+最后更新：2026-04-19
+范围：投资事件系统的长期执行工作流
+文档角色：backend / frontend / agent 三条线的长期 backlog
+更新时机：长期 backlog 结构或工作流优先级发生变化时
 
-## 1. Purpose
+## 1. 目的
 
-This document turns the agreed architecture into an execution backlog.
+这份文档的目标，是把已经达成一致的架构，落成一份可持续推进的 backlog。
 
-It exists to preserve one core rule:
+它存在的核心原因只有一个：
 
-> the backend event engine is the single source of truth and the single source of investment semantics
-> frontend investor views and agent interfaces are projections of that same truth
+> backend event engine 是唯一的事实源，也是唯一的投资语义源
+> frontend investor surface 和 agent interface 都只是同一事实的 projection
 
-The work is split into three sustained workstreams:
+工作被拆成三条长期工作流：
 
 1. backend unified event engine
 2. frontend investor surface
 3. agent-facing interface
 
-For active execution status, current tranche scope, and milestone tracking, see:
+如果你要看当前执行状态、当前 tranche 和近期里程碑，请优先看：
 
 - [docs/investment-event-delivery-board.md](./investment-event-delivery-board.md)
 - [docs/investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
 - [docs/event-operations-runbook.md](./event-operations-runbook.md)
 
-These workstreams may progress in parallel, but they must follow one direction:
+这些工作流可以并行推进，但顺序必须保持：
 
 - backend semantics first
 - frontend investor usability second
 - agent contract hardening third
 
-## 2. Cross-workstream constraints
+## 2. 跨工作流约束
 
-These rules apply to every task below.
+### 2.1 不允许复制业务逻辑
 
-### 2.1 Do not fork business logic
+frontend 和 agent 层都不能自己再做一套事件分类、direction、materiality 或 tradability 逻辑。
 
-Frontend and agent layers must not create their own event classification, direction, materiality, or tradability logic.
+### 2.2 facts 和 evidence 必须一直是一等公民
 
-### 2.2 Facts and evidence remain first-class
+任何任务都不能用纯文本摘要替代 structured facts 与 evidence。
 
-No task is allowed to replace structured facts and evidence with text-only summaries.
+### 2.3 是否有投资价值，是唯一验收标准
 
-### 2.3 Investor usefulness is the acceptance standard
+每个改动都应该至少提升下面一项：
 
-Every change should improve one or more of the following:
+- 信号和噪音的区分度
+- “发生了什么”的清晰度
+- “谁受影响”的清晰度
+- “现在可操作还是只能观察”的清晰度
+- “接下来要确认什么”的清晰度
 
-- signal versus noise separation
-- clarity of what happened
-- clarity of who is affected
-- clarity of whether the event is actionable or only watch-worthy
-- clarity of what must be confirmed next
+### 2.4 engine internals 不能成为默认用户契约
 
-### 2.4 Engine internals are not default user contracts
+像 parser family、merge reason、lifecycle reason code 这类内部标签，可以保留给 debug，但不能成为默认的人类或 agent 契约。
 
-Internal labels such as parser families, merge reasons, or lifecycle reason codes may exist for debug use, but they must not become the default human or agent-facing contract.
+## 3. Workstream A：Backend unified event engine
 
-## 3. Workstream A: Backend unified event engine
+目标：
 
-Goal:
+- 维护单一 canonical event engine
+- 维护单一 canonical investment semantics layer
+- 在 backend 一次性产出 facts、evidence、impact 和 event interpretation
 
-- maintain a single canonical event engine
-- maintain a single canonical investment semantics layer
-- produce facts, evidence, impact, and event interpretation once in the backend
+当前基础阶段：
 
-Current foundation phase:
-
-- Phase 1 `Semantic Baseline` completed on 2026-04-17
-- Phase 2 `Facts-First Depth` completed on 2026-04-17
-- Phase 3 `Identity and Series Model` completed on 2026-04-17
-- Phase 4 `Merge and Timeline Hardening` completed on 2026-04-17
-- Phase 5 `Query and Scan Foundation` completed on 2026-04-17
-- Phase 6 `Quality Gates and SLOs` completed on 2026-04-17
-- Phase 7 `Repair, Backfill, and Operations` completed on 2026-04-17
-- Foundation roadmap status: completed on 2026-04-17; active backend work now shifts to stratified latency remediation, continued semantic precision hardening for high-value families, and runbook-driven operations
+- Phase 1 `Semantic Baseline` 已于 2026-04-17 完成
+- Phase 2 `Facts-First Depth` 已于 2026-04-17 完成
+- Phase 3 `Identity and Series Model` 已于 2026-04-17 完成
+- Phase 4 `Merge and Timeline Hardening` 已于 2026-04-17 完成
+- Phase 5 `Query and Scan Foundation` 已于 2026-04-17 完成
+- Phase 6 `Quality Gates and SLOs` 已于 2026-04-17 完成
+- Phase 7 `Repair, Backfill, and Operations` 已于 2026-04-17 完成
+- Foundation roadmap 已于 2026-04-17 关闭
+- 第一轮 post-foundation tranche 已于 2026-04-18 关闭
+- 当前 backend 主线转向：继续打高价值 source family 的 semantic precision、extractor/fact depth，以及更有决策价值的 impact semantics，同时保住已经关闭的 latency / runbook 纪律
 
 ### A1. Canonical investment projection
 
-Objective:
+目标：
 
-- define and maintain one canonical investment projection for all consumers
+- 为所有消费者定义并维护单一 canonical investment projection
 
-Tasks:
+任务：
 
-- add `investment-view.ts`
-- define `InvestmentEventBrief`
-- define `InvestmentEventDetail`
-- define `InvestmentEventFact`
-- define `InvestmentEventEvidence`
-- define human-readable and machine-readable entity projections
+- 维护 `investment-view.ts`
+- 维护 `InvestmentEventBrief`
+- 维护 `InvestmentEventDetail`
+- 维护 `InvestmentEventFact`
+- 维护 `InvestmentEventEvidence`
+- 维护人类可读和机器可读的 entity projection
 
-Done when:
+完成标准：
 
-- frontend and agent consumers can use the same projected event object
-- no consumer needs to reconstruct business meaning from raw engine fields
+- frontend 和 agent 能消费同一投影视图
+- 没有消费者需要从 raw engine 字段重新拼业务语义
 
 ### A2. Source profile refinement
 
-Objective:
+目标：
 
-- reduce semantic ambiguity at source registration time
+- 在 source 注册阶段尽量减少语义模糊
 
-Tasks:
+任务：
 
-- continue splitting source kinds into investment-meaningful families
-- keep separating:
+- 继续把 source kinds 拆成更有投资意义的 families
+- 继续区分：
   - industry statistics
   - industry policy
   - industry news
@@ -114,337 +116,328 @@ Tasks:
   - market move
   - policy signal
   - disclosure signal
-- remove coarse fallback classification where a narrower semantic family is possible
+- 只要能更窄、更准，就继续减少粗粒度 fallback 分类
 
-Done when:
+完成标准：
 
-- new high-value sources enter the event engine with clear event semantics
-- fewer events fall into generic buckets like `other`
+- 新接入的高价值 source 能带着更清晰的事件语义进入引擎
+- 更少事件落进 `other` 这类泛桶
 
 ### A3. Extractor strengthening
 
-Objective:
+目标：
 
-- increase structured fact coverage and quality
+- 提高 structured fact coverage 和 fact 质量
 
-Priority source families:
+优先 source families：
 
 - `pbc-*`
 - `chinamoney-*`
 - `cninfo-*`
 - `sse-*`
 - `hkexnews-*`
-- high-value industry sources
-- high-value media clarification sources
+- 高价值行业源
+- 高价值媒体澄清源
 
-Tasks:
+任务：
 
-- increase numeric fact extraction coverage
-- increase event fact precision
-- reduce empty or placeholder fact payloads
-- map facts to affected entities and markets more reliably
+- 提高 numeric fact extraction coverage
+- 提高 event fact precision
+- 减少空洞或占位性质的 fact payload
+- 更可靠地将 facts 映射到受影响 entity 和 market
 
-Done when:
+完成标准：
 
-- high-value events are mostly represented by meaningful structured facts
-- detail views no longer show large volumes of low-value empty fields
+- 高价值事件大多能用有意义的 structured facts 表达
+- detail view 默认不再充斥大量低价值空字段
 
 ### A4. Impact engine refinement
 
-Objective:
+目标：
 
-- make investment interpretation more decision-useful
+- 让投资解释层更有决策价值
 
-Tasks:
+任务：
 
-- standardize:
+- 继续标准化：
   - `whyItMatters`
   - `tradableNow`
   - `whatToWatchNext`
   - `riskOfMisread`
-- reduce generic summaries
-- ensure summaries reflect facts, source authority, and event family
+- 减少模板化、泛化 summary
+- 确保 summary 能反映 facts、source authority 和 event family
 
-Done when:
+完成标准：
 
-- impact interpretation answers investor questions directly
-- summaries do not leak engine internals
+- impact interpretation 能直接回答投资者问题
+- summary 不再泄露 engine internals
 
 ### A5. Entity resolution and linking
 
-Objective:
+目标：
 
-- improve event-to-entity and event-to-theme relevance
+- 提升 event 与 entity/theme 的相关性质量
 
-Tasks:
+任务：
 
-- separate publisher identity from tradable entity identity
-- improve security, issuer, market, industry, and institution mapping
-- remove noisy placeholder entity output
-- improve cross-market entity consistency
+- 将 publisher identity 与 tradable entity identity 明确分开
+- 提高 security、issuer、market、industry、institution 映射质量
+- 去掉噪音型 placeholder entity 输出
+- 提高 cross-market entity consistency
 
-Done when:
+完成标准：
 
-- entity displays are investment-relevant by default
-- watchlists and related-event retrieval become more accurate
+- 默认 entity 展示对投资者有意义
+- watchlist 和 related-event retrieval 更准确
 
 ### A6. Merger and lifecycle refinement
 
-Objective:
+目标：
 
-- keep events stable and readable over time
+- 让事件在时间维度上既稳定又可读
 
-Tasks:
+任务：
 
-- improve same-event merge logic
-- compress low-value repeated lifecycle churn
-- preserve meaningful event evolution
-- keep timeline useful for investment review rather than engine debugging
+- 提高 same-event merge 逻辑质量
+- 压缩低价值重复 lifecycle churn
+- 保留真正有意义的事件演化
+- 让 timeline 更像投资复盘材料，而不是 engine debug 日志
 
-Done when:
+完成标准：
 
-- timeline entries are understandable and low-noise
-- repeated low-value update spam is rare
+- timeline 低噪且易理解
+- 重复、低价值的 update spam 变少
 
 ### A7. Replay, shadow, and observability
 
-Objective:
+目标：
 
-- keep the engine verifiable under continuous change
+- 在持续演进中保持引擎可验证
 
-Tasks:
+任务：
 
-- maintain replay fixtures
-- expand shadow comparison coverage
-- track extractor and merge quality metrics
-- track directional coverage and confidence distribution
-- track entity resolution success rates
+- 维护 replay fixtures
+- 扩大 shadow comparison 覆盖面
+- 跟踪 extractor 与 merge 质量指标
+- 跟踪 directional coverage 与 confidence distribution
+- 跟踪 entity resolution success rates
 
-Done when:
+完成标准：
 
-- major semantic changes can be replayed and validated before rollout
-- quality regressions can be detected without manual browsing
+- 大的语义改动在 rollout 前都能 replay 验证
+- 质量回退不需要靠人工浏览才会发现
 
-## 4. Workstream B: Frontend investor surface
+## 4. Workstream B：Frontend investor surface
 
-Goal:
+目标：
 
-- make the event surface useful for real discretionary investing
-- present the same backend event truth in investor language
+- 让事件界面对真实 discretionary investing 有用
+- 用投资者语言呈现同一份 backend 事件真相
 
 ### B1. Event list as an opportunity scanner
 
-Objective:
+目标：
 
-- make `/events` useful for quickly identifying what matters now
+- 让 `/events` 成为快速识别“今天什么最值得处理”的页面
 
-Tasks:
+任务：
 
-- keep investment-first sort as the default
-- support clear segmentation such as:
+- 保持 investment-first sort 为默认排序
+- 支持清晰分层：
   - actionable
   - watch
   - noise
-- improve filtering by market, industry, event family, and direction
-- surface affected markets and key entities clearly
+- 提高按 market、industry、event family、direction 的过滤体验
+- 清楚展示 affected markets 和 key entities
 
-Done when:
+完成标准：
 
-- an investor can scan the page and isolate today's highest-value events quickly
+- 投资者能快速从列表里筛出今天最高价值的事件
 
 ### B2. Event detail as an investment analysis card
 
-Objective:
+目标：
 
-- organize detail pages around investor decision questions
+- 让详情页围绕投资决策问题组织，而不是围绕 engine 字段组织
 
-Tasks:
+任务：
 
-- make the top of the page answer:
-  1. what happened
-  2. why it matters
-  3. who is affected
-  4. can it be traded now
-  5. what must be confirmed next
-- show only meaningful fact fields by default
-- show evidence in a source-credible format
-- compress or hide low-value engine lifecycle detail
+- 让页面顶部先回答：
+  1. 发生了什么
+  2. 为什么重要
+  3. 谁受影响
+  4. 现在能不能交易
+  5. 接下来要确认什么
+- 默认只展示真正有意义的 fact fields
+- 以可信 source 的方式展示 evidence
+- 压缩或隐藏低价值 engine lifecycle 细节
 
-Done when:
+完成标准：
 
-- the detail page reads like an investment brief, not an engine console
+- detail page 读起来像投资 brief，而不是 engine console
 
 ### B3. Related event navigation
 
-Objective:
+目标：
 
-- move from isolated events to investable context
+- 让用户从单条事件跳转到可投资的上下文
 
-Tasks:
+任务：
 
-- add related events by entity
-- add related events by market
-- add related events by industry/theme
-- add same-family event navigation where useful
+- 增加按 entity 的 related events
+- 增加按 market 的 related events
+- 增加按 industry/theme 的 related events
+- 在合适场景下增加 same-family navigation
 
-Done when:
+完成标准：
 
-- users can move from a single event to a relevant cluster of surrounding signals
+- 用户可以从一条事件顺着跳到相关信号簇
 
 ### B4. Watchlist investor workflow
 
-Objective:
+目标：
 
-- make watchlists serve portfolio and monitoring workflows
+- 让 watchlist 真正服务于组合和监控工作流
 
-Tasks:
+任务：
 
-- present watchlist hits with investment ordering
-- separate:
+- 让 watchlist hits 带着投资排序展示
+- 区分：
   - new catalyst
   - new risk
   - confirmation pending
-- make event relevance more transparent
+- 让 event relevance 更透明
 
-Done when:
+完成标准：
 
-- watchlist pages help decision review rather than acting as a raw alert feed
+- watchlist 页面帮助做决策复盘，而不是像原始 alert feed
 
 ### B5. Vocabulary hardening
 
-Objective:
+目标：
 
-- eliminate engineering-first wording from investor-facing pages
+- 从 investor-facing 页面中消除工程味语言
 
-Tasks:
+任务：
 
-- replace internal labels with investor language
-- hide or remap engine-only terms
-- keep debug views separate from default views
+- 用投资者语言替换内部标签
+- 隐藏或重命名 engine-only 术语
+- 将 debug view 与默认 view 分开
 
-Done when:
+完成标准：
 
-- frontend pages no longer depend on engine jargon for meaning
+- frontend 默认页面不再依赖 engine jargon 才能理解
 
-## 5. Workstream C: Agent-facing interface
+## 5. Workstream C：Agent-facing interface
 
-Goal:
+目标：
 
-- give agents a stable, auditable, structured investment event contract
-- keep agent outputs grounded in backend facts and evidence
+- 给 agent 一个稳定、可审计、结构化的投资事件契约
+- 让 agent 输出建立在 backend facts 和 evidence 上
 
 ### C1. Provider-facing contract in `newsnow`
 
-Objective:
+目标：
 
-- make `newsnow` a strong event provider for upstream agent systems
+- 让 `newsnow` 成为强 provider，而不是半结构化文本源
 
-Tasks:
+任务：
 
-- expose the canonical investment projection as a provider contract
-- ensure facts and evidence are part of the default contract
-- keep debug-only fields behind explicit debug mode
+- 将 canonical investment projection 暴露成 provider contract
+- 保证 facts 和 evidence 是默认契约的一部分
+- 将 debug-only 字段放到显式 debug mode 后面
 
-Done when:
+完成标准：
 
-- provider consumers can use `newsnow` without parsing engine-specific text blobs
+- provider consumer 可以直接使用 `newsnow`，而不用自己解析 engine 风格的 text blob
 
 ### C2. Internal MCP projection cleanup
 
-Objective:
+目标：
 
-- make the repository's own MCP projection align with the canonical investment contract
+- 让仓库内 MCP projection 与 canonical investment contract 保持一致
 
-Tasks:
+任务：
 
-- stop relying on ad hoc summary text formatting
-- align tool enums and schemas with the current event model
-- expose structured investment fields
-- preserve facts and evidence
+- 停止依赖 ad hoc 的 summary text formatting
+- 让 tool enums / schemas 和当前 event model 对齐
+- 暴露结构化 investment fields
+- 保留 facts 和 evidence
 
-Done when:
+完成标准：
 
-- the local MCP surface is no longer a text-heavy debug wrapper
+- 本地 MCP 不再只是一个 text-heavy 的 debug wrapper
 
 ### C3. Public MCP boundary through `nexus-fi-mcp`
 
-Objective:
+目标：
 
-- keep the public agent boundary stable and provider-agnostic
+- 保持 public agent boundary 稳定且 provider-agnostic
 
-Tasks:
+任务：
 
-- map the `newsnow` provider contract to the public `event.*` tool contract
-- avoid leaking provider-specific semantics
-- add public metadata and guard semantics
+- 将 `newsnow` provider contract 映射成公共 `event.*` tool contract
+- 避免泄露 provider-specific semantics
+- 增加公共元数据与 guard semantics
 
-Done when:
+完成标准：
 
-- skills and workflows consume a stable `event.*` contract without provider branching
+- 技能和工作流可以消费稳定的 `event.*` contract，而不需要按 provider 分支
 
 ### C4. Agent scenario validation
 
-Objective:
+目标：
 
-- verify that the contract actually supports high-value machine workflows
+- 验证这套 contract 真的能支持高价值机器工作流
 
-Priority scenarios:
+优先场景：
 
 - morning report synthesis
 - watchlist scanning
 - single-event attribution
 - theme and industry monitoring
 
-Done when:
+完成标准：
 
-- these scenarios can run on structured event objects without prompt-side reconstruction of event meaning
+- 这些场景都能直接跑在 structured event object 上，而不是靠 prompt 侧重建事件语义
 
-## 6. Execution order
+## 6. 执行顺序
 
-The default execution order is:
+默认顺序：
 
 1. Workstream A
 2. Workstream B
 3. Workstream C
 
-Reason:
+原因：
 
-- if backend semantics are unstable, both frontend and agent layers will drift
-- frontend is the fastest way to validate whether event semantics are decision-useful
-- agent contract hardening should happen after the backend projection is stable
+- backend semantics 不稳，frontend 和 agent 就一定会漂
+- frontend 是最快验证“事件语义是否真有投资价值”的地方
+- agent contract hardening 应该在 backend projection 稳定后推进
 
-Parallel work is allowed only when it does not create duplicate business logic.
+只有在不会制造重复业务逻辑时，才允许并行推进。
 
-## 7. Immediate backlog
+## 7. 当前 immediate backlog
 
-These are the highest-priority next tasks.
+下面是当前最优先的下一批任务：
 
-1. Add `investment-view.ts` and make it the canonical backend projection layer
-2. Make `/api/events/latest` and `/api/events/[id]` capable of returning the investment projection
-3. Continue splitting coarse source families:
-   - `industry_stat`
-   - `industry_policy`
-   - `industry_news`
-   - `industry_report`
-   - `market_move`
-   - `rumor_clarification`
-4. Tighten fact extraction for industry and media clarification events
-5. Rebuild event detail page top sections around the investor five-question model
-6. Add clearer list segmentation for actionable versus watch-only events
-7. Refactor local MCP event output to use the canonical investment projection
-8. Expand replay fixtures for:
-   - macro events
-   - disclosures
-   - industry events
-   - media clarification events
+1. 继续提高高价值 source family 中 `issuer / institution / market / tradable subject` 的区分精度
+2. 继续加深 policy、macro、disclosure、industry 高价值 family 的 structured fact completeness
+3. 提高 backend-owned 解释字段质量：
+   - 为什么重要
+   - 接下来要看什么
+   - 容易被误读在哪里
+4. 提高 mixed fast-feed 场景下的 entity / market linkage 质量，尤其是 broad market descriptor 与 tradable subject 同时出现时
+5. 在扩大 precise-clock coverage 的同时，继续保持 Tier A latency 为绿色，并维持基于 poll-history 的 backlog classification
+6. 对每个被修改的 source family 扩大 replay fixtures 与 targeted tests
 
-## 8. Acceptance checklist
+## 8. 验收检查表
 
-Every completed task should be checked against these questions:
+每个完成的任务都应该回答下面 6 个问题：
 
-1. Did it keep the backend as the single fact and semantics source?
-2. Did it improve investor decision usefulness?
-3. Did it make facts and evidence more usable?
-4. Did it reduce engine terminology leakage?
-5. Did it reduce downstream reconstruction burden for agents?
-6. Can the change be replayed, observed, and tested?
+1. 有没有保持 backend 仍然是唯一事实源和语义源？
+2. 有没有提升投资决策可用性？
+3. 有没有让 facts 和 evidence 更可消费？
+4. 有没有减少 engine 术语泄露？
+5. 有没有减少下游 agent 的重建负担？
+6. 这个改动能不能 replay、能不能观测、能不能测试？

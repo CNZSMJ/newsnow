@@ -1,223 +1,227 @@
-# Investment Event Delivery Board
+# 投资事件执行看板
 
-Status: Active execution board
-Last updated: 2026-04-18
-Scope: project-management view of the investment event system upgrade
+状态：执行中
+最后更新：2026-04-19
+范围：投资事件系统升级的项目管理视图
+文档角色：当前执行面
+更新时机：当前 tranche、里程碑状态或近期执行重点发生变化时
 
-Related roadmap:
+相关文档：
 
 - [docs/investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
+- [docs/README.md](./README.md)
 
-## 1. Operating rule
+## 1. 总原则
 
-This board exists to keep execution aligned with one architectural rule:
+这份 board 的存在，是为了持续对齐一个架构原则：
 
-> the backend event engine is the single source of truth and the single source of investment semantics
-> frontend investor views and agent-facing interfaces are projections of that same truth
+> backend event engine 是唯一的事实源，也是唯一的投资语义源
+> frontend investor view 和 agent-facing interface 都只是同一事实的 projection
 
-No task on this board is allowed to move business semantics into the frontend or into agent-specific wrappers.
+任何任务都不允许把业务语义挪到 frontend 或 agent 包装层里。
 
-## 2. Workstream status snapshot
+## 2. 工作流状态快照
 
-| Workstream | Current stage | Status | What is already true | Next milestone |
+| 工作流 | 当前阶段 | 状态 | 已经成立的事实 | 下一里程碑 |
 | --- | --- | --- | --- | --- |
-| Backend unified engine | Post-foundation latency remediation and precision hardening | In progress | Canonical events, facts, evidence, impact, replay, shadow, observability, investment projection, recurring-series scan semantics, quality gates, and ops triage surfaces are in place; the current local blockers are stratified priority-source latency on real data and residual subject/entity ambiguity in high-value families | Use the new triage surfaces to burn down slow source families, harden high-value semantics, and institutionalize runbook-driven operations |
-| Frontend investor surface | Investor workbench v1 | In progress | `/events`, `/events/:id`, `/watchlists`, `/watchlists/:id` are live, use provider-facing investment routes, and support action-bucket scanning | Deepen workbench behaviors and high-volume workflows |
-| Agent/provider interface | Provider contract v2 | In progress | Explicit provider routes exist and local MCP exposes task-oriented scan/detail tools over the same projection | Harden provider schema and reduce remaining downstream reconstruction |
+| Backend unified engine | post-foundation tranche 已关闭，backend hardening 持续推进 | Active | canonical events、facts、evidence、impact、replay、shadow、observability、investment projection、series scan semantics、quality gates、分层 latency gates、基于 poll history 的 backlog 判定、ops triage surface 都已经到位 | 在不破坏已关闭 latency/runbook 纪律的前提下，继续提升高价值 source family 的语义精度和 extractor 深度 |
+| Frontend investor surface | Investor workbench v1 | In progress | `/events`、`/events/:id`、`/watchlists`、`/watchlists/:id` 已上线，使用 provider-facing investment routes，并支持 action bucket 扫描 | 继续增强 workbench 行为和高频使用场景 |
+| Agent/provider interface | Provider contract v2 | In progress | 显式 provider routes 已存在，本地 MCP 已通过同一 projection 暴露任务型 scan/detail 工具 | 继续硬化 provider schema，并减少下游自行重建语义的负担 |
 
-## 3. Completed foundation
+## 3. 已完成的 foundation
 
 ### Backend
 
-- [x] Event engine phases 1-4 completed
-- [x] Canonical event/fact/evidence/timeline storage
-- [x] Source profiles and first-class extractors
-- [x] Replay, shadow, metrics, and backfill capabilities
-- [x] Canonical investment projection (`investment-view.ts`)
+- [x] Event engine Phase 1-4 完成
+- [x] Canonical event / fact / evidence / timeline 存储完成
+- [x] Source profiles 与 first-class extractors 完成
+- [x] Replay、shadow、metrics、backfill 能力完成
+- [x] Canonical investment projection（`investment-view.ts`）完成
 
 ### Frontend
 
-- [x] Event list page
-- [x] Event detail page
-- [x] Watchlist list page
-- [x] Watchlist detail page
-- [x] Investor-language detail sections
-- [x] Action buckets: actionable / watch / noise
-- [x] Related-event navigation by entity/topic/market/family
-- [x] Frontend investment pages switched to explicit provider routes
+- [x] 事件列表页
+- [x] 事件详情页
+- [x] Watchlist 列表页
+- [x] Watchlist 详情页
+- [x] 面向投资者语言的 detail sections
+- [x] Action buckets：`actionable / watch / noise`
+- [x] 按 entity / topic / market / family 的 related-event 导航
+- [x] Frontend 投资页面已切换到显式 provider routes
 
 ### Agent/provider
 
-- [x] Local MCP switched to investment projection
-- [x] Structured content returned by event tools
-- [x] Facts, evidence, and investment interpretation exposed together
-- [x] Explicit provider routes added for event and watchlist investment payloads
-- [x] Task-oriented MCP tools added: `event_scan`, `event_get_detail`, `watchlist_scan`
+- [x] 本地 MCP 已切换到 investment projection
+- [x] 事件工具返回 structured content
+- [x] facts、evidence、investment interpretation 一起暴露
+- [x] investment events / watchlists 的显式 provider routes 已增加
+- [x] 任务型 MCP 工具已增加：`event_scan`、`event_get_detail`、`watchlist_scan`
 
-## 4. Current execution tranche
+## 4. 近期执行 tranche
 
-### Tranche A: projection quality
+### Tranche A：projection 质量提升
 
-Objective:
+目标：
 
-- make the canonical investment projection more decision-useful before adding new surfaces
+- 在增加新消费面之前，先让 canonical investment projection 更有决策价值
 
-Tasks:
+任务：
 
-- [x] Add `actionBucket` to the canonical investment projection
-- [x] Push action buckets into frontend list and detail views
-- [x] Push action buckets into local MCP summaries
-- [x] Tighten `whyItMatters` quality for more event families
-- [x] Tighten `whatToWatchNext` quality for more event families
-- [x] Tighten `riskOfMisread` quality for more event families
-- [x] Add explicit `whatHappened` field to the canonical projection
-- [x] Add explicit `whoIsAffected` field to the canonical projection
-- [x] Make `eventFamily` a first-class filter across API, frontend, and MCP
+- [x] 在 canonical investment projection 中加入 `actionBucket`
+- [x] 将 action bucket 推到 frontend 列表和详情页
+- [x] 将 action bucket 推到本地 MCP summary
+- [x] 提升更多 event family 的 `whyItMatters` 质量
+- [x] 提升更多 event family 的 `whatToWatchNext` 质量
+- [x] 提升更多 event family 的 `riskOfMisread` 质量
+- [x] 在 canonical projection 中加入显式 `whatHappened`
+- [x] 在 canonical projection 中加入显式 `whoIsAffected`
+- [x] 将 `eventFamily` 做成 API / frontend / MCP 的一等过滤项
 
-### Tranche B: investor workbench
+### Tranche B：investor workbench
 
-Objective:
+目标：
 
-- move the frontend from event browsing to decision support
+- 将 frontend 从“事件浏览”推进到“决策支持”
 
-Tasks:
+任务：
 
-- [x] Group event list by action bucket
-- [x] Add related events to event detail
-- [x] Add related events by market as a third fallback layer
-- [x] Surface same-family context where useful
-- [x] Add list-level summary counts by action bucket and market
-- [x] Improve list scan speed for high-volume sessions
-- [x] Show “what happened” and “who is affected” explicitly in event detail
-- [x] Expose event-family filtering in the event scanner
+- [x] 按 action bucket 分组事件列表
+- [x] 在事件详情加入 related events
+- [x] 增加按 market 的 related events 作为第三层 fallback
+- [x] 在适当场景下补 same-family context
+- [x] 在列表层增加按 action bucket 和 market 的 summary counts
+- [x] 提高高频会话下的列表扫描速度
+- [x] 在事件详情里显式展示“发生了什么”和“谁受影响”
+- [x] 在事件扫描器里暴露 event-family filtering
 
-### Tranche C: provider contract hardening
+### Tranche C：provider contract hardening
 
-Objective:
+目标：
 
-- make the provider-facing MCP contract more stable and audit-friendly
+- 让 provider-facing MCP contract 更稳定、更可审计
 
-Tasks:
+任务：
 
-- [x] Keep `structuredContent` aligned with the canonical projection
-- [x] Include action bucket in MCP summary output
-- [x] Include misread risk in MCP summary output
-- [x] Separate default vs debug-only event fields more strictly
-- [x] Add MCP contract tests around the projected investment object
-- [x] Prepare explicit provider handoff notes for `nexus-fi-mcp`
-- [x] Move related-event assembly behind a backend canonical service
-- [x] Unify watchlist detail behind the investment projection
-- [x] Add explicit provider routes for investment events and watchlists
-- [x] Add provider-level focus filtering for actionable/watchable scans
-- [x] Add task-oriented MCP scan/detail tools over the provider contract
+- [x] 保持 `structuredContent` 与 canonical projection 对齐
+- [x] 在 MCP summary output 中加入 action bucket
+- [x] 在 MCP summary output 中加入 misread risk
+- [x] 更严格地区分 default-safe 与 debug-only event fields
+- [x] 增加围绕 projected investment object 的 MCP contract tests
+- [x] 为 `nexus-fi-mcp` 准备显式 provider handoff 文档
+- [x] 将 related-event assembly 收到 backend canonical service 后面
+- [x] 将 watchlist detail 统一到 investment projection 之后
+- [x] 增加 investment events / watchlists 的显式 provider routes
+- [x] 为 actionable / watchable 扫描增加 provider-level focus filtering
+- [x] 基于 provider contract 增加任务型 MCP scan/detail 工具
 
-### Tranche D: workbench convergence
+### Tranche D：workbench convergence
 
-Objective:
+目标：
 
-- make investor surfaces and local MCP consume the provider contract directly, with backend-owned focus semantics
+- 让 investor surface 和本地 MCP 都直接消费 provider contract，并复用 backend-owned focus semantics
 
-Tasks:
+任务：
 
-- [x] Switch event list to `/api/investment-events/latest`
-- [x] Switch event detail to `/api/investment-events/:id`
-- [x] Switch watchlist detail to `/api/investment-watchlists/:id`
-- [x] Move focus filtering (`all / actionable / watchable`) into provider routes
-- [x] Let event and watchlist scans reuse provider focus semantics instead of client-side overfetch
-- [x] Add richer watchlist workflow summaries and monitoring cues
-- [x] Add provider-backed search/entity flows to the investor workbench where they improve navigation
+- [x] 将事件列表切到 `/api/investment-events/latest`
+- [x] 将事件详情切到 `/api/investment-events/:id`
+- [x] 将 watchlist 详情切到 `/api/investment-watchlists/:id`
+- [x] 将 focus filtering（`all / actionable / watchable`）移到 provider routes
+- [x] 让 event / watchlist scans 复用 provider focus semantics，而不是 client 侧 overfetch
+- [x] 增加更丰富的 watchlist workflow summary 和 monitoring cues
+- [x] 在能提升导航体验的地方增加 provider-backed search / entity flows
 
-### Tranche E: investor workbench quality
+### Tranche E：investor workbench quality
 
-Objective:
+目标：
 
-- make the investor surface feel like a working decision console rather than a filtered event browser
+- 让 investor surface 更像决策工作台，而不是过滤后的事件浏览器
 
-Tasks:
+任务：
 
-- [x] Add watchlist-level summary cards for dominant families, markets, next checks, and misread risks
-- [x] Add `/events` workbench search modes: default scan, keyword search, entity search
-- [x] Keep search/entity flows on explicit provider routes instead of compatibility projection paths
-- [x] Add quick navigation between scan results and watchlists where it improves monitoring flow
-- [x] Add stronger “why this is actionable now” presentation for high-priority events
-- [x] Add more compact high-volume mode for busy market sessions
+- [x] 在 watchlist 层增加 dominant families、markets、next checks、misread risks 的 summary cards
+- [x] 为 `/events` 增加 workbench search modes：default scan、keyword search、entity search
+- [x] 让 search / entity flows 保持在显式 provider routes 上，而不是兼容 projection path
+- [x] 在能改善监控流程的地方增加 scan results 和 watchlists 之间的快速跳转
+- [x] 为高优先级事件增加更强的“为什么现在可操作”表达
+- [x] 为忙碌交易时段增加更紧凑的 high-volume mode
 
-### Tranche F: semantic precision hardening
+### Tranche F：semantic precision hardening
 
-Objective:
+目标：
 
-- tighten investment semantics so investor and agent surfaces inherit clearer subjects, cleaner families, and fewer ambiguous research/news mixes
+- 收紧投资语义，让 investor / agent surface 继承更清晰的主体、更干净的 family、以及更少的 research/news 混杂
 
-Tasks:
+任务：
 
-- [x] Add `actionReason` as a first-class backend projection field
-- [x] Add backend-owned `subjectSummary` and `publisherInstitution` instead of frontend subject reconstruction
-- [x] Split `industry_report` from `industry_data` for research/report sources
-- [x] Continue splitting `policy_signal` and `disclosure_signal` from broader fallback families where warranted
-- [ ] Raise entity precision for issuer vs institution vs market display in more source families
-- [ ] Reduce remaining generic `general_news` fallback usage for high-value sources
+- [x] 将 `actionReason` 做成 backend projection 的一等字段
+- [x] 增加 backend-owned `subjectSummary` 和 `publisherInstitution`，替代 frontend 自行重建主体
+- [x] 为 research/report 类 source 将 `industry_report` 与 `industry_data` 拆开
+- [x] 在需要时继续将 `policy_signal`、`disclosure_signal` 从更宽泛的 fallback family 中拆出来
+- [ ] 在更多 source family 中继续提高 `issuer / institution / market` 展示精度
+- [ ] 继续降低高价值 source 中剩余的 `general_news` 泛化 fallback
 
-### Tranche G: post-foundation latency remediation and runbook discipline
+### Tranche G：post-foundation latency remediation 与 runbook discipline
 
-Objective:
+目标：
 
-- make the event base operationally reliable for real investment use by reducing high-value source latency, keeping semantic hardening focused on high-value families, and formalizing repeatable repair/backfill workflows
+- 通过降低高价值 source latency、将 semantic hardening 限定在高价值 source family、并固化可重复的 repair/backfill 流程，让事件基座在真实投资使用中具备可运营性
 
-Execution rules:
+执行规则：
 
-- use stratified latency thresholds instead of one flat aggregate target
-- keep a hard `P95 <= 5 minutes` expectation for trade-critical source families
-- allow slower thresholds for non-intraday macro and long-form policy sources, but only when explicitly classified and separately measured
-- prioritize semantic hardening on high-value source families first
-- allow long-tail sources to stay conservative, but do not let long-tail fallback pollute canonical entity truth
-- keep operational workflow documentation in-repo under [`docs/event-operations-runbook.md`](./event-operations-runbook.md)
+- 使用分层 latency thresholds，而不是单一 aggregate target
+- 对 trade-critical source family 保持硬约束：`P95 <= 5 分钟`
+- 对非盘中 macro 和长文档政策源允许更慢阈值，但必须明确分类并单独衡量
+- 语义硬化优先打高价值 source family
+- 长尾 source 可以保守，但不能污染 canonical entity truth
+- 运维流程文档必须留在仓内，见 [`docs/event-operations-runbook.md`](./event-operations-runbook.md)
 
-Latency tiers:
+Latency tiers：
 
-- Tier A `Trade-critical`: exchange disclosures, intraday market flashes, central-bank operations, rate fixes; target `initial canonical event P95 <= 5 minutes`
-- Tier B `High-value non-intraday`: key macro releases and important policy notices; target `initial canonical event P95 <= 10-15 minutes`
-- Tier C `Long-form / heavy parsing`: long policy documents and complex deep-parsing sources; target `initial canonical event P95 <= 30 minutes`
-- for all tiers, track `full semantic enrichment latency` separately from `initial canonical latency`, so deep parsing does not hide time-to-first-truth performance
+- Tier A `Trade-critical`：交易所公告、盘中快讯、央行操作、利率定价；目标 `initial canonical event P95 <= 5 分钟`
+- Tier B `High-value non-intraday`：关键宏观发布、重要政策通知；目标 `initial canonical event P95 <= 10-15 分钟`
+- Tier C `Long-form / heavy parsing`：长政策文档、复杂深解析源；目标 `initial canonical event P95 <= 30 分钟`
+- 所有 tier 都要单独跟踪 `full semantic enrichment latency`，避免深解析吞掉 time-to-first-truth 表现
 
-Tasks:
+任务：
 
-- [ ] Classify high-value source families into latency tiers and expose tier-aware thresholds in the quality-gate path
-- [ ] Reduce Tier A latency until trade-critical families consistently approach the hard target
-- [ ] Reduce Tier B and Tier C latency without letting heavy parsing dominate Tier A alerting
-- [ ] Continue issuer vs institution vs market precision hardening only on high-value families first
-- [ ] Ensure long-tail fallback remains conservative and cannot write incorrect canonical subjects or entity links
-- [ ] Land a repo-owned event operations runbook and link it from roadmap and delivery docs
-- [ ] Require every latency or semantic remediation batch to run replay, targeted tests, quality checks, and runbook-recorded operator review
+- [x] 将高价值 source family 分类到 latency tiers，并在 quality-gate 路径中暴露 tier-aware thresholds
+- [x] 将 Tier A latency 拉回可控 steady-state gate
+- [x] 让 Tier B / Tier C 保持可见，但不让 heavy parsing 主导 Tier A 告警
+- [x] 按高价值 source family 优先继续做 `issuer / institution / market` 精度硬化
+- [x] 确保长尾 fallback 保守且不能写脏 canonical subject / entity link
+- [x] 落地 repo-owned event operations runbook，并从 roadmap / delivery docs 链过去
+- [x] 要求每一批 latency 或 semantic remediation 都跑 replay、targeted tests、quality checks、以及 runbook 记录的 operator review
 
-## 5. Foundation phase status
+## 5. Foundation phase 状态
 
-- [x] Phase 1 `Semantic Baseline` completed on 2026-04-17
-- [x] Phase 2 `Facts-First Depth` completed on 2026-04-17
-- [x] Phase 3 `Identity and Series Model` completed on 2026-04-17
-- [x] Phase 4 `Merge and Timeline Hardening` completed on 2026-04-17
-- [x] Phase 5 `Query and Scan Foundation` completed on 2026-04-17
-- [x] Phase 6 `Quality Gates and SLOs` completed on 2026-04-17
-- [x] Phase 7 `Repair, Backfill, and Operations` completed on 2026-04-17
-## 6. Definition of done for the current tranche
+- [x] Phase 1 `Semantic Baseline` 于 2026-04-17 完成
+- [x] Phase 2 `Facts-First Depth` 于 2026-04-17 完成
+- [x] Phase 3 `Identity and Series Model` 于 2026-04-17 完成
+- [x] Phase 4 `Merge and Timeline Hardening` 于 2026-04-17 完成
+- [x] Phase 5 `Query and Scan Foundation` 于 2026-04-17 完成
+- [x] Phase 6 `Quality Gates and SLOs` 于 2026-04-17 完成
+- [x] Phase 7 `Repair, Backfill, and Operations` 于 2026-04-17 完成
 
-The current tranche is complete when:
+## 6. 最近已关闭 tranche 的完成定义
 
-1. frontend investor routes consume only provider-facing investment routes for event/watchlist detail and scanning
-2. provider routes own focus filtering semantics for actionable and watch-worthy scans
-3. local MCP task-oriented tools consume the same provider contract as the investor surface
-4. legacy `/api/events/*` read routes are removed from the public consumer surface, and event-engine operations are separated under `/api/ops/events/*`
-5. all of the above are covered by targeted tests and pass build validation
+post-foundation tranche 完成的标准是：
 
-## 7. Validation cadence
+1. quality gates 使用分层 Tier A / Tier B / Tier C latency，而不是单一 aggregate blocker
+2. `events.ingested_at` 与 duplicate merge 的 ingest 语义保留首次 canonical detection，而不是 refresh time
+3. backlog catch-up 判定基于持久化 poll history，且不会污染 steady-state Tier A release gate
+4. `events:ops-report`、`events:check-quality` 和 ops status route 已暴露足够的操作真相，能支持 live slow-source triage
+5. runbook 在仓内，并且整批改动通过 targeted tests、repair validation、typecheck、build
 
-Every completed task in the active tranche must pass:
+## 7. 验证节奏
 
-- targeted unit tests where relevant
-- replay/shadow-sensitive tests when semantics change
+每个活跃 tranche 或 remediation batch 完成时，都必须通过：
+
+- 有针对性的单测
+- 语义改动时的 replay / shadow 敏感测试
 - `pnpm build`
 
-If a change alters event meaning, it should also be checked against replay fixtures before the tranche is closed.
+如果改动会改变事件语义，还应在 tranche 关闭前通过 replay fixtures 做回归核验。
 
-Operational guidance for the current tranche lives in:
+backend 运维批次的操作规范见：
 
 - [docs/event-operations-runbook.md](./event-operations-runbook.md)

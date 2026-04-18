@@ -1,9 +1,9 @@
-# Investment Event Engine Upgrade Plan — 评审意见
+# 投资事件引擎升级方案 — 评审意见
 
-Status: Review v1
-Reviewer: AI Code Review
-Date: 2026-04-11
-Target document: [investment-event-engine-upgrade-plan.md](./investment-event-engine-upgrade-plan.md)
+状态：评审版 v1
+评审者：AI Code Review
+日期：2026-04-11
+目标文档：[investment-event-engine-upgrade-plan.md](./investment-event-engine-upgrade-plan.md)
 
 ## 总体评价
 

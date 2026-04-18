@@ -1,30 +1,32 @@
-# Investment Event Foundation Roadmap
+# 投资事件基础路线图
 
-Status: Active roadmap
-Last updated: 2026-04-17
-Scope: staged evolution of the `newsnow` events system into a professional, reliable investment-grade structured event base
+状态：使用中基线
+最后更新：2026-04-19
+范围：`newsnow` 的 `events` 系统从当前 canonical event engine 演进为专业、可靠、投资级结构化事件基座的分阶段路线图
+文档角色：架构基线与已关闭 foundation 阶段的正式记录
+更新时机：长期边界规则、终态假设或基础阶段结论发生变化时
 
-## 1. Purpose
+## 1. 目的
 
-This roadmap defines how the `events` system should evolve from the current canonical event engine into a professional data foundation for real investment workflows.
+这份 roadmap 用来定义：`events` 系统如何从当前 canonical event engine，继续演进成能支撑真实投资工作流的专业数据基座。
 
-This document is intentionally limited to the `events` system itself. It does not define thesis management, subscription delivery, portfolio logic, or execution systems.
+这份文档刻意只讨论 `events` 系统本身，不讨论 thesis、订阅分发、组合管理、提醒策略或执行系统。
 
-## 2. Boundary
+## 2. 边界
 
-The `events` system owns:
+`events` 系统负责：
 
 - canonical event truth
 - structured facts
 - evidence linkage
-- canonical entity registry and nomenclature
-- entity, market, and topic linkage
-- event identity, merge, lifecycle, and series relations
+- canonical entity registry 与 nomenclature
+- entity / market / topic linkage
+- 事件身份、merge、lifecycle、series 关系
 - event-native investment interpretation
-- stable read/query surfaces
-- replay, repair, backfill, metrics, and operational quality
+- 稳定的 read / query surface
+- replay、repair、backfill、metrics、operational quality
 
-The `events` system does not own:
+`events` 系统不负责：
 
 - thesis state
 - variable evaluation
@@ -33,599 +35,322 @@ The `events` system does not own:
 - portfolio positions
 - order execution
 
-## 3. End-State Definition
+## 3. 终态定义
 
-The target state is not "a better news page". It is a professional event base that can safely support discretionary investing and future downstream systems.
+目标不是“做一个更好的新闻页”，而是做一个能安全支撑 discretionary investing 和未来下游系统的专业事件底座。
 
-At the end of this roadmap, `events` should be able to:
+这套底座最终应当能够：
 
-- represent high-value event domains with facts-first structured records
-- distinguish lifecycle events from periodic series events without semantic drift
-- keep security, issuer, institution, market, and industry identities clean and stable
-- preserve evidence and event evolution in an investor-readable way
-- support investment scans by entity, market, family, direction, materiality, tradability, authority, and freshness
-- survive replays, backfills, and data repairs without losing canonical consistency
-- keep storage and query implementation details behind stable contracts so future database upgrades remain possible
+- 用 facts-first 的结构化记录表达高价值事件域
+- 明确区分 lifecycle event 与 periodic series event，避免语义漂移
+- 保持 security、issuer、institution、market、industry 身份稳定且干净
+- 以投资者可读的方式保留 evidence 和事件演进
+- 支持按 entity、market、family、direction、materiality、tradability、authority、freshness 的投资扫描
+- 在 replay、backfill、repair 后仍保持 canonical consistency
+- 将存储和查询实现细节藏在稳定 contract 之后，为未来数据库升级留出空间
 
-## 4. Operating Rules
+## 4. 运行规则
 
-These rules apply in every phase.
+下面这些规则在所有 phase 都成立。
 
-### 4.1 Semantics before distribution
+### 4.1 先把语义做稳，再谈分发
 
-Do not build subscription or downstream delivery mechanics as an active workstream until the event base itself is stable enough to deserve external consumers.
+在事件基座本身还不够稳定前，不要把 subscription 或下游 delivery mechanics 当成主动工作流。
 
-### 4.2 Facts before summaries
+### 4.2 facts 优先于 summary
 
-High-value events should be represented by structured facts first. Human-readable summaries are a projection, not the primary data contract.
+高价值事件应先以 structured facts 表达。human-readable summary 是 projection，不是主数据契约。
 
-### 4.3 Event meaning remains objective
+### 4.3 事件意义必须保持客观
 
-`events` may compute investment-native event interpretation, but it must not absorb thesis-specific, portfolio-specific, or user-private logic.
+`events` 可以计算 investment-native interpretation，但不能吸收 thesis-specific、portfolio-specific 或 user-private 逻辑。
 
-### 4.4 Repairability is part of the design
+### 4.4 可 repair 性是设计的一部分
 
-Every semantics-changing phase must leave behind a replay path, a validation path, and a repair path.
+只要某个阶段改变了语义，就必须同时留下 replay 路径、验证路径和 repair 路径。
 
-### 4.5 Storage must stay swappable
+### 4.5 存储必须可替换
 
-The current database shape may remain in place, but contracts, repository logic, and query semantics must not be tightly coupled to current SQLite JSON behavior.
+当前数据库形态可以保留，但 contract、repository logic 和 query semantics 不能被 SQLite JSON 当前行为绑死。
 
-### 4.6 Bounded LLM use only
+### 4.6 只允许 bounded LLM use
 
-LLM use is allowed only as bounded assistance for ambiguous, long-text, or low-structure cases. It must not replace deterministic extraction where authoritative structured sources already exist.
+LLM 只允许用作有限辅助，用于模糊、长文本、低结构场景。
+在 authoritative structured source 已存在时，不能用 LLM 替代 deterministic extraction。
 
-Any LLM-assisted path must:
+任何 LLM-assisted 路径都必须：
 
-- be schema-constrained
-- carry confidence
-- link back to source evidence
-- preserve a deterministic fallback path
-- degrade explicitly instead of silently fabricating canonical truth
+- schema constrained
+- evidence linked
+- confidence bounded
+- 带 deterministic fallback
 
-## 5. Phase Overview
+### 4.7 canonical entity registry 是基座的一部分
 
-| Phase | Name | Core goal | Primary design question | Exit signal |
+entity normalization 不能靠零散正则和临时 heuristics 撑着。
+canonical entity registry / nomenclature layer 必须作为事件基座的一部分存在，并被 extractor、resolver、merge、query 共同使用。
+
+## 5. 阶段总览
+
+| Phase | 名称 | 核心目标 | 核心设计问题 | 退出信号 |
 | --- | --- | --- | --- | --- |
-| 1 | Semantic Baseline | Make event meaning correct before deeper expansion | What exactly is this event, and who does it really affect? | Priority source families classify cleanly with low generic fallback |
-| 2 | Facts-First Depth | Increase structured coverage for high-value events | Can the event stand on facts instead of titles? | Priority event families expose useful structured facts by default |
-| 3 | Identity and Series Model | Separate lifecycle evolution from periodic event sequences | Is this an updated event, or a new release in a series? | Merge logic and series logic stop fighting each other |
-| 4 | Merge and Timeline Hardening | Make event evolution readable and low-noise | Which updates matter, and which are churn? | Duplicate noise is low and lifecycle is investor-readable |
-| 5 | Query and Scan Foundation | Turn events into a real investment scan surface | Can investors and systems reliably ask for what matters now? | Query semantics are stable across list, detail, and scan modes |
-| 6 | Quality Gates and SLOs | Convert quality from intuition into release criteria | How do we know the event base is trustworthy? | SLOs are defined, measured, and enforced pre-release |
-| 7 | Repair, Backfill, and Operations | Make the base sustainable under continuous change | Can we evolve safely without corrupting history or runtime? | Replay, repair, and ops workflows are standard and repeatable |
+| 1 | Semantic Baseline | 先把“发生了什么”说对 | entity、subject、family、market 边界是否稳定 | 高价值 source family 的基础语义收口 |
+| 2 | Facts-First Depth | 让高价值事件有足够的结构化深度 | 系统是只知道有事件，还是知道事件的关键事实 | 高价值 families 的 structured facts 能支撑投资阅读 |
+| 3 | Identity and Series Model | 区分 lifecycle 与 periodic series | “同一事件更新”和“同类新一期发布”有没有被混淆 | series / period / cadence 模型稳定 |
+| 4 | Merge and Timeline Hardening | 让事件演进低噪、可读 | merge 和 timeline 会不会误导投资者 | timeline 更像投资演进，而不是 debug 日志 |
+| 5 | Query and Scan Foundation | 建立稳定的投资扫描面 | 下游能否按投资语义稳定读取事件 | query / API / MCP scan semantics 稳定 |
+| 6 | Quality Gates and SLOs | 把质量门槛变成发布门槛 | 是否能用指标而不是感觉判断质量 | gate 与质量快照可执行 |
+| 7 | Repair, Backfill, and Operations | 让系统长期可运营 | 语义升级后是否还能持续维护 | repair / backfill / ops 流程闭环 |
 
-## 6. Phase Design
+## 6. 各阶段设计
 
-### Phase 1: Semantic Baseline
+### Phase 1：Semantic Baseline
 
-Objective:
+设计重点：
 
-- make event meaning correct before making it broader or more automated
+- 收紧 `security / issuer / institution / market / industry` 边界
+- 引入并使用 canonical entity registry
+- 压缩高价值 source family 的 `general_news / other` fallback
+- 把投资者默认能看到的 subject / entity / family 先说对
 
-Design focus:
+完成标准：
 
-- keep source semantics declarative in profiles
-- establish a canonical entity registry and nomenclature layer shared by normalization, extraction, merge, query, and repair flows
-- tighten family and subtype assignment for priority sources
-- separate `security`, `issuer`, `institution`, `market`, and `industry` identity roles
-- aggressively reduce `general_news`, `other`, and similarly weak fallback buckets for high-value sources
+- 高价值 source 不再大面积输出错主体、错 market、错 tradable subject
+- entity alias / ticker / code / full code 能收敛到稳定 canonical identity
 
-Why this phase comes first:
+### Phase 2：Facts-First Depth
 
-- if the system names the event incorrectly, all later fact extraction, merging, scanning, and downstream use will be contaminated
+设计重点：
 
-Primary modules:
+- 对高价值 source family 提高 structured fact completeness
+- 公告、政策、宏观、行业数据从“标题驱动”推进到“事实驱动”
+- `whyItMatters`、`whatToWatchNext` 开始建立在 facts 之上
 
-- [`server/services/event-engine/profiles.ts`](../server/services/event-engine/profiles.ts)
-- [`server/services/event-engine/resolver.ts`](../server/services/event-engine/resolver.ts)
-- [`server/services/event-engine/entity-normalization.ts`](../server/services/event-engine/entity-normalization.ts)
-- [`server/services/event-engine/investment-view.ts`](../server/services/event-engine/investment-view.ts)
+完成标准：
 
-Execution goals:
+- 高价值事件默认就有可消费的 structured facts
+- detail 页不再需要依赖自由文本才能理解关键变化
 
-- audit the highest-value source families first
-- turn alias, synonym, code, and cross-market mappings into a shared canonical reference rather than scattered cleanup rules
-- keep entity-role cleanup in the backend, not in frontend projections
-- add targeted replay cases for every major semantic cleanup
-- add repair scripts when a semantics fix changes persisted identity data
+### Phase 3：Identity and Series Model
 
-Exit criteria:
+设计重点：
 
-- priority source families rarely fall back to generic families
-- canonical naming and identity rules are shared across extraction, merge, query, and repair paths
-- entity displays are correct for representative disclosure, policy, and industry samples
-- new semantic fixes can be replayed and repaired without manual one-off cleanup
+- 明确 `lifecycle event` 与 `periodic series event` 的模型差异
+- 对周期发布类事件补齐 `series_key / period_key / release_cadence`
+- 避免“新一期发布”被误并进“同一事件更新”
 
-### Phase 2: Facts-First Depth
+完成标准：
 
-Objective:
+- 周期数据能正确作为同系列不同期次存在
+- 同一事件更新与新一期数据发布不再混淆
 
-- make important events structurally useful, not just textually recognizable
+### Phase 4：Merge and Timeline Hardening
 
-Design focus:
+设计重点：
 
-- expand extractor depth for disclosure, policy, macro, and industry domains
-- prefer numeric, relationship, and status facts over prose summaries
-- make extracted facts link reliably back to affected entities and evidence
-- keep event-native interpretation driven by extracted facts
+- 提高 duplicate merge 的质量
+- 压缩 timeline 中的低价值 churn
+- 保留真正值得投资者看到的确认、补充、修正、撤回
 
-Why this phase is next:
+完成标准：
 
-- once semantic identity is stable, the next bottleneck is shallow event payloads that still depend too much on titles and summaries
+- timeline 对投资者可读
+- 重复“首次识别”“事件确认”“维护性刷新”被明显压低
 
-Primary modules:
+### Phase 5：Query and Scan Foundation
 
-- [`server/services/event-engine/extractors`](../server/services/event-engine/extractors)
-- [`server/services/event-engine/impact.ts`](../server/services/event-engine/impact.ts)
-- [`server/services/event-engine/resolver.ts`](../server/services/event-engine/resolver.ts)
+设计重点：
 
-Execution goals:
+- 建立稳定的 query / scan semantics
+- 支持按 entity、market、family、direction、authority、materiality、tradability、freshness 扫描
+- 支持 `changed_since`、`series_key`、`period_key` 这类投资级读取语义
 
-- prioritize high-value disclosure classes such as shareholding changes, management changes, contracts, and regulation
-- deepen industry and policy facts only where they materially improve decision usefulness
-- make extractors consume the shared canonical entity registry instead of re-inventing source-local naming logic
-- reject placeholder fact payloads that add storage but no investor value
+完成标准：
 
-Exit criteria:
+- backend / frontend / MCP 能用统一扫描语义消费事件
+- 列表与详情的 projection 保持一致
 
-- high-value event families expose meaningful structured facts by default
-- extracted facts link back to canonical entities consistently across source families
-- investor interpretation fields depend more on facts than on title heuristics
-- event detail views stop showing large amounts of low-value fact noise
+### Phase 6：Quality Gates and SLOs
 
-### Phase 3: Identity and Series Model
+设计重点：
 
-Objective:
+- 将 structured coverage、generic fallback、latency 变成显式 gate
+- 区分 automated runtime gate 与 manual sample / replay review gate
+- 暴露统一 quality snapshot 和 release gate 结果
 
-- define the durable model boundary between evolving events and recurring event sequences
+完成标准：
 
-Design focus:
+- `events:check-quality` 可执行
+- `/api/ops/events/status` 能展示 snapshot、blocking gates、release readiness
 
-- keep `lifecycle events` as one event with meaningful state evolution
-- model `series events` as separate events linked by shared series identity
-- introduce stable relation fields such as `series_id`, `recurrence_key`, or `period_key` where needed
-- keep periodic releases queryable as history, not collapsed into one endlessly updated event
+### Phase 7：Repair, Backfill, and Operations
 
-Why this phase matters for investing:
+设计重点：
 
-- periodic data and recurring disclosures are new decision points, not mere updates
-- process-driven situations such as investigations, buybacks, mergers, and policy formalization should remain one evolving event
+- 增加 ops triage surfaces
+- 标准化 repair / backfill / replay 流程
+- 让历史脏数据可以被修，而不是只能靠投影遮盖
 
-Primary modules:
+完成标准：
 
-- [`server/services/event-engine/merger.ts`](../server/services/event-engine/merger.ts)
-- [`server/database/events.ts`](../server/database/events.ts)
-- [`server/services/event-engine/text.ts`](../server/services/event-engine/text.ts)
+- `events:ops-report` 可执行
+- runbook 成为仓内标准流程
+- 语义升级与 repair/backfill 可以闭环
 
-Execution goals:
+## 7. 持续执行节奏
 
-- codify the distinction instead of leaving it to ad hoc merge heuristics
-- start with the highest-value recurring domains such as financial reports, periodic industry data, and benchmark rate releases
-- keep query contracts stable while evolving internal storage and relation modeling
+每个阶段或每一批语义改动，都必须遵循同样的 cadence：
 
-Exit criteria:
+1. 先明确本批要提升的是哪类能力
+   例如：提速、提准、提深度、提投资可用性、提运维可靠性
+2. 先补 replay / targeted tests / fixtures
+3. 再改 extractor / resolver / merger / impact / query
+4. 必跑：
+   - targeted tests
+   - 必要的 replay / shadow
+   - `pnpm typecheck`
+   - `pnpm build`
+5. 如果涉及 repair 或 backfill，要在 runbook 里有明确流程
 
-- recurring releases stop being incorrectly merged into old events
-- evolving process events stop fragmenting into low-value duplicates
-- historical comparison across periods becomes straightforward
+## 8. 执行日志
 
-### Phase 4: Merge and Timeline Hardening
+### 2026-04-17 — Phase 1 完成，Phase 2 开始
 
-Objective:
+Phase 1 完成内容：
 
-- make event evolution low-noise, trustworthy, and readable in trading contexts
+- 建立 entity registry 与核心 nomenclature 规则
+- 收紧 source profile、resolver、entity normalization
+- 修正多类主体、市场、tradable subject 误识别问题
 
-Design focus:
+带入 Phase 2 的残余风险：
 
-- improve duplicate consolidation across sources
-- handle corrections, retractions, supplements, and late authoritative confirmations explicitly
-- compress low-value lifecycle churn
-- keep timeline states and notes understandable to investors and future systems
+- structured fact completeness 仍不足
+- 高价值 families 的解释深度还不够
 
-Why this phase cannot be skipped:
+### 2026-04-17 — Phase 2 完成，Phase 3 开始
 
-- even with correct identity and facts, a noisy event history destroys scanability and weakens trust in the event base
+Phase 2 完成内容：
 
-Primary modules:
+- 高价值 source family 的 facts-first 结构显著加强
+- announcement / policy / macro / industry families 的 key facts 更完整
+- `impact` 与 `investment-view` 开始更多消费 structured facts
 
-- [`server/services/event-engine/merger.ts`](../server/services/event-engine/merger.ts)
-- [`server/database/events.ts`](../server/database/events.ts)
-- [`server/services/event-engine/scheduler.ts`](../server/services/event-engine/scheduler.ts)
+带入 Phase 3 的残余风险：
 
-Execution goals:
+- 周期事件与 lifecycle 事件仍需显式建模区分
 
-- improve same-event merge quality for multi-source reporting
-- preserve only meaningful lifecycle transitions
-- make duplicate handling and canonical consolidation fully auditable
+### 2026-04-17 — Phase 3 完成，Phase 4 开始
 
-Exit criteria:
+Phase 3 完成内容：
 
-- duplicate noise is visibly reduced in representative samples
-- timeline summaries are short, meaningful, and evidence-backed
-- corrections and retractions do not leave canonical state ambiguous
+- `series_key / period_key / release_cadence` 进入持久化与 query 语义
+- 周期事件开始具备清晰 series 关系
 
-### Phase 5: Query and Scan Foundation
+带入 Phase 4 的残余风险：
 
-Objective:
+- timeline 噪音和 duplicate merge 仍需继续打磨
 
-- make `events` usable as a professional scan surface instead of only a storage backend
+### 2026-04-17 — Phase 4 完成，Phase 5 开始
 
-Design focus:
+Phase 4 完成内容：
 
-- stabilize query semantics for list, detail, and scan routes
-- support investor-grade filtering by entity, market, family, direction, authority, materiality, tradability, freshness, and change recency
-- distinguish cleanly between latest-first, investment-priority, and recently-changed retrieval modes
-- preserve storage abstraction so query implementation can evolve later
+- duplicate merge provenance 与 investor timeline 展示分离
+- timeline 噪音显著压缩
 
-Why this phase follows model hardening:
+带入 Phase 5 的残余风险：
 
-- a scan surface is only as good as the underlying event model; adding richer filters earlier would amplify upstream noise
+- query / scan 语义还需要系统化
 
-Primary modules:
+### 2026-04-17 — Phase 5 完成，Phase 6 开始
 
-- [`server/services/event-engine/query.ts`](../server/services/event-engine/query.ts)
-- [`server/api/investment-events`](../server/api/investment-events)
-- [`server/services/event-engine/ranking.ts`](../server/services/event-engine/ranking.ts)
+Phase 5 完成内容：
 
-Execution goals:
+- query / scan foundation 到位
+- provider route、frontend、MCP 开始稳定复用 investment projection
 
-- keep provider-facing contracts stable and explicit
-- make scan semantics backend-owned rather than recreated client-side
-- ensure list and detail projections agree on the same canonical state
+带入 Phase 6 的残余风险：
 
-Exit criteria:
+- 质量门槛仍更多依赖人工信心，而不是显式 gate
 
-- event scans answer practical investor questions without custom post-processing
-- list and detail surfaces stay consistent under the same underlying event state
-- query contracts do not leak current storage implementation details
+### 2026-04-17 — Phase 6 完成，Phase 7 开始
 
-### Phase 6: Quality Gates and SLOs
+Phase 6 完成内容：
 
-Objective:
+- 引入 event-base SLO 与 automated runtime gate
+- `/api/ops/events/status` 暴露 quality snapshot、SLO、release gate
+- 增加 `pnpm events:check-quality`
 
-- turn event quality into measured release discipline
+当时的 gate 结果：
 
-Design focus:
+- `highValueStructuredCoveragePct = 100`
+- `highValueGenericFallbackSharePct = 0`
+- `prioritySourceIngestLatencyP95Ms` 仍为 fail
 
-- define and publish SLOs for the event base
-- measure quality continuously with replay, shadow, repair, and metrics
-- require semantics-changing work to clear objective gates before rollout
+带入 Phase 7 的残余风险：
 
-Initial SLO set:
+- 质量门槛能看见问题，但运维流程还没形成标准动作
 
-- high-value source structured coverage >= 85%
-- high-value source generic fallback share <= 5%
-- sampled entity mislink rate for `security / issuer / institution` <= 2%
-- sampled false merge rate <= 1%
-- sampled missed merge rate <= 3%
-- replay pass rate = 100%
-- deterministic replay consistency = 100%
-- priority-source ingest-to-canonical latency P95 <= 5 minutes
+### 2026-04-17 — Phase 7 完成，foundation roadmap 关闭
 
-Primary modules:
+Phase 7 完成内容：
 
-- [`server/services/event-engine/metrics`](../server/services/event-engine/metrics)
-- replay and shadow tests in [`server/services/event-engine`](../server/services/event-engine)
-- repair utilities in [`scripts`](../scripts)
+- 增加 ops latency diagnostics
+- 将 diagnostics 接入 `/api/ops/events/status`
+- 增加 `pnpm events:ops-report`
+- 初步形成标准 triage surface
 
-Execution goals:
+foundation 关闭后的残余风险：
 
-- keep SLOs visible in planning, not only in postmortems
-- expand metrics where quality risks remain opaque
-- treat SLO regression as a first-class release blocker
+- priority-source latency 在真实数据上仍需继续治理
+- sampled entity / merge / replay review 仍需要人工流程
+- 下一阶段需要进入 source-by-source latency remediation 与 runbook discipline
 
-Exit criteria:
+### 2026-04-18 — Post-close correction：backlog classification 改为基于持久化 poll history
 
-- SLOs are explicitly tracked and reviewed
-- releases that change semantics are gated by replay and metrics
-- event quality discussions rely on measured data instead of anecdotal browsing
+关闭后的修正内容：
 
-### Phase 7: Repair, Backfill, and Operations
+- backlog 判定不再基于 `raw_items` arrival gap
+- 引入 `source_fetch_runs`
+- even zero-item poll 也会落 run
+- `events.ingested_at` 明确回到“首次 canonical detection”的语义
 
-Objective:
+这一步让 stratified latency gate 真正可被信任。
 
-- make the event base sustainable under continuous schema, semantics, and source evolution
+## 9. Post-foundation 执行规则
 
-Design focus:
+foundation 关闭后，不再以“新 phase”推进，而以连续 hardening batch 推进。
 
-- standardize replay, repair, backfill, and rollback workflows
-- keep version records for semantics-changing logic
-- expose runtime freshness and worker health clearly
-- maintain storage and repository boundaries so future scaling work remains possible
+### 9.1 分层 latency thresholds
 
-Why this is the closing phase for the foundation:
+不再使用单一 aggregate latency target，而是使用：
 
-- a professional base is not only accurate when freshly built; it must remain accurate while history accumulates and source behavior changes
+- Tier A：trade-critical
+- Tier B：high-value non-intraday
+- Tier C：long-form / heavy parsing
 
-Primary modules:
-
-- [`server/database/events.ts`](../server/database/events.ts)
-- [`server/services/event-engine/scheduler.ts`](../server/services/event-engine/scheduler.ts)
-- repair scripts under [`scripts`](../scripts)
-- execution tracking in [`docs/investment-event-delivery-board.md`](./investment-event-delivery-board.md)
-
-Execution goals:
-
-- make repairs idempotent and reversible where possible
-- keep backfill bounded and version-aware
-- document standard operating procedures for stale data, bad merges, entity cleanup, and delayed source ingestion
-
-Exit criteria:
-
-- historical repairs can be run safely and repeatedly
-- backfill and replay paths are part of routine change management
-- the event system is operationally trustworthy even before any external subscriber exists
-
-## 7. Continuous Execution Cadence
-
-This roadmap is intended to be continuously executable, not a one-off planning artifact.
-
-Recommended cadence:
-
-- one active phase theme at a time
-- two-week execution blocks by default
-- every block ends with:
-  - code and tests
-  - replay or shadow validation where semantics changed
-  - repair notes if persisted data is affected
-  - delivery board update
-  - documented residual risks
-
-Recommended work ordering inside each block:
-
-1. define the semantic or data-model delta
-2. add or update fixtures
-3. implement backend changes
-4. run replay, validation, and data repair if needed
-5. update projection and query surfaces only after canonical truth is stable
-6. record metrics, risks, and next tranche entry point
-
-## 8. Execution Log
-
-### 2026-04-17 — Phase 1 completed, Phase 2 opened
-
-Completed in Phase 1:
-
-- established a shared canonical entity registry and nomenclature layer across extraction, normalization, query, and repair paths
-- normalized security alias handling in event extraction and persistence repair flows instead of relying on display-layer cleanup
-- reduced high-value source semantic fallback by hardening `xueqiu`, `szse`, generic exchange disclosure, and industry report classification behavior
-- narrowed `shareholding_change` detection so generic shareholder-meeting notices stay on disclosure semantics instead of being mislabeled as ownership changes
-- added explicit degradation for known `primaryEntityName` cases so issuer/company linkage remains usable even when local TDX lookup is unavailable
-
-Validation completed:
-
-- `pnpm exec vitest run server/database/events.test.ts server/services/event-engine/profiles.test.ts server/services/event-engine/resolver.test.ts server/services/event-engine/investment-view.test.ts server/services/event-engine/replay.test.ts`
-- `pnpm typecheck`
-- `pnpm build`
-
-Residual risks carried into Phase 2:
-
-- structured facts are still shallow in several disclosure families even when family/subtype semantics are now correct
-- fact-to-entity linkage still depends on source-specific extractor depth in more domains than desired
-- phase 1 covered priority semantic gaps, not every long-tail source family
-
-Phase 2 entry point:
-
-- deepen facts-first extraction for disclosure classes and ensure fact payloads, not titles, drive more of the investor interpretation surface
-
-### 2026-04-17 — Phase 2 completed, Phase 3 opened
-
-Completed in Phase 2:
-
-- upgraded `exchange_announcement` from a shallow announcement label into a normalized structured fact payload with disclosure metadata
-- added bounded title-level structure for `financing`, `buyback`, `dividend`, and `shareholding_change` without overreaching beyond current raw metadata limits
-- introduced a fact-driven `exchange_announcement` impact lane so disclosure interpretation depends less on subtype defaults and more on structured fields
-- tightened investor detail fact summaries so disclosure key facts now reflect structured payload fields instead of generic fixed copy
-
-Validation completed:
-
-- `pnpm exec vitest run server/services/event-engine/extractors/exchange-announcement.test.ts server/services/event-engine/impact.test.ts server/services/event-engine/investment-view.test.ts server/services/event-engine/replay.test.ts`
-- `pnpm typecheck`
-- `pnpm build`
-
-Residual risks carried into Phase 3:
-
-- `management_change`, `regulation`, and `contract` still rely on lighter title-driven structure than the capital-action disclosure families
-- periodic release identity and lifecycle identity are still governed by merge heuristics rather than an explicit durable series model
-- high-value disclosure facts are deeper now, but recurring event families still need a clearer lifecycle-vs-series boundary
-
-Phase 3 entry point:
-
-- formalize the durable split between lifecycle events and series events so recurring disclosures and recurring industry releases stop competing with merge logic
-
-### 2026-04-17 — Phase 3 completed, Phase 4 opened
-
-Completed in Phase 3:
-
-- added explicit periodic series metadata derivation for `official_rate_fixing`, `industry_stat_release`, `industry_report_release`, and `industry_policy_notice`
-- persisted `series_key`, `period_key`, and `release_cadence` on canonical event rows without changing current duplicate-deduped `eventId` behavior
-- proved the intended split in replay: same-period duplicates still collapse into one canonical event, while next-period releases keep different `eventId` values but share one durable `seriesKey`
-- kept lifecycle state and series identity separate so future merge/timeline work can target lifecycle noise directly instead of overloading identity hints
-
-Validation completed:
-
-- `pnpm exec vitest run server/database/events.test.ts server/services/event-engine/replay.test.ts server/services/event-engine/impact.test.ts server/services/event-engine/investment-view.test.ts`
-- `pnpm typecheck`
-- `pnpm build`
-
-Residual risks carried into Phase 4:
-
-- lifecycle timeline entries are still noisier than they should be because merge confirmations and snapshot updates share the same narrow state vocabulary
-- periodic series identity is now explicit, but timeline/projection layers still do not summarize recurring-series context for investors
-- recurring disclosure families beyond the current first-class periodic set still rely on document identity and merge heuristics
-
-Phase 4 entry point:
-
-- reduce lifecycle churn, make merge provenance more explicit, and keep investor-facing timelines readable when authoritative confirmations, duplicate merges, and snapshot refreshes all occur on one canonical event
-
-### 2026-04-17 — Phase 4 completed, Phase 5 opened
-
-Completed in Phase 4:
-
-- split duplicate merge provenance from lifecycle truth so canonical merges no longer overwrite a previously confirmed lifecycle state
-- stopped copying duplicate-event lifecycle rows into canonical timelines, keeping canonical event history compact while preserving one explicit merge provenance row
-- reduced investor-facing timeline noise by compressing maintenance-only snapshot refreshes into short maintenance updates instead of presenting them like substantive event changes
-- kept substantive snapshot refreshes, authoritative confirmations, and duplicate merges separately readable in detail projections
-
-Validation completed:
-
-- `pnpm exec vitest run server/database/events.test.ts server/services/event-engine/investment-view.test.ts server/services/event-engine/replay.test.ts server/services/event-engine/impact.test.ts`
-- `pnpm typecheck`
-- `pnpm build`
-
-Residual risks carried into Phase 5:
-
-- scan/query surfaces still do not expose the newly durable series context as first-class filtering or grouping primitives
-- read semantics for `latest`, `changed recently`, and `series history` are still implicit rather than contractually separated
-- investor scans can now rely on cleaner lifecycle truth, but they still lack explicit sequence-aware retrieval for recurring releases
-
-Phase 5 entry point:
-
-- turn the event base into a clearer scan surface by making list/detail/query semantics explicit for latest events, recently changed events, and recurring-series history
-
-### 2026-04-17 — Phase 5 completed, Phase 6 opened
-
-Completed in Phase 5:
-
-- exposed durable recurring-series metadata (`seriesKey`, `periodKey`, `releaseCadence`) on the canonical investment brief so scans and detail projections can carry sequence identity without re-deriving it downstream
-- made scan semantics explicit across the query layer and provider routes with three stable retrieval modes: `investment`, `latest`, and `changed`, plus first-class `changed_since/lifecycle_after` and `series_key/period_key` filters
-- aligned MCP scan tools to the same provider-facing semantics and added an investor-friendly series summary in agent projections instead of leaking raw series internals into default text output
-- added database coverage proving changed-first ordering, lifecycle recency filtering, and recurring-series filtering work against canonical event storage instead of ad hoc client post-processing
-
-Validation completed:
-
-- `pnpm exec vitest run server/database/events.test.ts server/mcp/projection.test.ts server/mcp/investment-tools.test.ts server/services/event-engine/investment-view.test.ts`
-- `pnpm typecheck`
-- `pnpm build`
-
-Residual risks carried into Phase 6:
-
-- target SLOs are written down, but they are not yet enforced as release gates or surfaced as operator-visible quality signals
-- entity precision, false-merge, missed-merge, and generic-fallback rates still rely on spot checks rather than automated threshold reporting
-- replay consistency and ingest latency are measurable, but the event base still lacks one explicit quality-gate path that blocks semantics-changing rollout on regression
-
-Phase 6 entry point:
-
-- turn quality expectations into explicit metrics, gates, and release discipline so semantic upgrades stop depending on manual confidence alone
-
-### 2026-04-17 — Phase 6 completed, Phase 7 opened
-
-Completed in Phase 6:
-
-- added a bounded event-base SLO definition layer for automated runtime gates around structured coverage, generic fallback share, and ingest latency P95, while also declaring the manual sample and replay-review gates that still require human workflow
-- exposed the quality snapshot, SLO evaluation, and release-gate outcome in `/api/ops/events/status`, so operators can inspect raw metrics, blocking gates, and release readiness from one surface
-- added executable gate commands (`pnpm events:check-quality` / `pnpm events:check-slos`) that print the current snapshot and exit non-zero when automated blocking SLOs regress
-- tightened the quality snapshot to a recent publication window for high-value sources, so latency and fallback gates reflect live operational quality rather than historical backfill noise
-- kept the gate contract auditable by separating automated runtime blockers from non-automated manual-review requirements in one shared evaluator
-
-Validation completed:
-
-- `pnpm exec vitest run server/services/event-engine/slo.test.ts server/database/events.test.ts server/mcp/projection.test.ts server/mcp/investment-tools.test.ts server/services/event-engine/investment-view.test.ts`
-- `pnpm typecheck`
-- `pnpm build`
-- `pnpm events:check-quality`
-
-Current local gate result:
-
-- the command now executes successfully and fails only for real data reasons rather than script/runtime errors
-- `highValueStructuredCoveragePct = 100` (`pass`)
-- `highValueGenericFallbackSharePct = 0` (`pass`)
-- `prioritySourceIngestLatencyP95Ms = 2318929` ms, about 38.6 minutes (`fail`, release-blocking)
-
-Residual risks carried into Phase 7:
-
-- the first automated gate set is intentionally narrow and does not yet cover entity precision, merge precision, replay consistency, or shadow drift
-- the repo now knows it is blocked by priority-source latency, but it still lacks a standard operational playbook for diagnosing slow source families, replay side effects, and backlog flushes
-- manual-review gates for sampled entity and merge quality are declared, but the process for recording and repeating those reviews is still missing
-
-Phase 7 entry point:
-
-- turn the new gate outputs into routine operational workflows for latency triage, replay/backfill control, repair execution, and manual quality review
-
-### 2026-04-17 — Phase 7 completed, foundation roadmap closed
-
-Completed in Phase 7:
-
-- exposed operational latency diagnostics from the canonical event store, including high-value source-kind and source-id breakdowns over the live ingest window
-- wired those diagnostics into `/api/ops/events/status`, so operators can inspect worker health, quality gates, and slow source families from one operational surface
-- added a repo-runnable triage command, `pnpm events:ops-report`, that prints the current slow source-family breakdown without requiring ad hoc database inspection
-- added database coverage proving the triage layer can identify stale high-value source kinds and individual slow sources from canonical event persistence
-
-Validation completed:
-
-- `pnpm exec vitest run server/database/events.test.ts server/services/event-engine/slo.test.ts server/services/event-engine/quality-gates.test.ts`
-- `pnpm typecheck`
-- `pnpm build`
-- `pnpm events:ops-report -- --hours 24 --limit 5`
-
-Current local operational readout after Phase 7:
-
-- the event base now exposes a standard latency-triage surface instead of only one failing aggregate gate
-- the latest local `events:ops-report` run shows `official_policy_notice`, `official_macro_release`, `official_central_bank_operation`, and `official_rate_fixing` as the slowest high-value source kinds in the recent 24-hour window
-- the same run shows `cninfo-hk-gem` and several `official_policy_notice` sources as concrete slow-source candidates for the next remediation tranche
-
-Residual post-foundation risks:
-
-- priority-source ingest latency P95 is still above target on real local data, so the quality gate remains operationally visible even though it is now diagnosable
-- manual review gates for entity precision, false merges, missed merges, and replay consistency still require explicit operator workflow outside runtime automation
-- the event base is now operationally inspectable, but the next tranche still needs actual source-by-source latency reduction and repeatable repair/runbook discipline
-
-Post-foundation entry point:
-
-- use the new diagnostics to burn down priority-source latency blockers, formalize repair/backfill runbooks, and continue semantic precision hardening without reopening the foundation model
-- execute the next tranche under stratified latency thresholds instead of one flat aggregate target
-- keep semantic hardening focused on high-value source families first, while preventing long-tail fallback from polluting canonical entity truth
-- keep operational workflow in-repo under [`docs/event-operations-runbook.md`](./event-operations-runbook.md)
-
-### Post-foundation execution rules
-
-#### 1. Stratified latency thresholds
-
-The next tranche should not use one flat latency target for every source family.
-
-Use:
-
-- Tier A `Trade-critical`: exchange disclosures, intraday market flashes, central-bank operations, rate fixings; target `initial canonical event P95 <= 5 minutes`
-- Tier B `High-value non-intraday`: key macro releases and important policy notices; target `initial canonical event P95 <= 10-15 minutes`
-- Tier C `Long-form / heavy parsing`: long policy documents and complex deep-parsing sources; target `initial canonical event P95 <= 30 minutes`
-
-Latency should be measured in two stages:
+同时必须区分：
 
 - `initial canonical latency`
 - `full semantic enrichment latency`
 
-The event base should optimize time-to-first-truth before time-to-full-depth.
+### 9.2 优先硬化高价值 source family
 
-#### 2. High-value semantic hardening first
+高价值 source family 是 semantic hardening 的优先对象。
+长尾 source 可以保守，但绝不能写脏 canonical entity truth。
 
-The next tranche should prioritize high-value source families for semantic precision work.
+### 9.3 运维必须 runbook 化
 
-Long-tail sources may remain conservative, but they must not:
+repair、backfill、manual review、latency triage 都必须落进仓内 runbook，而不是继续依赖临时经验。
 
-- write incorrect canonical subjects
-- write incorrect entity links
-- write incorrect market links
-- poison the canonical entity registry through aggressive fallback
+## 10. Deferred Work
 
-#### 3. Runbook-driven operations
+下面这些工作是刻意后置的，不属于 foundation 主线：
 
-Post-foundation operation should be runbook-driven, not ad hoc.
+- subscription / external delivery
+- thesis integration
+- alerting policy
+- portfolio / execution logic
+- PDF / tables / OCR / multimodal parsing 的大规模扩展
+- public `event.*` contract 在 `nexus-fi-mcp` 的最终归一化
 
-The default workflow for latency triage, repair, backfill, and manual review lives in:
-
-- [docs/event-operations-runbook.md](./event-operations-runbook.md)
-
-## 9. Deferred Work
-
-The following work is explicitly deferred until the event base is stable enough:
-
-- event subscription delivery
-- thesis-system integration
-- external consumer webhooks or feeds
-- user-level alert policy
-- complex document expansion for PDF, tables, OCR, and multimodal layout parsing
-
-Any future document-expansion work must still land back into the same canonical event, fact, and evidence contracts. It should extend extraction depth, not create a second event model.
-
-Those future systems should consume the event base after it is trustworthy. They should not shape the current foundation roadmap.
+这些能力都应建立在一个已经稳定、可信、可 repair 的事件基座之上，而不是反过来驱动 `events` 的边界。

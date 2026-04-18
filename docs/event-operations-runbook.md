@@ -1,231 +1,251 @@
-# Event Operations Runbook
+# 事件运维手册
 
-Status: Active
-Last updated: 2026-04-18
-Scope: post-foundation operational workflow for latency remediation, repair, backfill, and manual review in the `events` system
+状态：使用中
+最后更新：2026-04-19
+范围：`events` 系统在 post-foundation 阶段的 latency remediation、repair、backfill、manual review 运维流程
+文档角色：运维流程与发布验证手册
+更新时机：运维命令、triage 步骤、repair 流程或验证规则变化时
 
-Related docs:
+相关文档：
 
 - [docs/investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
 - [docs/investment-event-delivery-board.md](./investment-event-delivery-board.md)
+- [docs/README.md](./README.md)
 
-## 1. Purpose
+## 1. 目的
 
-This runbook defines the default operator workflow for the post-foundation `events` tranche.
+这份 runbook 定义 post-foundation 阶段 `events` 的默认运维流程。
 
-Its job is to make slow-source triage, semantic repair, backfill, and manual review repeatable inside the repo instead of relying on ad hoc shell history or one-off debugging.
+它的职责是让 slow-source triage、semantic repair、backfill、manual review 这些动作都能在仓库内重复执行，而不是依赖临时 shell 历史或一次性 debug 经验。
 
-## 2. Operating rules
+## 2. 运行规则
 
-### 2.1 Canonical truth stays in the backend
+### 2.1 Canonical truth 必须留在 backend
 
-All triage, repair, and backfill work must preserve the backend event engine as the single source of truth for canonical events, facts, evidence, entity linkage, and investment semantics.
+所有 triage、repair、backfill 动作，都必须保持 backend event engine 仍然是 canonical events、facts、evidence、entity linkage 和 investment semantics 的唯一事实源。
 
-### 2.2 Trade-critical latency comes first
+### 2.2 Trade-critical latency 优先级最高
 
-Latency remediation should prioritize source families that directly affect live or near-open investment decisions before low-frequency and long-form sources.
+Latency remediation 要优先处理那些直接影响盘中或开盘决策的 source family，再处理低频或长文档 source。
 
-### 2.3 Long-tail sources may be conservative, not wrong
+### 2.3 长尾 source 可以保守，但不能写错
 
-Long-tail sources may stay on generic fallback longer than high-value families, but they must not write incorrect canonical subjects, entity links, or market links into the event base.
+长尾 source 可以比高价值 source 更保守地使用 generic fallback，但绝不能把错误的 canonical subject、entity link 或 market link 写进事件基座。
 
-### 2.4 Runbook records must move with code
+### 2.4 Runbook 必须跟代码一起演进
 
-When this workflow changes, update this document in the same repo and under version control. Do not split operational truth into an external handbook.
+只要运维流程变化，就必须在同仓库、同版本控制下更新这份文档。不要把运维真相拆到仓外的独立手册里。
 
-### 2.5 Initial canonical latency only uses trustworthy publication clocks
+### 2.5 `initial canonical latency` 只能使用可信 publication clock
 
-Minute-level latency automation is only valid for source families whose publication timestamps are precise enough to support minute-level reasoning.
+分钟级 latency automation 只对那些发布时间足够精确、能支撑分钟级判断的 source family 有意义。
 
-Rules:
+规则：
 
-- if a source exposes precise publication time, use it in automated `initial canonical latency` gates
-- if a source only exposes day-level publication date, do not let that coarse clock distort minute-level release blocking
-- coarse-clock sources must remain visible in diagnostics and be tracked for future timestamp enrichment, but they must not poison Tier A automation
+- 如果 source 暴露了精确发布时间，就把它用于自动化 `initial canonical latency` gate
+- 如果 source 只有 day-level 的发布日期，就不要让这种粗时间戳污染分钟级 release blocking
+- coarse-clock source 必须继续在 diagnostics 里可见，并为未来 timestamp enrichment 保留追踪，但不能污染 Tier A automation
 
-### 2.6 `ingested_at` means first canonical detection, not latest refresh
+### 2.6 `ingested_at` 表示首次 canonical detection，不是最新 refresh
 
-`events.ingested_at` is the first trustworthy canonical ingest time for an event.
+`events.ingested_at` 表示事件第一次被可信地识别进 canonical event store 的时间。
+`events.last_seen_at` 表示后续轮询时再次看到它的 refresh marker。
 
-`events.last_seen_at` is the refresh marker for later polling passes.
+不要在 routine refresh 时覆盖 `ingested_at`。
+如果旧数据被 refresh overwrite 污染过，就在信任 latency diagnostics 之前先做 repair。
 
-Do not overwrite `ingested_at` on routine refresh. If old data was polluted by refresh overwrites, repair it before trusting latency diagnostics.
+### 2.7 稳态 latency automation 必须排除 outage catch-up batch
 
-### 2.7 Steady-state latency automation must exclude outage catch-up batches
+分钟级 latency automation 测量的是稳态 pipeline 表现，而不是系统长时间停摆后重启时的 backlog catch-up。
 
-Minute-level latency automation is meant to measure steady-state pipeline behavior, not restart backlog catch-up after the source has gone unpolled for a long gap.
+规则：
 
-Rules:
+- 如果 precise-clock source 在经历异常长的 fetch gap 后才被抓取，这批事件应标记为 `backlog catch-up`
+- `backlog catch-up` 仍然要出现在 diagnostics 和 ops review 里
+- `backlog catch-up` 不进入自动化 Tier A release blocking sample
+- backlog 判定必须基于 source-specific fetch interval，并保留足够保守的 grace window
+- backlog 判定必须基于持久化的 source poll history，而不是 `raw_items` arrival gap
+- 即使某次 poll 返回 0 条，也必须记录 source fetch run；否则 sparse precise-clock source 会被误判成 outage catch-up
+- 对于 `source_fetch_runs` 出现前的 legacy 历史，只允许对高密度 exchange-disclosure family 使用 `raw_items` batch-gap fallback；不要把这个 fallback 重新用于 central-bank operations、rate fixings 这类 sparse precise-clock source
 
-- if a precise-clock source is fetched after an unusually long gap, mark those rows as `backlog catch-up`
-- backlog catch-up rows stay visible in diagnostics and ops review
-- backlog catch-up rows do not enter automated Tier A release blocking samples
-- use source-specific fetch interval as the baseline, with a conservative grace window before treating a batch as outage catch-up
-- base backlog detection on persisted source poll history, not on `raw_items` arrival gaps
-- record source fetch runs even when a poll returns zero items, otherwise sparse precise-clock sources will be misclassified as outage catch-up
-- for legacy history that predates `source_fetch_runs`, only use `raw_items` batch-gap fallback on dense exchange-disclosure families; do not reuse that fallback for sparse precise-clock sources such as central-bank operations or rate fixings
-
-This preserves honest runtime visibility without letting recovery batches permanently poison steady-state release gating.
+这样既能保留真实运行可见性，又不会让恢复阶段的 catch-up batch 长期污染稳态 release gate。
 
 ## 3. Latency tiers
 
-Use stratified thresholds instead of one flat target.
+不要使用一个平的统一目标，必须按层分治。
 
-### Tier A: Trade-critical
+### Tier A：Trade-critical
 
-Examples:
+典型 source：
 
 - exchange disclosures
 - intraday market flashes
 - central-bank operations
 - rate fixings
 
-Primary target:
+目标：
 
-- `initial canonical event P95 <= 5 minutes`
+- `initial canonical latency P95 <= 5 分钟`
 
-### Tier B: High-value non-intraday
+### Tier B：High-value non-intraday
 
-Examples:
+典型 source：
 
 - key macro releases
 - important policy notices
 
-Primary target:
+目标：
 
-- `initial canonical event P95 <= 10-15 minutes`
+- `initial canonical latency P95 <= 10-15 分钟`
 
-### Tier C: Long-form / heavy parsing
+### Tier C：Long-form / heavy parsing
 
-Examples:
+典型 source：
 
-- long policy documents
-- complex long-form parsing sources
+- 长政策通稿
+- 复杂表格/深解析 source
 
-Primary target:
+目标：
 
-- `initial canonical event P95 <= 30 minutes`
+- `initial canonical latency P95 <= 30 分钟`
 
-### Dual latency measurement
+### 双 latency 口径
 
-Track both of the following:
+所有 tier 都必须分开看两类 latency：
 
-- `initial canonical latency`: time to first trustworthy canonical event
-- `full semantic enrichment latency`: time to deeper structured enrichment
+- `initial canonical latency`
+- `full semantic enrichment latency`
 
-Do not allow heavy parsing to hide slow time-to-first-truth behavior.
+这样可以保证：time-to-first-truth 的速度，不会被复杂 enrichment 的耗时掩盖。
 
-## 4. Standard triage loop
+## 4. 标准 triage 循环
 
-### Step 1: Inspect current operational state
+### Step 1：先看当前运行状态
 
-Use:
+默认先跑下面 3 个入口：
 
 - `pnpm events:ops-report -- --hours 24 --limit 20`
+- `pnpm events:check-quality`
 - `curl http://127.0.0.1:3000/api/ops/events/status`
 
-Record:
+最低限度要看清楚：
 
-- slowest source kinds
-- slowest source ids
-- current quality-gate failures
-- which latency tier is affected
-- whether the source bucket is using a precise publication clock or a coarse day-level clock
-- how many rows are excluded from automated latency sampling because they only have coarse publication clocks
-- how many rows are excluded from automated latency sampling because they belong to backlog catch-up batches after long fetch gaps
+- 当前是哪个 gate 在失败
+- 哪些 source kind / source id 最慢
+- 慢的是 `initial canonical latency` 还是 `full semantic enrichment latency`
+- 是否已经被标记成 `backlog catch-up`
+- 是否同时伴随 semantic fallback、entity precision 或 merge regression
 
-### Step 2: Classify the issue
+### Step 2：对问题分类
 
-Decide whether the problem is mainly:
+把问题先分到下面几类之一：
 
-- source polling cadence
-- worker scheduling / backlog
-- coarse publication timestamp precision
-- outage catch-up after a long source fetch gap
-- parsing cost
-- persistence bottleneck
-- semantic reprocessing / repair side effects
+- `latency regression`
+- `publication clock issue`
+- `backlog catch-up`
+- `semantic fallback regression`
+- `entity precision regression`
+- `merge / lifecycle regression`
+- `repair-needed historical pollution`
 
-### Step 3: Pick the remediation scope
+如果分类不清，先不要动代码。
 
-Prioritize in this order:
+### Step 3：决定 remediation 范围
 
-1. Tier A source families
-2. Tier B source families
-3. Tier C source families
-4. semantic precision defects in high-value source families
-5. long-tail hygiene that risks polluting canonical truth
+按最小闭环处理，不要一次改太散：
 
-### Step 4: Validate before rollout
+- 只修单个 source family
+- 或只修单类 extractor / resolver / merge 问题
+- 或只修一类历史 repair 污染
 
-Minimum validation for every remediation batch:
+不要在一次 batch 中同时重写调度、extractor、frontend 逻辑。
 
-- targeted `vitest` suites
-- replay-sensitive tests when event meaning changes
-- `pnpm typecheck`
-- `pnpm build`
+### Step 4：在 rollout 前验证
+
+每个 remediation batch 至少要通过：
+
+- 对应的 targeted test
+- 必要时的 replay / shadow 相关测试
 - `pnpm events:ops-report`
 - `pnpm events:check-quality`
+- `pnpm typecheck`
+- `pnpm build`
 
-If quality gates still fail, record whether the remaining failure is expected and why.
+如果质量门限是红的，视为阻断，不允许带着红灯进入下一个 batch。
 
-## 5. Repair and backfill workflow
+## 5. Repair 与 backfill 流程
 
-### When to run repair
+### 什么时候跑 repair
 
-Run repair when one of the following is true:
+满足下面任意一条，就应该先考虑 repair：
 
-- canonical entity truth was polluted by a known extraction bug
-- event timeline or merge history contains systematic duplicate or malformed records
-- a semantic fix should be applied to historical local data, not just future ingest
-- refresh loops previously overwrote `ingested_at`, causing latency diagnostics to measure event age instead of initial canonical ingest latency
-- merge logic previously failed to carry the earliest canonical ingest time into the surviving event row
+- 历史数据已经污染 canonical latency 指标
+- 历史 entity / subject / merge 脏数据会继续漏到当前 projection
+- 新逻辑已经修好，但历史 store 还残留旧错误
 
-### When to run backfill
+### 什么时候跑 backfill
 
-Run backfill when:
+满足下面任意一条，就应该考虑 backfill：
 
-- a source family gained materially deeper extraction
-- a previously generic family now has a more precise semantic path
-- a replay sample proves older events should be reinterpreted
+- source profile / extractor 语义发生了实质升级
+- 某个 source family 以前被粗分类，现在需要重新生成更深的 facts 或更准的 family
+- 历史数据要重新进新 merge / impact / projection 逻辑
 
-### Required sequence
+### 必须遵循的顺序
 
-1. diagnose with `events:ops-report` or direct ops status
-2. confirm behavior with fixture or targeted sample
-3. implement the semantic or latency fix
-4. run targeted tests and replay checks
-5. run repair or backfill if historical data is affected
-6. rerun quality and ops checks
-7. record the remaining risk in the roadmap or delivery board if the tranche is not yet closed
+标准顺序：
 
-### Standard repair commands
+1. 先通过 `events:ops-report` 或 ops status 诊断
+2. 先补或跑 targeted tests / replay tests
+3. 先做 repair，再做需要的 backfill
+4. 再跑 `events:check-quality`
+5. 最后再决定是否视为 tranche 关闭
+
+### 标准 repair 命令
+
+当前标准 repair 命令：
 
 - `pnpm events:repair-ingested-at`
-- `pnpm events:repair-timeline`
-- `pnpm events:repair-entities`
-- `pnpm events:repair-explicit-tickers`
 
-## 6. Manual review workflow
+如果未来新增 repair 脚本，也要在这里补充用途和使用边界。
 
-The following still require operator judgment:
+## 6. Manual review 流程
 
-- sampled entity precision
-- false merges
-- missed merges
-- replay consistency when semantics materially change
+自动化 gate 不覆盖全部质量问题，所以 sampled review 仍然必要。
 
-Review rule:
+最少要抽查：
 
-- focus manual review on high-value source families first
-- long-tail sources may stay conservative as long as they do not poison canonical truth
+- entity precision
+- false merge
+- missed merge
+- replay consistency
+- high-value fallback pollution
 
-## 7. Exit criteria for the post-foundation tranche
+建议抽样对象：
 
-This tranche is ready to close when:
+- 最近 24 小时的高价值 source family
+- 本批代码实际触碰过的 source family
+- diagnostics 已经暴露为慢源或歧义源的 family
 
-- Tier A latency is near or within the hard target for the main trade-critical families
-- Tier B and Tier C thresholds are explicit and enforced separately
-- high-value source families show continued semantic precision improvement
-- long-tail fallback no longer pollutes canonical entity truth
-- repair, backfill, and manual review follow this runbook rather than ad hoc operator memory
+Manual review 结果至少要记录：
+
+- 抽样范围
+- 抽样时间
+- 发现的问题类型
+- 是否需要 repair / backfill / code patch
+
+## 7. Post-foundation tranche 的退出标准
+
+当下面几件事都成立时，post-foundation tranche 才算真正关闭：
+
+- quality gates 已经采用 stratified latency thresholds，而不是单一 aggregate gate
+- Tier A gate 回到可控范围
+- Tier B / Tier C 保持可见，但不污染 Tier A automation
+- `ingested_at` / merge survivor / backlog catch-up 这些 latency 语义已经被修正
+- runbook 已经成为 repo 内默认操作流程
+- 验证命令能稳定跑通：
+  - `pnpm events:ops-report`
+  - `pnpm events:check-quality`
+  - targeted tests
+  - `pnpm typecheck`
+  - `pnpm build`
