@@ -1,4 +1,5 @@
 import { type EventBaseQualitySnapshot, evaluateEventBaseSLOs } from "#/services/event-engine/slo"
+import { evaluateTrancheHScorecard } from "#/services/event-engine/tranche-h"
 
 type EventQualityGateUnit = "%" | "ms"
 type EventQualityGateComparator = ">=" | "<="
@@ -89,6 +90,7 @@ export function evaluateEventQualityGates(
   options?: { evaluatedAt?: number },
 ) {
   const slo = evaluateEventBaseSLOs(snapshot)
+  const evaluatedAt = options?.evaluatedAt ?? Date.now()
   const runtimeAutomatedGates: EventQualityGate[] = slo.gates
     .filter(gate => gate.automated)
     .map(gate => ({
@@ -115,7 +117,7 @@ export function evaluateEventQualityGates(
 
   return {
     contractVersion: "event-quality-gates-v2" as const,
-    evaluatedAt: options?.evaluatedAt ?? Date.now(),
+    evaluatedAt,
     enforcement: {
       command: "pnpm events:check-quality",
       exitNonZeroOnRegression: true,
@@ -144,5 +146,11 @@ export function evaluateEventQualityGates(
       ...runtimeVisibleNonAutomatedGates,
       ...declaredManualGates,
     ],
+    scorecards: {
+      trancheH: evaluateTrancheHScorecard({
+        snapshot,
+        evaluatedAt,
+      }),
+    },
   }
 }

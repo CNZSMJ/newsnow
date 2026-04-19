@@ -2,13 +2,12 @@ import { Buffer } from "node:buffer"
 import process from "node:process"
 import md5 from "md5"
 import type { EventProfile } from "@shared/event-profile"
-import type { EventLifecycleState, NewsItem, SourceID } from "@shared/types"
+import type { EventLifecycleState, InvestmentEntityRef, NewsItem, SourceID } from "@shared/types"
 import sources from "@shared/sources"
 import { hydrateClsRawItem } from "#/sources/cls"
 import { getters } from "#/getters"
 import { getEventTable } from "#/database/events"
 import type { EventRow, RawItemRow } from "#/types"
-import { extractEntityLinks } from "#/services/event-engine/entity"
 import { normalizeEntityLinks, normalizeFactEntityIds, normalizePrimaryEntityName } from "#/services/event-engine/entity-normalization"
 import { extractEventFacts } from "#/services/event-engine/extractors"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
@@ -17,8 +16,19 @@ import { EVENT_ENGINE_METRICS, incrementEventEngineMetric, toMetricLabels } from
 import { getSourceEventProfile, validateSourceEventProfile } from "#/services/event-engine/profiles"
 import { resolveRequestedSourceSeedIds } from "#/services/event-engine/request-scope"
 import { type ResolvedEventClassification, resolveEventClassification } from "#/services/event-engine/resolver"
+import {
+  getLiveSubjectRoleExtractor,
+  getLiveSubjectRoleExtractorTimeoutMs,
+} from "#/services/event-engine/subject-role-live-extractor"
+import { resolveEventSubjects } from "#/services/event-engine/subject-resolution"
+import {
+  getLiveWatchTargetCandidateExtractor,
+  getLiveWatchTargetCandidateExtractorTimeoutMs,
+} from "#/services/event-engine/watch-target-live-extractor"
+import { resolveWatchTargetCandidates } from "#/services/event-engine/watch-target-candidates"
 import { normalizeTitle, normalizeUrl, parsePublishedAt, stripHtml } from "#/services/event-engine/text"
 import { EVENT_ENGINE_VERSIONS } from "#/services/event-engine/versions"
+import { resolveSecurityByName } from "#/services/tdx-api"
 
 const DEFAULT_EVENT_COLUMNS = new Set(["finance", "industry"])
 const WORKER_INTERVAL_MS = Number(process.env.EVENT_BUS_INTERVAL_MS || 2 * 60 * 1000)
@@ -57,6 +67,67 @@ function toRawRow(sourceId: SourceID, item: NewsItem, fetchedAt: number): RawIte
     fingerprint: `${title}|${url}`,
     payload_json: JSON.stringify(item),
     status: "active",
+  }
+}
+
+function inferWatchTargetMarket(fullCode?: string | null, code?: string | null) {
+  const normalized = (fullCode || code || "").trim().toLowerCase()
+  if (normalized.startsWith("sh") || normalized.startsWith("sz") || normalized.startsWith("bj")) return "A"
+  if (normalized.startsWith("hk")) return "HK"
+  if (normalized.startsWith("us:") || normalized.endsWith(".us")) return "US"
+  return undefined
+}
+
+function toWatchTargetEntityRef(entity: ReturnType<typeof normalizeEntityLinks>[number]): InvestmentEntityRef {
+  switch (entity.entity_type) {
+    case "stock":
+      return {
+        entityId: entity.full_code || entity.code || entity.entity_name,
+        label: entity.entity_name,
+        entityType: "security",
+        entityTypeLabel: "交易标的",
+        code: entity.code || undefined,
+        market: inferWatchTargetMarket(entity.full_code, entity.code),
+      }
+    case "company":
+      return {
+        entityId: entity.full_code || entity.code || entity.entity_name,
+        label: entity.entity_name,
+        entityType: "issuer",
+        entityTypeLabel: "公司主体",
+        code: entity.code || undefined,
+        market: inferWatchTargetMarket(entity.full_code, entity.code),
+      }
+    case "industry":
+      return {
+        entityId: entity.entity_name,
+        label: entity.entity_name,
+        entityType: "industry",
+        entityTypeLabel: "产业赛道",
+      }
+    case "institution":
+      return {
+        entityId: entity.entity_name,
+        label: entity.entity_name,
+        entityType: "institution",
+        entityTypeLabel: "发布机构",
+      }
+    case "index":
+      return {
+        entityId: entity.full_code || entity.code || entity.entity_name,
+        label: entity.entity_name,
+        entityType: "market",
+        entityTypeLabel: "影响市场",
+        code: entity.code || undefined,
+        market: inferWatchTargetMarket(entity.full_code, entity.code),
+      }
+    default:
+      return {
+        entityId: entity.entity_name,
+        label: entity.entity_name,
+        entityType: "topic",
+        entityTypeLabel: "主题标签",
+      }
   }
 }
 
@@ -155,15 +226,48 @@ async function persistResolvedEvent(input: {
 }) {
   return input.eventTable.withTransaction(async () => {
     const { eventRow, facts, payload, resolved } = buildEventRow(input.sourceId, input.rawRow)
-    const normalizedEntityLinks = normalizeEntityLinks(
-      await extractEntityLinks(eventRow.event_id, input.rawRow.title, JSON.parse(eventRow.topic_tags_json), {
-        primaryEntityName: resolved.primaryEntityName,
-        summary: eventRow.summary,
-        payload,
-      }),
-    )
+    const topicTags = JSON.parse(eventRow.topic_tags_json)
+    const affectedMarkets = JSON.parse(eventRow.affected_markets_json)
+    const subjectResolution = await resolveEventSubjects({
+      eventId: eventRow.event_id,
+      title: input.rawRow.title,
+      summary: eventRow.summary,
+      eventType: resolved.eventType,
+      eventSubType: resolved.eventSubType,
+      sourceKind: resolved.profile?.sourceKind,
+      topicTags,
+      affectedMarkets,
+      payload,
+      primaryEntityNameHint: resolved.primaryEntityName,
+    }, {
+      roleExtractor: getLiveSubjectRoleExtractor(),
+      extractionTimeoutMs: getLiveSubjectRoleExtractorTimeoutMs(),
+    })
+    const normalizedEntityLinks = normalizeEntityLinks(subjectResolution.entityLinks)
     const normalizedFacts = normalizeFactEntityIds(facts, normalizedEntityLinks)
-    eventRow.primary_entity_name = normalizePrimaryEntityName(eventRow.primary_entity_name, normalizedEntityLinks)
+    const watchTargetCandidates = await resolveWatchTargetCandidates({
+      eventId: eventRow.event_id,
+      title: input.rawRow.title,
+      summary: eventRow.summary,
+      eventType: resolved.eventType,
+      eventSubType: resolved.eventSubType,
+      sourceKind: resolved.profile?.sourceKind,
+      topicTags,
+      affectedMarkets,
+      affectedEntities: normalizedEntityLinks.map(toWatchTargetEntityRef),
+      impactSummary: JSON.parse(eventRow.impact_summary_json),
+    }, {
+      extractor: getLiveWatchTargetCandidateExtractor(),
+      extractionTimeoutMs: getLiveWatchTargetCandidateExtractorTimeoutMs(),
+      registryResolver: {
+        resolveByName: resolveSecurityByName,
+      },
+    })
+    eventRow.primary_entity_name = normalizePrimaryEntityName(
+      subjectResolution.primaryEntityName ?? null,
+      normalizedEntityLinks,
+    )
+    eventRow.watch_target_candidates_json = JSON.stringify(watchTargetCandidates)
     const previousEvent = await input.eventTable.getEventById(eventRow.event_id)
     const eventMetric = previousEvent ? EVENT_ENGINE_METRICS.eventUpdates : EVENT_ENGINE_METRICS.eventCreates
     const eventMetricLabels = toMetricLabels({
@@ -211,6 +315,7 @@ async function persistResolvedEvent(input: {
       nextEvent: eventRow,
       rawId: input.rawRow.raw_id,
       sourceId: input.sourceId,
+      subjectResolutionAudit: subjectResolution.audit,
     })
 
     return {
@@ -280,6 +385,12 @@ async function addLifecycleEntry(input: {
   nextEvent: EventRow
   rawId: string
   sourceId: SourceID
+  subjectResolutionAudit?: {
+    provider: "llm" | "deterministic"
+    confidence: number
+    timedOut: boolean
+    usedFallback: boolean
+  }
 }) {
   if (!input.eventTable) return
 
@@ -373,6 +484,10 @@ async function addLifecycleEntry(input: {
         sourceId: input.sourceId,
         resolverVersion: EVENT_ENGINE_VERSIONS.resolver,
         sourceKind: input.nextEvent.source_kind,
+        subjectResolutionProvider: input.subjectResolutionAudit?.provider,
+        subjectResolutionConfidence: input.subjectResolutionAudit?.confidence,
+        subjectResolutionTimedOut: input.subjectResolutionAudit?.timedOut,
+        subjectResolutionUsedFallback: input.subjectResolutionAudit?.usedFallback,
         ...entry.metadata,
       }),
     })

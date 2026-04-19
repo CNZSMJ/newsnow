@@ -55,6 +55,7 @@
 | [archive/investment-event-engine-upgrade-plan-review.md](./archive/investment-event-engine-upgrade-plan-review.md) | 对旧升级计划的评审意见，已不再代表当前执行面 |
 | [archive/investment-event-engine-code-review.md](./archive/investment-event-engine-code-review.md) | 一次性 code review 记录，不属于长期运行文档 |
 | [archive/investment-event-post-foundation-tracking.md](./archive/investment-event-post-foundation-tracking.md) | 已完成 tranche 的执行跟踪，内容已回收进活文档 |
+| [archive/tranche-h-sprint-tracking.md](./archive/tranche-h-sprint-tracking.md) | Tranche H 已完成，执行记录已吸收进 delivery board、workstreams 和 runbook |
 
 ## 5. 文档生命周期规则
 

@@ -46,6 +46,117 @@ describe("investment event projection", () => {
     expect(brief.sourceSummary.primarySourceName).toBeTruthy()
   })
 
+  it("surfaces industry follow-up subjects when only an investable chain clue survives", () => {
+    const detail: EventDetail = {
+      eventId: "evt_fiber_watch_targets",
+      title: "国产光纤全球爆单 部分产品价格暴涨650%",
+      summary: "行业价格与订单同时走强，但未点名具体上市公司。",
+      eventType: "macro",
+      eventSubType: "macro_data",
+      sourceKind: "media_fast_feed",
+      publishedAt: Date.UTC(2026, 3, 19, 10, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 19, 10, 1, 0),
+      importance: "medium",
+      directionalView: "positive",
+      directionalConfidence: 42,
+      materialityScore: 58,
+      tradabilityScore: 44,
+      authorityScore: 35,
+      freshnessScore: 77,
+      surpriseScore: 51,
+      affectedMarkets: ["A"],
+      impactSummary: ["产业链价格和订单同步走强，需继续确认是否扩散到公司业绩。"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 1,
+      sourceIds: ["cls-telegraph"],
+      evidences: [],
+      entities: [{
+        eventId: "evt_fiber_watch_targets",
+        entityType: "industry",
+        entityName: "光纤",
+        confidence: 0.88,
+        resolver: "llm-industry",
+      }],
+      facts: [],
+      timeline: [],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.primarySubject?.entityType).toBe("industry")
+    expect(projected.primarySubject?.label).toBe("光纤")
+    expect(projected.subjectSummary).toBe("核心赛道：光纤")
+    expect(projected.whoIsAffected).toEqual(["产业赛道：光纤"])
+    expect(projected.affectedEntities).toEqual([
+      expect.objectContaining({
+        label: "光纤",
+        entityType: "industry",
+      }),
+    ])
+    expect(projected.watchTargetCandidates.map(item => item.entity.label)).toEqual([
+      "长飞光纤",
+      "亨通光电",
+      "中天科技",
+      "烽火通信",
+    ])
+  })
+
+  it("prefers persisted watch-target candidates over projection-time fallback derivation", () => {
+    const detail: EventDetail = {
+      eventId: "evt_fiber_watch_targets_persisted",
+      title: "国产光纤全球爆单 部分产品价格暴涨650%",
+      summary: "行业价格与订单同时走强，但未点名具体上市公司。",
+      eventType: "macro",
+      eventSubType: "macro_data",
+      sourceKind: "media_fast_feed",
+      publishedAt: Date.UTC(2026, 3, 19, 10, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 19, 10, 1, 0),
+      importance: "medium",
+      directionalView: "positive",
+      directionalConfidence: 42,
+      materialityScore: 58,
+      tradabilityScore: 44,
+      authorityScore: 35,
+      freshnessScore: 77,
+      surpriseScore: 51,
+      affectedMarkets: ["A"],
+      impactSummary: ["产业链价格和订单同步走强，需继续确认是否扩散到公司业绩。"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 1,
+      sourceIds: ["cls-telegraph"],
+      evidences: [],
+      entities: [{
+        eventId: "evt_fiber_watch_targets_persisted",
+        entityType: "industry",
+        entityName: "光纤",
+        confidence: 0.88,
+        resolver: "llm-industry",
+      }],
+      facts: [],
+      timeline: [],
+      watchTargetCandidates: [{
+        source: "llm-registry",
+        matchedBy: "llm_hypothesis",
+        reason: "光纤供需收紧时，光纤光缆龙头通常最先兑现业绩弹性。",
+        confidence: 0.93,
+        entity: {
+          entityId: "sh601869",
+          label: "长飞光纤",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+          code: "601869",
+          market: "A",
+        },
+      }],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.watchTargetCandidates).toEqual(detail.watchTargetCandidates)
+  })
+
   it("suppresses broad market descriptors as follow-up subjects for market-move fast feeds", () => {
     const brief = projectInvestmentEventBrief({
       eventId: "evt_crypto_board_move",
@@ -215,6 +326,58 @@ describe("investment event projection", () => {
     ])
     expect(projected.primarySubject?.label).toBe("Strategy")
     expect(projected.subjectSummary).toBe("核心主体：Strategy")
+    expect(projected.watchTargetCandidates).toEqual([])
+  })
+
+  it("projects provisional institutions as institution follow-up subjects instead of issuers", () => {
+    const detail: EventDetail = {
+      eventId: "evt_openai_provisional_institution",
+      title: "OpenAI 推出企业版智能体平台",
+      summary: "高价值未映射主体样本",
+      eventType: "industry",
+      eventSubType: "industry_news",
+      sourceKind: "media_fast_feed",
+      primaryEntityName: "OpenAI",
+      publishedAt: Date.UTC(2026, 3, 18, 9, 0, 0),
+      ingestedAt: Date.UTC(2026, 3, 18, 9, 1, 0),
+      importance: "medium",
+      directionalView: "unknown",
+      directionalConfidence: 45,
+      materialityScore: 68,
+      tradabilityScore: 42,
+      authorityScore: 60,
+      freshnessScore: 88,
+      surpriseScore: 52,
+      affectedMarkets: ["global_macro"],
+      impactSummary: ["企业版智能体平台发布，关注产业链和软件基础设施映射。"],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 1,
+      sourceIds: ["cls-telegraph"],
+      evidences: [],
+      entities: [{
+        eventId: "evt_openai_provisional_institution",
+        entityType: "institution" as any,
+        entityName: "OpenAI",
+        confidence: 0.84,
+        resolver: "llm-provisional-institution",
+      }],
+      facts: [],
+      timeline: [],
+    }
+
+    const projected = projectInvestmentEventDetail(detail)
+
+    expect(projected.affectedEntities).toEqual([
+      expect.objectContaining({
+        label: "OpenAI",
+        entityType: "institution",
+        entityTypeLabel: "发布机构",
+      }),
+    ])
+    expect(projected.primarySubject?.entityType).toBe("institution")
+    expect(projected.primarySubject?.label).toBe("OpenAI")
+    expect(projected.subjectSummary).toBe("发布机构：OpenAI")
   })
 
   it("projects detail events with facts, evidence and readable timeline", () => {

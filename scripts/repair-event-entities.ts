@@ -53,6 +53,7 @@ async function main() {
   await table.init()
   const entityRepair = await table.repairCanonicalEntityLinks(options)
   const primaryEntityContainerRepair = await table.repairPrimaryEntityContainerNames(options)
+  const watchTargetRepair = await table.repairWatchTargetCandidates(options)
   const marketRepair = await table.repairExchangeDisclosureMarkets(options)
 
   console.log(JSON.stringify({
@@ -60,6 +61,7 @@ async function main() {
     dataDir,
     entityRepair,
     primaryEntityContainerRepair,
+    watchTargetRepair,
     marketRepair,
   }, null, 2))
 }

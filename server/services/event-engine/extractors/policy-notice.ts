@@ -10,6 +10,35 @@ function parsePolicyDirection(text: string) {
   return null
 }
 
+function extractPolicyAction(title: string) {
+  const normalized = normalizeTitle(title)
+  const matched = normalized.match(/^关于(.+?)(?:的)?(?:实施意见|通知|公告|办法|规定|制度|细则|方案|若干措施)$/)
+  if (matched?.[1]) return matched[1]
+  return normalizeReleaseTitle(title) || normalized
+}
+
+function extractTargetScope(text: string, policyAction: string) {
+  const stripLeadingPolicyVerbs = (value: string) => value.replace(/^(?:(?:关于|促进|支持|推动))+/, "")
+  const matched = text.match(/([\u4e00-\u9fa5A-Za-z]{2,24}(?:行业|企业|项目|市场|机构|主体))/)
+  if (matched?.[1]) return stripLeadingPolicyVerbs(matched[1])
+  const actionMatch = policyAction.match(/([\u4e00-\u9fa5A-Za-z]{2,24}(?:行业|企业|项目|市场|机构|主体))/)
+  return actionMatch?.[1] ? stripLeadingPolicyVerbs(actionMatch[1]) : null
+}
+
+function extractExecutionWindow(text: string) {
+  const direct = text.match(/(\d{4}年\d{1,2}月\d{1,2}日(?:起|起实施|实施|开始实施)?)/)
+  if (direct?.[1]) return direct[1]
+  const ranged = text.match(/(自\d{4}年\d{1,2}月\d{1,2}日起[^，。；]*)/)
+  return ranged?.[1] ?? null
+}
+
+function extractIssuerInstitution(sourceId: SourceID, title: string) {
+  const normalized = normalizeTitle(title)
+  const prefix = normalized.match(/^([\u4e00-\u9fa5A-Za-z]{2,32}(?:部|委|局|署|会|院|行|厅|总局|管理局|协会|央行))(?:发布|印发|关于|令)/)?.[1]
+  if (prefix) return prefix
+  return sources[sourceId]?.name ?? sourceId
+}
+
 function firstTagId(payload: NewsItem, sourceId: SourceID) {
   const tags = (payload.extra as { tags?: string[] } | undefined)?.tags
   if (Array.isArray(tags) && typeof tags[0] === "string") return tags[0]
@@ -32,13 +61,18 @@ export function extractPolicyNoticeFacts(input: {
   const periodKey = extractPeriodKey(text)
   const cadence = inferReleaseCadence(text)
   const direction = parsePolicyDirection(text)
+  const policyAction = extractPolicyAction(title)
+  const targetScope = extractTargetScope(text, policyAction)
+  const executionWindow = extractExecutionWindow(text)
+  const issuerInstitution = extractIssuerInstitution(input.sourceId, title)
+  const affectedMarkets = sources[input.sourceId]?.eventProfile?.markets ?? []
 
   const fact: EventFactRow = {
     fact_id: `fact_${md5(`${input.eventId}|${input.rawId}|policy_notice`)}`,
     event_id: input.eventId,
     evidence_id: input.rawId,
     fact_type: "policy_notice",
-    metric_name: normalizeReleaseTitle(title) || "policy_notice",
+    metric_name: policyAction || normalizeReleaseTitle(title) || "policy_notice",
     value: null,
     unit: cadence,
     previous_value: null,
@@ -51,6 +85,11 @@ export function extractPolicyNoticeFacts(input: {
       sourceId: input.sourceId,
       cadence,
       periodKey,
+      issuerInstitution,
+      policyAction,
+      targetScope,
+      executionWindow,
+      affectedMarkets,
       summary: typeof input.payload.extra?.info === "string" ? input.payload.extra.info : undefined,
       raw,
     }),

@@ -1,6 +1,6 @@
 import process from "node:process"
 import md5 from "md5"
-import type { AffectedMarket, DirectionalView } from "@shared/event-profile"
+import type { AffectedMarket, DirectionalView, EventSourceKind } from "@shared/event-profile"
 import { type IndustryTag, allIndustryTags, resolveIndustryTagsFromKeywordQuery } from "@shared/industry"
 import type {
   EventDetail,
@@ -12,6 +12,8 @@ import type {
   EventSubType,
   EventTimelineEntry,
   EventType,
+  InvestmentEntityRef,
+  InvestmentWatchTargetCandidate,
   SourceID,
 } from "@shared/types"
 import sources from "@shared/sources"
@@ -24,11 +26,20 @@ import {
   normalizeFactEntityIds,
   normalizePrimaryEntityName,
 } from "#/services/event-engine/entity-normalization"
-import { extractEntityLinks } from "#/services/event-engine/entity"
 import { getEntityLookupTerms } from "#/services/event-engine/entity-registry"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
 import { getExchangeDisclosureMarkets, getSourceEventProfile } from "#/services/event-engine/profiles"
 import { resolveEventClassification } from "#/services/event-engine/resolver"
+import {
+  getLiveSubjectRoleExtractor,
+  getLiveSubjectRoleExtractorTimeoutMs,
+} from "#/services/event-engine/subject-role-live-extractor"
+import { resolveEventSubjects } from "#/services/event-engine/subject-resolution"
+import {
+  getLiveWatchTargetCandidateExtractor,
+  getLiveWatchTargetCandidateExtractorTimeoutMs,
+} from "#/services/event-engine/watch-target-live-extractor"
+import { resolveWatchTargetCandidates } from "#/services/event-engine/watch-target-candidates"
 import {
   type EventBaseQualitySnapshot,
   type EventLatencyTier,
@@ -43,6 +54,7 @@ import {
 import { inferIndustryTagsFromText } from "#/services/event-engine/text"
 import type { EntityLinkRow, EventEvidenceRow, EventFactRow, EventRow, EventSourceRow, EventTimelineRow, RawItemRow, SourceFetchRunRow } from "#/types"
 import { getEventRecencyAnchor, scoreInvestmentEvent } from "#/services/event-engine/ranking"
+import { resolveSecurityByName } from "#/services/tdx-api"
 
 function getEventTableLogger() {
   return (globalThis as typeof globalThis & {
@@ -115,6 +127,8 @@ export interface EventOperationalLatencyDiagnostics {
   sourceBreakdown: EventOperationalLatencyDiagnosticBucket[]
 }
 
+type MergeDispositionStatus = "merged" | "conflict" | "correction"
+
 function percentageOrNull(numerator: number, denominator: number) {
   if (denominator <= 0) return null
   return Number(((numerator / denominator) * 100).toFixed(2))
@@ -159,6 +173,164 @@ function summarizeOperationalDurations(values: number[]) {
     p95Ms: percentileFromSorted(sortedValues, 0.95),
     maxMs: sortedValues[sortedValues.length - 1] ?? null,
   }
+}
+
+function getMergeDisposition(canonical: EventRow, duplicate: EventRow) {
+  const conflictFields: string[] = []
+  const correctionFields: string[] = []
+  const sameSubject = Boolean(
+    canonical.primary_entity_name
+    && duplicate.primary_entity_name
+    && canonical.primary_entity_name === duplicate.primary_entity_name,
+  )
+  const hasDirectionalReversal = (
+    canonical.directional_view === "positive" || canonical.directional_view === "negative"
+  ) && (
+    duplicate.directional_view === "positive" || duplicate.directional_view === "negative"
+  ) && canonical.directional_view !== duplicate.directional_view
+
+  if (
+    canonical.primary_entity_name
+    && duplicate.primary_entity_name
+    && canonical.primary_entity_name !== duplicate.primary_entity_name
+  ) {
+    conflictFields.push("primary_subject")
+  }
+
+  if (canonical.event_type !== duplicate.event_type) {
+    conflictFields.push("event_family")
+  } else if (
+    canonical.event_subtype !== duplicate.event_subtype
+    && canonical.event_subtype !== "other"
+    && duplicate.event_subtype !== "other"
+  ) {
+    conflictFields.push("event_family")
+  }
+
+  if (sameSubject && hasDirectionalReversal) {
+    correctionFields.push("directional_view")
+  } else if (hasDirectionalReversal) {
+    conflictFields.push("directional_view")
+  }
+
+  if (conflictFields.length) {
+    return {
+      status: "conflict" as const,
+      conflictFields,
+      correctionFields: [] as string[],
+    }
+  }
+
+  if (correctionFields.length) {
+    return {
+      status: "correction" as const,
+      conflictFields: [] as string[],
+      correctionFields,
+    }
+  }
+
+  return {
+    status: "merged" as const,
+    conflictFields: [] as string[],
+    correctionFields: [] as string[],
+  }
+}
+
+function inferWatchTargetMarket(fullCode?: string | null, code?: string | null) {
+  const normalized = (fullCode || code || "").trim().toLowerCase()
+  if (normalized.startsWith("sh") || normalized.startsWith("sz") || normalized.startsWith("bj")) return "A"
+  if (normalized.startsWith("hk")) return "HK"
+  if (normalized.startsWith("us:") || normalized.endsWith(".us")) return "US"
+  return undefined
+}
+
+function toWatchTargetEntityRef(entity: EntityLinkRow): InvestmentEntityRef {
+  switch (entity.entity_type) {
+    case "stock":
+      return {
+        entityId: entity.full_code || entity.code || entity.entity_name,
+        label: entity.entity_name,
+        entityType: "security",
+        entityTypeLabel: "交易标的",
+        code: entity.code || undefined,
+        market: inferWatchTargetMarket(entity.full_code, entity.code),
+      }
+    case "company":
+      return {
+        entityId: entity.full_code || entity.code || entity.entity_name,
+        label: entity.entity_name,
+        entityType: "issuer",
+        entityTypeLabel: "公司主体",
+        code: entity.code || undefined,
+        market: inferWatchTargetMarket(entity.full_code, entity.code),
+      }
+    case "industry":
+      return {
+        entityId: entity.entity_name,
+        label: entity.entity_name,
+        entityType: "industry",
+        entityTypeLabel: "产业赛道",
+      }
+    case "institution":
+      return {
+        entityId: entity.entity_name,
+        label: entity.entity_name,
+        entityType: "institution",
+        entityTypeLabel: "发布机构",
+      }
+    case "index":
+      return {
+        entityId: entity.full_code || entity.code || entity.entity_name,
+        label: entity.entity_name,
+        entityType: "market",
+        entityTypeLabel: "影响市场",
+        code: entity.code || undefined,
+        market: inferWatchTargetMarket(entity.full_code, entity.code),
+      }
+    default:
+      return {
+        entityId: entity.entity_name,
+        label: entity.entity_name,
+        entityType: "topic",
+        entityTypeLabel: "主题标签",
+      }
+  }
+}
+
+async function computePersistedWatchTargetCandidates(input: {
+  eventId: string
+  title: string
+  summary?: string | null
+  eventType: EventType
+  eventSubType: EventSubType
+  sourceKind?: EventSourceKind | null
+  topicTags: IndustryTag[]
+  affectedMarkets: AffectedMarket[]
+  impactSummary: string[]
+  entityLinks: EntityLinkRow[]
+}) {
+  return resolveWatchTargetCandidates({
+    eventId: input.eventId,
+    title: input.title,
+    summary: input.summary,
+    eventType: input.eventType,
+    eventSubType: input.eventSubType,
+    sourceKind: input.sourceKind ?? undefined,
+    topicTags: input.topicTags,
+    affectedMarkets: input.affectedMarkets,
+    affectedEntities: input.entityLinks.map(toWatchTargetEntityRef),
+    impactSummary: input.impactSummary,
+  }, {
+    extractor: getLiveWatchTargetCandidateExtractor(),
+    extractionTimeoutMs: getLiveWatchTargetCandidateExtractorTimeoutMs(),
+    registryResolver: {
+      resolveByName: resolveSecurityByName,
+    },
+  })
+}
+
+function parseWatchTargetCandidatesJson(value?: string | null) {
+  return parseJSON<InvestmentWatchTargetCandidate[]>(value ?? "[]", [])
 }
 
 export class EventTable {
@@ -250,6 +422,7 @@ export class EventTable {
         series_key TEXT,
         period_key TEXT,
         release_cadence TEXT,
+        watch_target_candidates_json TEXT NOT NULL DEFAULT '[]',
         importance TEXT NOT NULL,
         sentiment TEXT,
         directional_view TEXT,
@@ -273,6 +446,7 @@ export class EventTable {
     await this.ensureColumn("events", "series_key", "TEXT")
     await this.ensureColumn("events", "period_key", "TEXT")
     await this.ensureColumn("events", "release_cadence", "TEXT")
+    await this.ensureColumn("events", "watch_target_candidates_json", "TEXT NOT NULL DEFAULT '[]'")
     await this.ensureColumn("events", "directional_view", "TEXT")
     await this.ensureColumn("events", "directional_confidence", "INTEGER")
     await this.ensureColumn("events", "materiality_score", "INTEGER")
@@ -490,9 +664,9 @@ export class EventTable {
     await this.db.prepare(`
       INSERT INTO events (
         event_id, cluster_key, title, summary, event_type, event_subtype, source_kind, published_at, ingested_at, canonical_url,
-        primary_entity_name, series_key, period_key, release_cadence, importance, sentiment, directional_view, directional_confidence, materiality_score, tradability_score,
+        primary_entity_name, series_key, period_key, release_cadence, watch_target_candidates_json, importance, sentiment, directional_view, directional_confidence, materiality_score, tradability_score,
         authority_score, freshness_score, surprise_score, affected_markets_json, impact_summary_json, degraded, topic_tags_json, last_seen_at, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(cluster_key) DO UPDATE SET
         title = excluded.title,
         summary = COALESCE(excluded.summary, events.summary),
@@ -506,6 +680,7 @@ export class EventTable {
         series_key = COALESCE(events.series_key, excluded.series_key),
         period_key = COALESCE(events.period_key, excluded.period_key),
         release_cadence = COALESCE(events.release_cadence, excluded.release_cadence),
+        watch_target_candidates_json = excluded.watch_target_candidates_json,
         importance = excluded.importance,
         sentiment = COALESCE(excluded.sentiment, events.sentiment),
         directional_view = COALESCE(excluded.directional_view, events.directional_view),
@@ -536,6 +711,7 @@ export class EventTable {
       row.series_key ?? null,
       row.period_key ?? null,
       row.release_cadence ?? null,
+      row.watch_target_candidates_json ?? "[]",
       row.importance,
       row.sentiment,
       row.directional_view,
@@ -1398,13 +1574,104 @@ export class EventTable {
     if (options.canonicalEventId === options.duplicateEventId) return
 
     const mergedAt = options.mergedAt ?? Date.now()
+    const canonical = await this.getEventById(options.canonicalEventId)
     const duplicate = await this.getEventById(options.duplicateEventId)
-    if (!duplicate) return
+    if (!canonical || !duplicate) return
+    const disposition = getMergeDisposition(canonical, duplicate)
+
+    if (disposition.status === "conflict") {
+      await this.addTimeline({
+        timeline_id: `etl_${md5(`${options.canonicalEventId}|${options.duplicateEventId}|merge_conflict|${mergedAt}`)}`,
+        event_id: options.canonicalEventId,
+        state_from: null,
+        state_to: "updated",
+        changed_at: mergedAt,
+        trigger_evidence_id: null,
+        actor: "event-engine",
+        reason: "merge_conflict_candidate",
+        metadata_json: JSON.stringify({
+          conflictingEventId: options.duplicateEventId,
+          conflictingEventTitle: duplicate.title,
+          conflictingEventUrl: duplicate.canonical_url,
+          conflictFields: disposition.conflictFields,
+          mergeReason: options.reason,
+        }),
+      })
+      return {
+        status: "conflict" as MergeDispositionStatus,
+      }
+    }
 
     await this.withTransaction(async () => {
+      if (disposition.status === "correction") {
+        await this.db.prepare(`
+          UPDATE events
+          SET
+            summary = COALESCE(?, summary),
+            directional_view = COALESCE(?, directional_view),
+            directional_confidence = COALESCE(?, directional_confidence),
+            materiality_score = COALESCE(?, materiality_score),
+            tradability_score = COALESCE(?, tradability_score),
+            authority_score = COALESCE(?, authority_score),
+            freshness_score = COALESCE(?, freshness_score),
+            surprise_score = COALESCE(?, surprise_score),
+            affected_markets_json = CASE
+              WHEN ? IS NULL OR ? = '[]' THEN affected_markets_json
+              ELSE ?
+            END,
+            impact_summary_json = CASE
+              WHEN ? IS NULL OR ? = '[]' THEN impact_summary_json
+              ELSE ?
+            END,
+            last_seen_at = MAX(last_seen_at, ?)
+          WHERE event_id = ?
+        `).run(
+          duplicate.summary,
+          duplicate.directional_view,
+          duplicate.directional_confidence,
+          duplicate.materiality_score,
+          duplicate.tradability_score,
+          duplicate.authority_score,
+          duplicate.freshness_score,
+          duplicate.surprise_score,
+          duplicate.affected_markets_json,
+          duplicate.affected_markets_json,
+          duplicate.affected_markets_json,
+          duplicate.impact_summary_json,
+          duplicate.impact_summary_json,
+          duplicate.impact_summary_json,
+          duplicate.last_seen_at,
+          options.canonicalEventId,
+        )
+
+        await this.addTimeline({
+          timeline_id: `etl_${md5(`${options.canonicalEventId}|${options.duplicateEventId}|event_correction|${mergedAt}`)}`,
+          event_id: options.canonicalEventId,
+          state_from: null,
+          state_to: "updated",
+          changed_at: mergedAt,
+          trigger_evidence_id: null,
+          actor: "event-engine",
+          reason: "event_correction",
+          metadata_json: JSON.stringify({
+            correctionEventId: options.duplicateEventId,
+            correctionEventTitle: duplicate.title,
+            correctionFields: disposition.correctionFields,
+            mergeReason: options.reason,
+          }),
+        })
+      }
+
       await this.db.prepare(`
         UPDATE events
         SET
+          event_subtype = CASE
+            WHEN (event_subtype IS NULL OR event_subtype = 'other')
+              AND ? IS NOT NULL
+              AND ? != 'other'
+            THEN ?
+            ELSE event_subtype
+          END,
           summary = COALESCE(summary, ?),
           primary_entity_name = COALESCE(primary_entity_name, ?),
           series_key = COALESCE(series_key, ?),
@@ -1424,6 +1691,9 @@ export class EventTable {
           last_seen_at = MAX(last_seen_at, ?)
         WHERE event_id = ?
       `).run(
+        duplicate.event_subtype,
+        duplicate.event_subtype,
+        duplicate.event_subtype,
         duplicate.summary,
         duplicate.primary_entity_name,
         duplicate.series_key,
@@ -1527,6 +1797,10 @@ export class EventTable {
       await this.db.prepare(`DELETE FROM event_evidence WHERE event_id = ?`).run(options.duplicateEventId)
       await this.db.prepare(`DELETE FROM events WHERE event_id = ?`).run(options.duplicateEventId)
     })
+
+    return {
+      status: disposition.status as MergeDispositionStatus,
+    }
   }
 
   async upsertEntityLinks(rows: EntityLinkRow[]) {
@@ -1710,7 +1984,7 @@ export class EventTable {
     await this.withTransaction(async () => {
       for (const eventId of candidateEventIds) {
         const eventRow = await this.db.prepare(`
-          SELECT event_id, title, summary, topic_tags_json, primary_entity_name
+          SELECT event_id, title, summary, topic_tags_json, affected_markets_json, primary_entity_name
           FROM events
           WHERE event_id = ?
         `).get(eventId) as {
@@ -1718,6 +1992,7 @@ export class EventTable {
           title: string
           summary?: string | null
           topic_tags_json: string
+          affected_markets_json: string
           primary_entity_name?: string | null
         } | undefined
         if (!eventRow) continue
@@ -1747,17 +2022,27 @@ export class EventTable {
         const topicTags = resolved.topicTags.length
           ? resolved.topicTags
           : parseJSON<IndustryTag[]>(eventRow.topic_tags_json, [])
+        const affectedMarkets = parseJSON<AffectedMarket[]>(eventRow.affected_markets_json, [])
 
-        const extractedEntityLinks = (
-          await Promise.all(evidenceRows.map(async (evidence) => {
+        const subjectResolutions = await Promise.all(evidenceRows.map(async (evidence) => {
             const payload = parseJSON<Record<string, unknown>>(evidence.payload_json, {}) as any
-            return extractEntityLinks(eventId, eventRow.title, topicTags, {
-              primaryEntityName: resolved.primaryEntityName ?? undefined,
+            return resolveEventSubjects({
+              eventId,
+              title: eventRow.title,
               summary: eventRow.summary ?? evidence.summary ?? undefined,
+              eventType: resolved.eventType,
+              eventSubType: resolved.eventSubType,
+              sourceKind: resolved.profile?.sourceKind,
+              topicTags,
+              affectedMarkets,
               payload,
+              primaryEntityNameHint: resolved.primaryEntityName ?? undefined,
+            }, {
+              roleExtractor: getLiveSubjectRoleExtractor(),
+              extractionTimeoutMs: getLiveSubjectRoleExtractorTimeoutMs(),
             })
           }))
-        ).flat()
+        const extractedEntityLinks = subjectResolutions.flatMap(result => result.entityLinks)
         const normalizedEntityLinks = normalizeEntityLinks(extractedEntityLinks)
 
         const existingEntityLinks = getRows<EntityLinkRow>(await this.db.prepare(`
@@ -1772,7 +2057,10 @@ export class EventTable {
         const entityLinksChanged = existingKeys.size !== nextKeys.size
           || Array.from(existingKeys).some(key => !nextKeys.has(key))
 
-        const nextPrimaryEntityName = normalizePrimaryEntityName(resolved.primaryEntityName ?? null, normalizedEntityLinks)
+        const nextPrimaryEntityName = normalizePrimaryEntityName(
+          subjectResolutions.find(result => result.primaryEntityName)?.primaryEntityName ?? null,
+          normalizedEntityLinks,
+        )
         const primaryEntityChanged = nextPrimaryEntityName !== (eventRow.primary_entity_name ?? null)
 
         if (!entityLinksChanged && !primaryEntityChanged) continue
@@ -1800,6 +2088,122 @@ export class EventTable {
       updatedEvents,
       updatedPrimaryEntityNames,
       replacedEntityLinks,
+    }
+  }
+
+  async repairWatchTargetCandidates(options?: {
+    eventIds?: string[]
+    limit?: number
+  }) {
+    const scopedEventIds = options?.eventIds?.length
+      ? options.eventIds.slice(0, options.limit ?? options.eventIds.length)
+      : undefined
+    const candidateRows = scopedEventIds?.length
+      ? getRows<{
+        event_id: string
+        title: string
+        summary?: string | null
+        event_type: EventType
+        event_subtype: EventSubType
+        source_kind?: EventSourceKind | null
+        topic_tags_json: string
+          affected_markets_json: string
+          impact_summary_json: string
+          watch_target_candidates_json?: string | null
+        }>(await this.db.prepare(`
+        SELECT
+          event_id,
+          title,
+          summary,
+          event_type,
+          event_subtype,
+          source_kind,
+          topic_tags_json,
+          affected_markets_json,
+          impact_summary_json,
+          watch_target_candidates_json
+        FROM events
+        WHERE event_id IN (${scopedEventIds.map(() => "?").join(", ")})
+        ORDER BY event_id ASC
+      `).all(...scopedEventIds))
+      : getRows<{
+        event_id: string
+        title: string
+        summary?: string | null
+        event_type: EventType
+        event_subtype: EventSubType
+        source_kind?: EventSourceKind | null
+        topic_tags_json: string
+        affected_markets_json: string
+        impact_summary_json: string
+        watch_target_candidates_json?: string | null
+      }>(await this.db.prepare(`
+        SELECT DISTINCT
+          e.event_id,
+          e.title,
+          e.summary,
+          e.event_type,
+          e.event_subtype,
+          e.source_kind,
+          e.topic_tags_json,
+          e.affected_markets_json,
+          e.impact_summary_json,
+          e.watch_target_candidates_json
+        FROM events e
+        LEFT JOIN entity_links direct_entity
+          ON direct_entity.event_id = e.event_id
+         AND direct_entity.entity_type IN ('stock', 'company')
+        LEFT JOIN entity_links industry_entity
+          ON industry_entity.event_id = e.event_id
+         AND industry_entity.entity_type = 'industry'
+        WHERE direct_entity.event_id IS NULL
+          AND (
+            industry_entity.event_id IS NOT NULL
+            OR COALESCE(e.topic_tags_json, '[]') != '[]'
+          )
+        ORDER BY e.event_id ASC
+        LIMIT ?
+      `).all(options?.limit ?? 100000))
+
+    let updatedEvents = 0
+
+    await this.withTransaction(async () => {
+      for (const row of candidateRows) {
+        const entityLinks = getRows<EntityLinkRow>(await this.db.prepare(`
+          SELECT event_id, entity_type, entity_name, code, full_code, confidence, resolver
+          FROM entity_links
+          WHERE event_id = ?
+          ORDER BY confidence DESC, entity_type ASC, entity_name ASC
+        `).all(row.event_id))
+
+        const nextCandidates = await computePersistedWatchTargetCandidates({
+          eventId: row.event_id,
+          title: row.title,
+          summary: row.summary ?? undefined,
+          eventType: row.event_type,
+          eventSubType: row.event_subtype,
+          sourceKind: row.source_kind,
+          topicTags: parseJSON<IndustryTag[]>(row.topic_tags_json, []),
+          affectedMarkets: parseJSON<AffectedMarket[]>(row.affected_markets_json, []),
+          impactSummary: parseJSON<string[]>(row.impact_summary_json, []),
+          entityLinks,
+        })
+
+        const nextJson = JSON.stringify(nextCandidates)
+        if (nextJson === (row.watch_target_candidates_json ?? "[]")) continue
+
+        await this.db.prepare(`
+          UPDATE events
+          SET watch_target_candidates_json = ?
+          WHERE event_id = ?
+        `).run(nextJson, row.event_id)
+        updatedEvents += 1
+      }
+    })
+
+    return {
+      scannedEvents: candidateRows.length,
+      updatedEvents,
     }
   }
 
@@ -1840,7 +2244,7 @@ export class EventTable {
     await this.withTransaction(async () => {
       for (const eventId of candidateEventIds) {
         const eventRow = await this.db.prepare(`
-          SELECT event_id, title, summary, topic_tags_json, primary_entity_name
+          SELECT event_id, title, summary, topic_tags_json, affected_markets_json, primary_entity_name
           FROM events
           WHERE event_id = ?
         `).get(eventId) as {
@@ -1848,12 +2252,13 @@ export class EventTable {
           title: string
           summary?: string | null
           topic_tags_json: string
+          affected_markets_json: string
           primary_entity_name?: string | null
         } | undefined
         if (!eventRow) continue
 
-        const rawRows = getRows<{ payload_json: string }>(await this.db.prepare(`
-          SELECT ri.payload_json
+        const rawRows = getRows<{ source_id: SourceID, payload_json: string }>(await this.db.prepare(`
+          SELECT ee.source_id, ri.payload_json
           FROM event_evidence ee
           JOIN raw_items ri ON ri.raw_id = ee.raw_id
           WHERE ee.event_id = ?
@@ -1862,17 +2267,33 @@ export class EventTable {
         if (!rawRows.length) continue
 
         const topicTags = parseJSON<IndustryTag[]>(eventRow.topic_tags_json, [])
+        const affectedMarkets = parseJSON<AffectedMarket[]>(eventRow.affected_markets_json, [])
         const extractedEntityLinks = (
           await Promise.all(rawRows.map(async (raw) => {
             const payload = parseJSON<Record<string, unknown>>(raw.payload_json, {}) as any
-            return extractEntityLinks(eventId, eventRow.title, topicTags, {
-              primaryEntityName: eventRow.primary_entity_name ?? undefined,
+            const resolved = resolveEventClassification(
+              raw.source_id,
+              eventRow.title,
+              eventRow.summary ?? undefined,
+            )
+            const subjectResolution = await resolveEventSubjects({
+              eventId,
+              title: eventRow.title,
               summary: eventRow.summary ?? undefined,
+              eventType: resolved.eventType,
+              eventSubType: resolved.eventSubType,
+              sourceKind: resolved.profile?.sourceKind,
+              topicTags,
+              affectedMarkets,
               payload,
+              primaryEntityNameHint: eventRow.primary_entity_name ?? undefined,
+            }, {
+              roleExtractor: getLiveSubjectRoleExtractor(),
+              extractionTimeoutMs: getLiveSubjectRoleExtractorTimeoutMs(),
             })
+            return subjectResolution.entityLinks
           }))
         ).flat()
-
         const normalizedEntityLinks = normalizeEntityLinks(extractedEntityLinks)
         const existingEntityLinks = getRows<EntityLinkRow>(await this.db.prepare(`
           SELECT event_id, entity_type, entity_name, code, full_code, confidence, resolver
@@ -2552,7 +2973,7 @@ export class EventTable {
     const normalized = {
       ...event,
       sourceKind: event.sourceKind ?? resolved.profile?.sourceKind,
-      primaryEntityName: event.primaryEntityName ?? resolved.primaryEntityName,
+      primaryEntityName: event.primaryEntityName?.trim() || undefined,
       topicTags: nextTopicTags.length ? nextTopicTags : resolved.topicTags,
     }
     const hasStoredImpact = normalized.directionalView !== undefined
@@ -2744,6 +3165,7 @@ export class EventTable {
       seriesKey: row.series_key ?? undefined,
       periodKey: row.period_key ?? undefined,
       releaseCadence: row.release_cadence ?? undefined,
+      watchTargetCandidates: parseWatchTargetCandidatesJson(row.watch_target_candidates_json),
       evidences,
       entities,
       facts,

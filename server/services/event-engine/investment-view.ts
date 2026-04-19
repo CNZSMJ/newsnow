@@ -21,6 +21,7 @@ import { industries } from "@shared/industry"
 import sources from "@shared/sources"
 import { isCodeLikeEntityName, normalizeSecurityCode, normalizeSecurityIdentifier } from "#/services/event-engine/entity-normalization"
 import { isBroadMarketDescriptor, normalizeTitle } from "#/services/event-engine/text"
+import { deriveWatchTargetCandidates } from "#/services/event-engine/watch-target-candidates"
 
 export function getInvestmentEventFamily(event: Pick<EventRecord, "eventType" | "eventSubType" | "sourceKind">): InvestmentEventFamily {
   if (event.sourceKind === "media_fast_feed" && event.eventType === "policy")
@@ -79,6 +80,8 @@ function mapEntityType(entityType: EventEntityLink["entityType"]): InvestmentEnt
       return "industry"
     case "company":
       return "issuer"
+    case "institution":
+      return "institution"
     case "topic":
       return "topic"
     default:
@@ -595,6 +598,26 @@ function getExchangeAnnouncementPayload(fact: EventFact) {
   }
 }
 
+function getPolicyNoticePayload(fact: EventFact) {
+  const payload = fact.payload ?? {}
+  return {
+    issuerInstitution: typeof payload.issuerInstitution === "string" ? payload.issuerInstitution : undefined,
+    policyAction: typeof payload.policyAction === "string" ? payload.policyAction : undefined,
+    targetScope: typeof payload.targetScope === "string" ? payload.targetScope : undefined,
+    executionWindow: typeof payload.executionWindow === "string" ? payload.executionWindow : undefined,
+  }
+}
+
+function getMediaFastPayload(fact: EventFact) {
+  const payload = fact.payload ?? {}
+  return {
+    subjectText: typeof payload.subjectText === "string" ? payload.subjectText : undefined,
+    magnitudeText: typeof payload.magnitudeText === "string" ? payload.magnitudeText : undefined,
+    driverText: typeof payload.driverText === "string" ? payload.driverText : undefined,
+    market: typeof payload.market === "string" ? payload.market : undefined,
+  }
+}
+
 function formatAnnouncementStageLabel(stage?: string) {
   if (!stage) return undefined
   switch (stage) {
@@ -655,8 +678,14 @@ function formatExchangeAnnouncementFactSummary(fact: EventFact) {
 
 function formatFactSummary(fact: EventFact) {
   switch (fact.factType) {
-    case "policy_notice":
-      return "正式政策/监管文件已进入事件引擎，重点在于后续执行口径、时间点和影响范围。"
+    case "policy_notice": {
+      const payload = getPolicyNoticePayload(fact)
+      const actor = payload.issuerInstitution ?? "相关机构"
+      const action = payload.policyAction ?? fact.metricName
+      const scope = payload.targetScope ? `，约束/作用对象为${payload.targetScope}` : ""
+      const timing = payload.executionWindow ? `，执行窗口为${payload.executionWindow}` : ""
+      return `正式政策/监管文件：${actor}已发布${action}${scope}${timing}，重点在于执行口径、节奏和实际影响范围。`
+    }
     case "industry_release":
       return "这是事件型产业数据发布，更适合用来确认景气方向，再结合价格、销量或订单数据判断强度。"
     case "industry_report":
@@ -665,12 +694,17 @@ function formatFactSummary(fact: EventFact) {
       return "这是行业动态型事实，更像主题催化线索，需要后续硬数据或公司公告确认。"
     case "exchange_announcement":
       return formatExchangeAnnouncementFactSummary(fact)
-    case "media_fast_signal":
+    case "media_fast_signal": {
+      const payload = getMediaFastPayload(fact)
+      if (fact.metricName === "market_move_signal" && (payload.subjectText || payload.magnitudeText)) {
+        return `${payload.subjectText ?? "相关市场"}盘中出现${payload.magnitudeText ?? "明显异动"}${payload.driverText ? `，伴随${payload.driverText}` : ""}，需继续确认成交、扩散和后续权威证据。`
+      }
       if (fact.unit === "%")
         return "快讯正文提到了一个幅度型数字，这更像市场情绪或题材线索，不等同于公司正式经营数据。"
       if (fact.unit === "CNY_100M")
         return "快讯正文提到了一个规模型数字，需等待正式公告或更高权威来源确认。"
       return "这是媒体快讯里抽出的线索型事实，适合作为早期观察，不足以单独支撑强交易结论。"
+    }
     default:
       return undefined
   }
@@ -1393,6 +1427,14 @@ export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEve
   const affectedMarketLabels = detail.affectedMarkets.map(formatAffectedMarketLabel)
   const whoIsAffected = deriveWhoIsAffected(projectedEntities, detail.affectedMarkets)
   const primarySubject = derivePrimarySubject(projectedEntities, detail.affectedMarkets) ?? brief.primarySubject
+  const watchTargetCandidates = detail.watchTargetCandidates?.length
+    ? detail.watchTargetCandidates
+    : deriveWatchTargetCandidates({
+      title: detail.title,
+      summary: detail.summary,
+      affectedEntities: projectedEntities,
+      relatedTopics: detail.topicTags,
+    })
 
   return {
     ...brief,
@@ -1427,6 +1469,7 @@ export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEve
         relatedEventUrl: typeof entry.metadata?.mergedEventUrl === "string" ? entry.metadata.mergedEventUrl : undefined,
       })),
     ),
+    watchTargetCandidates,
     relatedTopics: detail.topicTags,
   }
 }

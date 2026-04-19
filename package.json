@@ -29,6 +29,8 @@
     "events:check-quality": "tsx --tsconfig tsconfig.node.json ./scripts/evaluate-event-quality-gates.ts",
     "events:check-slos": "tsx --tsconfig tsconfig.node.json ./scripts/evaluate-event-quality-gates.ts",
     "events:ops-report": "tsx --tsconfig tsconfig.node.json ./scripts/report-event-operations.ts",
+    "events:blind-review": "tsx --tsconfig tsconfig.node.json ./scripts/sample-tranche-h-blind-review.ts",
+    "events:probe-subject-extractor": "tsx --tsconfig tsconfig.node.json ./scripts/probe-subject-role-extractor.ts",
     "events:latency-diagnostics": "tsx --tsconfig tsconfig.node.json ./scripts/report-event-operations.ts",
     "preview": "cross-env CF_PAGES=1 npm run build && wrangler pages dev dist/output/public",
     "deploy": "cross-env CF_PAGES=1 npm run build && wrangler pages deploy dist/output/public",

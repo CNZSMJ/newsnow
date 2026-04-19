@@ -76,7 +76,8 @@ frontend 和 agent 层都不能自己再做一套事件分类、direction、mate
 - Phase 7 `Repair, Backfill, and Operations` 已于 2026-04-17 完成
 - Foundation roadmap 已于 2026-04-17 关闭
 - 第一轮 post-foundation tranche 已于 2026-04-18 关闭
-- 当前 backend 主线转向：继续打高价值 source family 的 semantic precision、extractor/fact depth，以及更有决策价值的 impact semantics，同时保住已经关闭的 latency / runbook 纪律
+- Tranche H “发生了什么事 95 分专项” 已于 2026-04-19 完成并归档
+- 当前 backend 主线转向：继续推进高价值 source family 的 semantic precision、extractor/fact depth 和 impact semantics，同时保住已关闭的 latency / runbook / Tranche H scorecard 纪律
 
 ### A1. Canonical investment projection
 
@@ -226,6 +227,52 @@ frontend 和 agent 层都不能自己再做一套事件分类、direction、mate
 
 - 大的语义改动在 rollout 前都能 replay 验证
 - 质量回退不需要靠人工浏览才会发现
+
+### A8. “发生了什么事”95 分专项
+
+目标：
+
+- 让 canonical event engine 对事件本身的表达达到高置信度，优先把“事件身份、主体、类型、最小事实、时间语义”这五件事做稳
+
+当前状态：
+
+- 2026-04-19 已完成首轮闭环，scorecard、blind review、subject arbitration、minimal fact template、merge conflict / correction 已上线
+- 后续不再以独立 tranche 重复实施，转入 steady-state 守护：持续维护 replay fixtures、blind review 风险桶覆盖、repair/backfill discipline
+
+核心抓手：
+
+- `wrong merge rate`
+- `missed merge rate`
+- `primary subject precision`
+- `false tradable subject rate`
+- `event family precision`
+- `structured fact coverage`
+- `key fact completeness`
+- `evidence-linked fact rate`
+- `timeline noise ratio`
+
+执行顺序：
+
+1. 先定样本和门限
+2. 先打主体与后续跟踪对象链路
+3. 再打 family / subtype / 最小事实集
+4. 最后收 merge / timeline / repair
+
+任务：
+
+- 建立“发生了什么事”专项 goldens、sample review 和 replay fixtures
+- 将伪主体、伪标的、wrong merge、missed merge、family 错分、事实缺失统一打标签
+- 重构 `primarySubject / affectedEntities / whoIsAffected` 生成逻辑
+- 引入“LLM 理解角色 + TDX / entity registry 验实体 + backend 裁决输出”的主体识别模式
+- 禁止 `primary-entity-fallback` 直接进入 investor-facing entity projection
+- 为高价值 source family 建立最小事实集模板与 completeness 检查
+- 把 timeline 噪音和重复 lifecycle 节点继续压到投资可读水平
+
+完成标准：
+
+- 用户看到一条高价值事件时，基本不用回原文，就能确信系统对“发生了什么事”说对了
+- 主体、标题、类型、最小事实集和时间语义都达到专项 scorecard 门限
+- 相关 repair、backfill、runbook 和 replay 流程全部闭环
 
 ## 4. Workstream B：Frontend investor surface
 

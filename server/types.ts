@@ -57,6 +57,7 @@ export interface EventRow {
   series_key?: string | null
   period_key?: string | null
   release_cadence?: string | null
+  watch_target_candidates_json?: string | null
   importance: EventImportance
   sentiment: EventSentiment | null
   directional_view: DirectionalView | null

@@ -5,6 +5,7 @@ import type {
   InvestmentEventDetail,
   InvestmentEventEvidence,
   InvestmentEventFact,
+  InvestmentWatchTargetCandidate,
   InvestmentWatchlistDetail,
   InvestmentRelatedEventsSection,
   InvestmentTimelineEntry,
@@ -13,6 +14,7 @@ import type {
 import { projectInvestmentEventBrief } from "#/services/event-engine/investment-view"
 
 export interface McpInvestmentEntityRef extends InvestmentEntityRef {}
+export interface McpInvestmentWatchTargetCandidate extends InvestmentWatchTargetCandidate {}
 
 export interface McpInvestmentEventFact {
   label: string
@@ -127,6 +129,7 @@ export interface McpInvestmentEventDetail extends McpInvestmentEventBrief {
   keyFacts: McpInvestmentEventFact[]
   evidence: McpInvestmentEventEvidence[]
   timelineSummary: McpInvestmentTimelineEntry[]
+  watchTargetCandidates: McpInvestmentWatchTargetCandidate[]
   relatedEvents?: McpInvestmentRelatedEventsSection[]
 }
 
@@ -292,6 +295,7 @@ export function toMcpEventDetail(item: InvestmentEventDetail, debug = false): Mc
     keyFacts: item.keyFacts.map(fact => toMcpFact(fact, debug)),
     evidence: item.evidence.map(evidence => toMcpEvidence(evidence, debug)),
     timelineSummary: item.timelineSummary.map(entry => toMcpTimeline(entry, debug)),
+    watchTargetCandidates: item.watchTargetCandidates,
     relatedEvents: item.relatedEvents?.map(section => toMcpRelatedSection(section, debug)),
   }
 }

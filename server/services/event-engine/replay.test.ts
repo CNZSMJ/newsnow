@@ -1,14 +1,71 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { buildEventIdentity, buildEventIdentityHints, derivePeriodicSeriesMetadata } from "#/services/event-engine/merger"
 import { getSourceEventProfile } from "#/services/event-engine/profiles"
 import { resolveRequestedSourceSeedIds } from "#/services/event-engine/request-scope"
 import { resolveEventClassification } from "#/services/event-engine/resolver"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
-import { extractEntityLinks } from "#/services/event-engine/entity"
+import { resolveEventSubjects } from "#/services/event-engine/subject-resolution"
 import { extractEventFacts } from "#/services/event-engine/extractors"
 import { getInvestmentEventFamily } from "#/services/event-engine/investment-view"
 import { EVENT_ENGINE_METRICS, getEventEngineMetricsSnapshot, incrementEventEngineMetric, resetEventEngineMetrics } from "#/services/event-engine/metrics"
 import { createChinaisaIndustryFixture, createChinamoneyFdr007Fixture, createChinapvPolicyFixture, createClsInterpretationFixture, createClsOmoFixture, createCninfoAnnouncementFixture, createEastmoneyMarketMoveFixture, createHkexResumeFixtures, createPbcOmoFixture, createXueqiuHotstockFixture } from "#/services/event-engine/fixtures"
+
+vi.mock("#/services/tdx-api", () => ({
+  resolveSecurityByCode: async (keyword: string) => {
+    if (keyword === "601318") {
+      return {
+        code: "601318",
+        fullCode: "sh601318",
+        name: "中国平安",
+        exchange: "SH",
+        assetType: "stock",
+      }
+    }
+    return null
+  },
+  resolveSecurityByName: async (keyword: string) => {
+    if (keyword === "鹏辉能源") {
+      return {
+        code: "300438",
+        fullCode: "sz300438",
+        name: "鹏辉能源",
+        exchange: "SZ",
+        assetType: "stock",
+      }
+    }
+    return null
+  },
+}))
+
+async function extractEntityLinksForReplay(
+  eventId: string,
+  title: string,
+  topicTags: string[],
+  options?: {
+    primaryEntityName?: string | null
+    summary?: string | null
+    payload?: any
+    eventType?: any
+    eventSubType?: any
+    sourceKind?: any
+    affectedMarkets?: any[]
+  },
+) {
+  const resolved = await resolveEventSubjects({
+    eventId,
+    title,
+    summary: options?.summary,
+    eventType: options?.eventType ?? "news",
+    eventSubType: options?.eventSubType ?? "other",
+    sourceKind: options?.sourceKind,
+    topicTags,
+    affectedMarkets: options?.affectedMarkets ?? [],
+    payload: options?.payload,
+    primaryEntityNameHint: options?.primaryEntityName,
+  })
+
+  return resolved.entityLinks
+}
 
 function createDatedChinamoneyFdr007Fixture(input: {
   itemId: string
@@ -339,9 +396,12 @@ describe("event-engine replay fixtures", () => {
     const title = "加密货币板块集体走高 Strategy涨超12%"
     const summary = "加密货币板块周五集体走高，比特币涨超3%，报77195美元；以太坊涨超3.8%，报2433.5美元。截至发稿，Coinbase(COIN.US)涨超4.5%，Robinhood(HOOD.US)涨超5%，Strategy(MSTR.US)涨超12%，Bit Digital(BTBT.US)涨近4%，CleanSpark(CLSK.US)涨近4%。"
     const resolved = resolveEventClassification("cls-telegraph", title, summary)
-    const entities = await extractEntityLinks("evt_broad_market_descriptor", title, resolved.topicTags, {
+    const entities = await extractEntityLinksForReplay("evt_broad_market_descriptor", title, resolved.topicTags, {
       primaryEntityName: resolved.primaryEntityName,
       summary,
+      eventType: resolved.eventType,
+      eventSubType: resolved.eventSubType,
+      sourceKind: resolved.profile?.sourceKind,
     })
 
     expect(resolved.eventType).toBe("market_move")
@@ -373,8 +433,11 @@ describe("event-engine replay fixtures", () => {
   it("extracts explicit offshore tickers from nested company names and mixed listing-code groups", async () => {
     const hkTitle = "广南(集团)(01203.HK)拟4月28日举行董事会会议审批第一季度业绩"
     const hkResolved = resolveEventClassification("gelonghui", hkTitle)
-    const hkEntities = await extractEntityLinks("evt_nested_hk_ticker", hkTitle, hkResolved.topicTags, {
+    const hkEntities = await extractEntityLinksForReplay("evt_nested_hk_ticker", hkTitle, hkResolved.topicTags, {
       primaryEntityName: hkResolved.primaryEntityName,
+      eventType: hkResolved.eventType,
+      eventSubType: hkResolved.eventSubType,
+      sourceKind: hkResolved.profile?.sourceKind,
     })
 
     expect(hkEntities).toEqual(expect.arrayContaining([
@@ -390,8 +453,11 @@ describe("event-engine replay fixtures", () => {
 
     const mixedTitle = "大摩发布26家“中国最佳商业模式”企业，平安(601318.SH/2318.HK)的答案：服务"
     const mixedResolved = resolveEventClassification("gelonghui", mixedTitle)
-    const mixedEntities = await extractEntityLinks("evt_mixed_listing_codes", mixedTitle, mixedResolved.topicTags, {
+    const mixedEntities = await extractEntityLinksForReplay("evt_mixed_listing_codes", mixedTitle, mixedResolved.topicTags, {
       primaryEntityName: mixedResolved.primaryEntityName,
+      eventType: mixedResolved.eventType,
+      eventSubType: mixedResolved.eventSubType,
+      sourceKind: mixedResolved.profile?.sourceKind,
     })
 
     expect(mixedEntities).toEqual(expect.arrayContaining([
@@ -412,8 +478,11 @@ describe("event-engine replay fixtures", () => {
 
     const shareClassTitle = "加科思－Ｂ(01167.HK)4月10日耗资49.5万港元回购6.84万股"
     const shareClassResolved = resolveEventClassification("gelonghui", shareClassTitle)
-    const shareClassEntities = await extractEntityLinks("evt_hk_share_class", shareClassTitle, shareClassResolved.topicTags, {
+    const shareClassEntities = await extractEntityLinksForReplay("evt_hk_share_class", shareClassTitle, shareClassResolved.topicTags, {
       primaryEntityName: shareClassResolved.primaryEntityName,
+      eventType: shareClassResolved.eventType,
+      eventSubType: shareClassResolved.eventSubType,
+      sourceKind: shareClassResolved.profile?.sourceKind,
     })
 
     expect(shareClassEntities).toEqual(expect.arrayContaining([
@@ -469,10 +538,13 @@ describe("event-engine replay fixtures", () => {
       payload,
       resolved,
     })
-    const entities = await extractEntityLinks(identity.eventId, raw.title, resolved.topicTags, {
+    const entities = await extractEntityLinksForReplay(identity.eventId, raw.title, resolved.topicTags, {
       primaryEntityName: resolved.primaryEntityName,
       summary: payload.extra?.hover,
       payload,
+      eventType: resolved.eventType,
+      eventSubType: resolved.eventSubType,
+      sourceKind: resolved.profile?.sourceKind,
     })
     const impact = buildImpactSnapshot({
       eventType: resolved.eventType,

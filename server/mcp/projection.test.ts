@@ -111,6 +111,7 @@ function makeInvestmentDetail(): InvestmentEventDetail {
       note: "中国货币网更新当日 FDR007",
       sourceName: "中国货币网",
     }],
+    watchTargetCandidates: [],
   }
 }
 

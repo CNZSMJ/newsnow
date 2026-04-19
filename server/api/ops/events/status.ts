@@ -1,6 +1,7 @@
 import { getEventBusWorkerStatus } from "#/services/event-bus"
 import { getEventTable } from "#/database/events"
 import { evaluateEventQualityGates } from "#/services/event-engine/quality-gates"
+import { getLiveSubjectRoleExtractorStatus } from "#/services/event-engine/subject-role-live-extractor"
 import type { EventBaseQualitySnapshot } from "#/services/event-engine/slo"
 import { EVENT_ENGINE_VERSIONS } from "#/services/event-engine/versions"
 
@@ -148,6 +149,7 @@ export default defineEventHandler(async (event) => {
   const extractorFailureRate = extractionAttempts ? Number((extractorFailure / extractionAttempts).toFixed(4)) : 0
   const mergeCollisionRate = extractorSuccess ? Number((mergeCollisions / extractorSuccess).toFixed(4)) : 0
   const qualityGate = evaluateEventQualityGates(qualitySnapshot, { evaluatedAt: updatedTime })
+  const liveExtractorStatus = getLiveSubjectRoleExtractorStatus()
 
   return {
     status: "success",
@@ -162,7 +164,12 @@ export default defineEventHandler(async (event) => {
       diagnostics: latencyDiagnostics,
     },
     llm: {
-      enabled: false,
+      enabled: liveExtractorStatus.enabled,
+      provider: liveExtractorStatus.provider,
+      model: liveExtractorStatus.model,
+      promptId: liveExtractorStatus.promptId,
+      promptVersion: liveExtractorStatus.promptVersion,
+      missingConfig: liveExtractorStatus.missingConfig,
       latencyMs: null,
       fallbackRate: null,
     },

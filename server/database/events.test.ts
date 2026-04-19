@@ -44,6 +44,7 @@ describe("event table migration", () => {
       "series_key",
       "period_key",
       "release_cadence",
+      "watch_target_candidates_json",
       "directional_view",
       "directional_confidence",
       "materiality_score",
@@ -729,6 +730,70 @@ describe("event table migration", () => {
     expect((detail as any)?.releaseCadence).toBe("monthly")
     expect(listResult.map(item => item.eventId)).toEqual(["evt_series"])
     expect(listResult[0]?.title).toBe("2026年3月工业增加值数据")
+  })
+
+  it("persists and reads watch-target candidates on event details", async () => {
+    const db = createTempDb("watch-target-candidates-roundtrip")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertEvent({
+      event_id: "evt_watch_targets",
+      cluster_key: "cluster_watch_targets",
+      title: "国产光纤全球爆单 部分产品价格暴涨650%",
+      summary: "行业价格与订单同时走强，但未点名具体上市公司。",
+      event_type: "industry",
+      event_subtype: "industry_news",
+      source_kind: "media_fast_feed",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/fiber",
+      primary_entity_name: "光纤",
+      importance: "medium",
+      sentiment: null,
+      directional_view: "positive",
+      directional_confidence: 61,
+      materiality_score: 66,
+      tradability_score: 52,
+      authority_score: 41,
+      freshness_score: 79,
+      surprise_score: 57,
+      affected_markets_json: JSON.stringify(["A"]),
+      impact_summary_json: JSON.stringify(["光纤链价格和订单同步走强。"]),
+      degraded: 0,
+      topic_tags_json: JSON.stringify([]),
+      watch_target_candidates_json: JSON.stringify([{
+        source: "llm-registry",
+        matchedBy: "llm_hypothesis",
+        reason: "光纤供需收紧时，光纤光缆龙头通常最先兑现业绩弹性。",
+        confidence: 0.93,
+        entity: {
+          entityId: "sh601869",
+          label: "长飞光纤",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+          code: "601869",
+          market: "A",
+        },
+      }]),
+      last_seen_at: now,
+      status: "active",
+    } as any)
+
+    const detail = await table.getEventDetail("evt_watch_targets")
+
+    expect((detail as any)?.watchTargetCandidates).toEqual([
+      expect.objectContaining({
+        source: "llm-registry",
+        matchedBy: "llm_hypothesis",
+        reason: "光纤供需收紧时，光纤光缆龙头通常最先兑现业绩弹性。",
+        entity: expect.objectContaining({
+          label: "长飞光纤",
+          code: "601869",
+        }),
+      }),
+    ])
   })
 
   it("supports changed-first ordering and lifecycle recency filters for scan semantics", async () => {
@@ -2560,6 +2625,243 @@ describe("event table migration", () => {
     await expect(table.getEventById("evt_duplicate_confirmed")).resolves.toBeUndefined()
   })
 
+  it("blocks silent merges when the duplicate carries a conflicting primary subject", async () => {
+    const db = createTempDb("merge-conflict-primary-subject")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertEvent({
+      event_id: "evt_merge_conflict_canonical",
+      cluster_key: "cluster_merge_conflict_canonical",
+      title: "宁德时代回购方案",
+      summary: "canonical",
+      event_type: "announcement",
+      event_subtype: "buyback",
+      source_kind: "exchange_disclosure",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/conflict-merge",
+      primary_entity_name: "宁德时代",
+      importance: "high",
+      sentiment: null,
+      directional_view: "positive",
+      directional_confidence: 70,
+      materiality_score: 75,
+      tradability_score: 65,
+      authority_score: 90,
+      freshness_score: 80,
+      surprise_score: 40,
+      affected_markets_json: "[\"A\"]",
+      impact_summary_json: "[\"回购提升资本回报预期\"]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now,
+      status: "active",
+    })
+    await table.upsertEvent({
+      event_id: "evt_merge_conflict_duplicate",
+      cluster_key: "cluster_merge_conflict_duplicate",
+      title: "比亚迪回购方案",
+      summary: "duplicate",
+      event_type: "announcement",
+      event_subtype: "buyback",
+      source_kind: "exchange_disclosure",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/conflict-merge",
+      primary_entity_name: "比亚迪",
+      importance: "high",
+      sentiment: null,
+      directional_view: "positive",
+      directional_confidence: 72,
+      materiality_score: 78,
+      tradability_score: 66,
+      authority_score: 90,
+      freshness_score: 80,
+      surprise_score: 42,
+      affected_markets_json: "[\"A\"]",
+      impact_summary_json: "[\"回购提升资本回报预期\"]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now,
+      status: "active",
+    })
+
+    const result = await table.mergeEventIntoCanonical({
+      canonicalEventId: "evt_merge_conflict_canonical",
+      duplicateEventId: "evt_merge_conflict_duplicate",
+      reason: "subject_conflict",
+      mergedAt: now + 1,
+    })
+
+    const canonical = await table.getEventDetail("evt_merge_conflict_canonical")
+    const duplicate = await table.getEventById("evt_merge_conflict_duplicate")
+
+    expect(result?.status).toBe("conflict")
+    expect(canonical?.primaryEntityName).toBe("宁德时代")
+    expect(canonical?.timeline.some(entry => entry.reason === "merge_conflict_candidate")).toBe(true)
+    expect(duplicate?.primary_entity_name).toBe("比亚迪")
+  })
+
+  it("records an explicit correction when the same subject flips direction", async () => {
+    const db = createTempDb("merge-correction-direction")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertEvent({
+      event_id: "evt_correction_canonical",
+      cluster_key: "cluster_correction_canonical",
+      title: "测试公司业绩快报",
+      summary: "canonical",
+      event_type: "announcement",
+      event_subtype: "earnings",
+      source_kind: "exchange_disclosure",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/correction-merge",
+      primary_entity_name: "测试公司",
+      importance: "high",
+      sentiment: null,
+      directional_view: "negative",
+      directional_confidence: 68,
+      materiality_score: 70,
+      tradability_score: 58,
+      authority_score: 90,
+      freshness_score: 80,
+      surprise_score: 39,
+      affected_markets_json: "[\"A\"]",
+      impact_summary_json: "[\"初始解读偏负面\"]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now,
+      status: "active",
+    })
+    await table.upsertEvent({
+      event_id: "evt_correction_duplicate",
+      cluster_key: "cluster_correction_duplicate",
+      title: "测试公司业绩快报更正",
+      summary: "duplicate",
+      event_type: "announcement",
+      event_subtype: "earnings",
+      source_kind: "exchange_disclosure",
+      published_at: now + 1,
+      ingested_at: now + 1,
+      canonical_url: "https://example.com/correction-merge",
+      primary_entity_name: "测试公司",
+      importance: "high",
+      sentiment: null,
+      directional_view: "positive",
+      directional_confidence: 82,
+      materiality_score: 74,
+      tradability_score: 61,
+      authority_score: 92,
+      freshness_score: 82,
+      surprise_score: 45,
+      affected_markets_json: "[\"A\"]",
+      impact_summary_json: "[\"更正后转为偏正面\"]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now + 1,
+      status: "active",
+    })
+
+    const result = await table.mergeEventIntoCanonical({
+      canonicalEventId: "evt_correction_canonical",
+      duplicateEventId: "evt_correction_duplicate",
+      reason: "direction_correction",
+      mergedAt: now + 2,
+    })
+
+    const canonical = await table.getEventDetail("evt_correction_canonical")
+    const duplicate = await table.getEventById("evt_correction_duplicate")
+
+    expect(result?.status).toBe("correction")
+    expect(canonical?.directionalView).toBe("positive")
+    expect(canonical?.impactSummary).toContain("更正后转为偏正面")
+    expect(canonical?.timeline.some(entry => entry.reason === "event_correction")).toBe(true)
+    expect(duplicate).toBeUndefined()
+  })
+
+  it("allows coarse subtypes to refine during merge without raising a conflict", async () => {
+    const db = createTempDb("merge-subtype-refinement")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertEvent({
+      event_id: "evt_subtype_refine_canonical",
+      cluster_key: "cluster_subtype_refine_canonical",
+      title: "测试公司回购公告",
+      summary: "canonical",
+      event_type: "announcement",
+      event_subtype: "other",
+      source_kind: "exchange_disclosure",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/subtype-refine",
+      primary_entity_name: "测试公司",
+      importance: "high",
+      sentiment: null,
+      directional_view: "positive",
+      directional_confidence: 70,
+      materiality_score: 75,
+      tradability_score: 60,
+      authority_score: 90,
+      freshness_score: 80,
+      surprise_score: 40,
+      affected_markets_json: "[\"A\"]",
+      impact_summary_json: "[\"初始公告分类较粗\"]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now,
+      status: "active",
+    })
+    await table.upsertEvent({
+      event_id: "evt_subtype_refine_duplicate",
+      cluster_key: "cluster_subtype_refine_duplicate",
+      title: "测试公司回购公告",
+      summary: "duplicate",
+      event_type: "announcement",
+      event_subtype: "buyback",
+      source_kind: "exchange_disclosure",
+      published_at: now + 1,
+      ingested_at: now + 1,
+      canonical_url: "https://example.com/subtype-refine",
+      primary_entity_name: "测试公司",
+      importance: "high",
+      sentiment: null,
+      directional_view: "positive",
+      directional_confidence: 72,
+      materiality_score: 77,
+      tradability_score: 62,
+      authority_score: 91,
+      freshness_score: 82,
+      surprise_score: 42,
+      affected_markets_json: "[\"A\"]",
+      impact_summary_json: "[\"后续识别为回购\"]",
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now + 1,
+      status: "active",
+    })
+
+    const result = await table.mergeEventIntoCanonical({
+      canonicalEventId: "evt_subtype_refine_canonical",
+      duplicateEventId: "evt_subtype_refine_duplicate",
+      reason: "subtype_refinement",
+      mergedAt: now + 2,
+    })
+
+    const canonical = await table.getEventById("evt_subtype_refine_canonical")
+    const duplicate = await table.getEventById("evt_subtype_refine_duplicate")
+
+    expect(result?.status).toBe("merged")
+    expect(canonical?.event_subtype).toBe("buyback")
+    expect(duplicate).toBeUndefined()
+  })
+
   it("ignores duplicate new_event timeline entries for the same event", async () => {
     const db = createTempDb("duplicate-new-event-timeline")
     const table = new EventTable(db as any)
@@ -3173,12 +3475,13 @@ describe("event table migration", () => {
     expect(detail?.primaryEntityName).toBe("台积电")
     expect(detail?.entities).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        entityType: "company",
+        entityType: "institution",
         entityName: "台积电",
-        resolver: "primary-entity-fallback",
+        resolver: "deterministic-provisional-institution",
       }),
     ]))
-    expect(detail?.entities.some(entity => entity.entityType === "company" && entity.entityName === "台积电法说会")).toBe(false)
+    expect(detail?.entities.some(entity => entity.entityName === "台积电法说会")).toBe(false)
+    expect(detail?.entities.some(entity => entity.entityName === "魏哲家称")).toBe(false)
   })
 
   it("repairs nested HK tickers and broad market descriptor fallbacks out of follow-up entities", async () => {
@@ -3500,5 +3803,63 @@ describe("event table migration", () => {
     })
 
     expect(results.some(item => item.eventId === "evt_topic_medicine")).toBe(true)
+  })
+
+  it("does not rehydrate heuristic title subjects when stored primary entity truth is empty", async () => {
+    const db = createTempDb("no-heuristic-primary-rehydration")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+    await table.upsertEvent({
+      event_id: "evt_no_heuristic_primary",
+      cluster_key: "cluster_no_heuristic_primary",
+      title: "国产光纤全球爆单 部分产品价格暴涨650%",
+      summary: "行业价格与订单同时走强，但未点名具体上市公司。",
+      event_type: "macro",
+      event_subtype: "macro_data",
+      source_kind: "media_fast_feed",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/fiber-watch-targets",
+      primary_entity_name: null,
+      importance: "medium",
+      sentiment: null,
+      directional_view: "positive",
+      directional_confidence: 42,
+      materiality_score: 58,
+      tradability_score: 44,
+      authority_score: 35,
+      freshness_score: 77,
+      surprise_score: 51,
+      affected_markets_json: JSON.stringify(["A"]),
+      impact_summary_json: JSON.stringify(["产业链价格和订单同步走强，需继续确认是否扩散到公司业绩。"]),
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_no_heuristic_primary",
+      raw_id: "raw_no_heuristic_primary",
+      source_id: "cls-telegraph",
+      source_item_id: "no-heuristic-primary",
+      title: "国产光纤全球爆单 部分产品价格暴涨650%",
+      summary: "行业价格与订单同时走强，但未点名具体上市公司。",
+      canonical_url: "https://example.com/fiber-watch-targets",
+      published_at: now,
+      fetched_at: now,
+      source_priority: 0,
+      authority_level: "media",
+      parser_family: "cls",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+
+    const detail = await table.getEventDetail("evt_no_heuristic_primary")
+
+    expect(detail?.primaryEntityName).toBeUndefined()
   })
 })

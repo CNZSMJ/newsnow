@@ -122,10 +122,11 @@ Latency remediation 要优先处理那些直接影响盘中或开盘决策的 so
 
 ### Step 1：先看当前运行状态
 
-默认先跑下面 3 个入口：
+默认先跑下面 4 个入口：
 
 - `pnpm events:ops-report -- --hours 24 --limit 20`
 - `pnpm events:check-quality`
+- `pnpm events:blind-review -- --hours 24 --scan-limit 20 --random 2 --high-risk 3`
 - `curl http://127.0.0.1:3000/api/ops/events/status`
 
 最低限度要看清楚：
@@ -135,6 +136,7 @@ Latency remediation 要优先处理那些直接影响盘中或开盘决策的 so
 - 慢的是 `initial canonical latency` 还是 `full semantic enrichment latency`
 - 是否已经被标记成 `backlog catch-up`
 - 是否同时伴随 semantic fallback、entity precision 或 merge regression
+- blind review 的高风险桶当前覆盖了哪些：`generic_fallback`、`unmapped_role`、`merge_conflict`、`new_family`、`low_confidence_llm`
 
 ### Step 2：对问题分类
 
@@ -146,6 +148,7 @@ Latency remediation 要优先处理那些直接影响盘中或开盘决策的 so
 - `semantic fallback regression`
 - `entity precision regression`
 - `merge / lifecycle regression`
+- `tranche-h blind review regression`
 - `repair-needed historical pollution`
 
 如果分类不清，先不要动代码。
@@ -209,6 +212,12 @@ Latency remediation 要优先处理那些直接影响盘中或开盘决策的 so
 
 如果未来新增 repair 脚本，也要在这里补充用途和使用边界。
 
+如果 repair / backfill 触及主体识别、最小事实集或 merge 语义，必须额外确认：
+
+- 没有把 provisional institution 回写成伪 canonical company / security
+- 没有吞掉 `merge_conflict_candidate` 或 `event_correction` timeline 节点
+- blind review 与 replay fixture 在 repair 之后仍然可复现
+
 ## 6. Manual review 流程
 
 自动化 gate 不覆盖全部质量问题，所以 sampled review 仍然必要。
@@ -220,12 +229,20 @@ Latency remediation 要优先处理那些直接影响盘中或开盘决策的 so
 - missed merge
 - replay consistency
 - high-value fallback pollution
+- Tranche H blind review 风险桶覆盖情况
 
 建议抽样对象：
 
 - 最近 24 小时的高价值 source family
 - 本批代码实际触碰过的 source family
 - diagnostics 已经暴露为慢源或歧义源的 family
+- `pnpm events:blind-review` 生成的随机样本与高风险样本
+
+Tranche H 默认抽样入口：
+
+- `pnpm events:blind-review -- --hours 24 --scan-limit 20 --random 2 --high-risk 3`
+- 高风险样本至少覆盖：`generic_fallback`、`unmapped_role`、`merge_conflict`、`new_family`、`low_confidence_llm`
+- 如果命中 `merge_conflict_candidate` 或 `event_correction`，先确认是否需要 repair / backfill，再决定是否扩大抽样
 
 Manual review 结果至少要记录：
 

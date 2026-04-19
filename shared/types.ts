@@ -138,7 +138,7 @@ export type EventSubType =
   | "industry_news"
 export type EventImportance = "low" | "medium" | "high"
 export type EventSentiment = "positive" | "negative" | "neutral"
-export type EventEntityType = "stock" | "index" | "industry" | "company" | "topic"
+export type EventEntityType = "stock" | "index" | "industry" | "company" | "topic" | "institution"
 export type EventLifecycleState = "detected" | "updated" | "confirmed" | "resolved"
 export type InvestmentEventFamily =
   | "rates_liquidity"
@@ -302,6 +302,7 @@ export interface EventDetail extends EventRecord {
   entities: EventEntityLink[]
   facts: EventFact[]
   timeline: EventTimelineEntry[]
+  watchTargetCandidates?: InvestmentWatchTargetCandidate[]
 }
 
 export interface EventListResponse {
@@ -317,6 +318,14 @@ export interface InvestmentEntityRef {
   entityTypeLabel: string
   code?: string
   market?: string
+}
+
+export interface InvestmentWatchTargetCandidate {
+  entity: InvestmentEntityRef
+  reason: string
+  confidence: number
+  source: "industry-watch-registry" | "llm-registry"
+  matchedBy: "industry_entity" | "topic_tag" | "llm_hypothesis"
 }
 
 export interface InvestmentEventFact {
@@ -424,6 +433,7 @@ export interface InvestmentEventDetail extends InvestmentEventBrief {
   keyFacts: InvestmentEventFact[]
   evidence: InvestmentEventEvidence[]
   timelineSummary: InvestmentTimelineEntry[]
+  watchTargetCandidates: InvestmentWatchTargetCandidate[]
   relatedEvents?: InvestmentRelatedEventsSection[]
 }
 

@@ -43,6 +43,25 @@ function detectMetricName(text: string) {
   return "media_fast_signal"
 }
 
+function extractSubjectText(text: string) {
+  const matched = text.match(/(沪指|深成指|创业板指|科创50|恒指|恒生科技|A股|港股|比特币|以太坊)(?=涨超|涨逾|上涨|拉升|走高|跌超|跌逾|下跌|跳水|走低|回落)/)
+  if (matched?.[1]) return matched[1]
+  const leading = text.match(/^(沪指|深成指|创业板指|恒指|恒生科技|A股|港股)/)
+  return leading?.[1] ?? null
+}
+
+function extractMagnitudeText(text: string) {
+  const matched = text.match(/((?:涨超|涨逾|跌超|跌逾)\s*[\d.]+\s*%)/)
+  if (matched?.[1]) return matched[1].replace(/\s+/g, "")
+  const percent = text.match(/([\d.]+\s*%)/)
+  return percent?.[1]?.replace(/\s+/g, "") ?? null
+}
+
+function extractDriverText(text: string) {
+  const parts = text.split(/[，。；]/).map(part => part.trim()).filter(Boolean)
+  return parts[1] ?? null
+}
+
 export function extractMediaFastFacts(input: {
   eventId: string
   rawId: string
@@ -67,6 +86,9 @@ export function extractMediaFastFacts(input: {
     ? amountMagnitude
     : detectMagnitude(text)
   const market = detectMarket(text)
+  const subjectText = extractSubjectText(text)
+  const magnitudeText = extractMagnitudeText(text)
+  const driverText = extractDriverText(text)
 
   const fact: EventFactRow = {
     fact_id: `fact_${md5(`${input.eventId}|${input.rawId}|media_fast|${metricName}`)}`,
@@ -84,6 +106,9 @@ export function extractMediaFastFacts(input: {
     confidence: direction || magnitude.value || market ? 0.72 : 0.45,
     payload_json: JSON.stringify({
       market,
+      subjectText,
+      magnitudeText,
+      driverText,
       text,
       sourceId: input.sourceId,
       raw,

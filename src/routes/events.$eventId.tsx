@@ -239,6 +239,29 @@ function EventDetailPage() {
               ))}
             </div>
           </InfoCard>
+
+          <InfoCard title="赛道观察标的" count={item.watchTargetCandidates.length}>
+            {!item.watchTargetCandidates.length && <EmptyText text="当前暂无基于赛道线索推导出的候选标的。" />}
+            {!!item.watchTargetCandidates.length && (
+              <p className="mb-3 text-xs leading-5 text-neutral-500">
+                这些是后端根据赛道线索和候选标的 registry 推导出的观察名单，用于补足“新闻没点名、但投资上应该盯谁”的空缺；它们不是新闻已明确确认的主体。
+              </p>
+            )}
+            <div className="space-y-2">
+              {item.watchTargetCandidates.map(candidate => (
+                <div key={`${candidate.entity.entityId}-${candidate.source}`} className="rounded-2xl bg-neutral-400/5 px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge>候选标的</Badge>
+                    <Badge tone="subtle">{candidate.entity.entityTypeLabel}</Badge>
+                    {candidate.entity.market && <Badge tone="subtle">{formatEntityMarket(candidate.entity.market)}</Badge>}
+                  </div>
+                  <p className="mt-2 font-medium">{candidate.entity.label}</p>
+                  <p className="mt-1 text-neutral-500">{candidate.entity.code ?? candidate.entity.entityId}</p>
+                  <p className="mt-2 text-xs leading-5 text-neutral-500">{candidate.reason}</p>
+                </div>
+              ))}
+            </div>
+          </InfoCard>
         </div>
       </section>
     </div>

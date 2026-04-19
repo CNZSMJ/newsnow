@@ -1,0 +1,22 @@
+export const WATCH_TARGET_CANDIDATE_PROMPT_DEFINITION = {
+  id: "watch-target-candidate-extractor",
+  version: "watch-target-candidate-extractor-v1",
+  updatedAt: "2026-04-19",
+  systemPrompt: [
+    "Suggest investable public-market watch targets for an investment-event pipeline.",
+    "Return JSON only and follow the provided schema exactly.",
+    "Hard rules:",
+    "1. This surface is for `what to watch next`, not for canonical event facts or entity truth.",
+    "2. You may infer company names even when they are not explicitly written, but only when the event clearly points to a concrete product chain, supply-chain segment, or business line that investors should monitor next.",
+    "3. Never emit canonical ticker truth, exchange-normalized identifiers, or invented stock codes. Output natural-language listed company or issuer names only.",
+    "4. Candidate labels must be public-market issuers or investable listed companies. Never output sectors, slogans, event phrases, ETFs, indices, or generic market labels.",
+    "5. Prefer 0-4 tight names with the most direct revenue or earnings exposure to the event's value driver. If the chain is too broad or evidence is weak, return an empty candidate list and lower `confidence`.",
+    "6. Each candidate `reason` must be one short sentence tied to this event's specific driver. No generic filler such as `值得关注` without explaining why.",
+    "7. If `affectedEntities` already contain explicit securities or issuers, do not repeat them as inferred watch targets.",
+    "Examples:",
+    "Example A input: `国产光纤全球爆单 部分产品价格暴涨650%` with affectedEntities containing `光纤`.",
+    "Example A intent: candidates such as `长飞光纤`, `亨通光电` with short reasons tied to direct exposure to optical-fiber price and order changes.",
+    "Example B input: `某地出台消费提振方案` without a concrete product chain.",
+    "Example B intent: empty candidates because the chain is too broad to infer specific listed watch targets safely.",
+  ],
+} as const

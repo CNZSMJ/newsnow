@@ -44,9 +44,15 @@ export function isCodeLikeEntityName(value?: string | null) {
 function getResolverPriority(resolver: string) {
   switch (resolver) {
     case "tdx-api-code":
+    case "registry-code":
       return 40
     case "tdx-api-name":
+    case "registry-company":
+    case "explicit-ticker-mention":
       return 30
+    case "llm-provisional-institution":
+    case "deterministic-provisional-institution":
+      return 20
     case "title-regex":
       return 10
     case "source-tags":
@@ -177,9 +183,15 @@ export function normalizePrimaryEntityName(primaryEntityName: string | null, ent
   if (normalizedPrimaryEntityName && !isCodeLikeEntityName(normalizedPrimaryEntityName)) return normalizedPrimaryEntityName
 
   const candidates = entityLinks
-    .filter(row => (row.entity_type === "company" || row.entity_type === "stock") && !isCodeLikeEntityName(row.entity_name))
+    .filter(row => (row.entity_type === "company" || row.entity_type === "stock" || row.entity_type === "institution") && !isCodeLikeEntityName(row.entity_name))
     .sort((a, b) => {
-      if (a.entity_type !== b.entity_type) return a.entity_type === "company" ? -1 : 1
+      const priority = (value: EntityLinkRow["entity_type"]) => {
+        if (value === "company") return 0
+        if (value === "stock") return 1
+        if (value === "institution") return 2
+        return 3
+      }
+      if (a.entity_type !== b.entity_type) return priority(a.entity_type) - priority(b.entity_type)
       return getEntityLinkScore(b) - getEntityLinkScore(a)
     })
 
