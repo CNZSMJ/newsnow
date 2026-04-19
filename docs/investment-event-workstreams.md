@@ -246,10 +246,20 @@ frontend 和 agent 层都不能自己再做一套事件分类、direction、mate
 - `primary subject precision`
 - `false tradable subject rate`
 - `event family precision`
+- `high-value generic fallback share`
 - `structured fact coverage`
 - `key fact completeness`
 - `evidence-linked fact rate`
 - `timeline noise ratio`
+
+当前量化合同：
+
+- 已落地合同：`tranche-h-scorecard-v1`
+- 当前挂载位置：`event-quality-gates-v2 -> scorecards.trancheH`
+- 指标来源：
+  - `manual_sample`：`wrong merge rate`、`missed merge rate`、`primary subject precision`、`false tradable subject rate`、`timeline noise ratio`
+  - `runtime_snapshot`：`high-value generic fallback share`、`structured fact coverage`
+  - `ci_replay`：`event family precision`、`key fact completeness`、`evidence-linked fact rate`
 
 执行顺序：
 

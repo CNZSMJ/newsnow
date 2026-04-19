@@ -20,6 +20,26 @@
 - 已完成的 tracking、被新文档取代的计划、一次性的 review 记录，全部移到 `docs/archive/`
 - 只要现有活文档能承载，就优先更新现有文档，而不是再新建一份“补充说明”
 
+这套文档首先服务于一个前提：
+
+> `newsnow` 的 `event` 不是新闻列表，也不是标题摘要。
+> 它是 backend-owned 的 canonical investment event，用来在事件发生时，及时向用户提供有证据约束的投资洞察与建议。
+
+一个合格的 `event`，至少要回答下面 5 个问题：
+
+1. 发生了什么事
+2. 这个事为什么会发生
+3. 这个事会影响什么
+4. 这个事背后的关联标的是什么
+5. 后续建议是什么
+
+其中第一层“发生了什么事”已经不是主观感受，而是仓内有实现、有门限的专项 scorecard：
+
+- 当前合同：`tranche-h-scorecard-v1`
+- 当前挂载位置：`event-quality-gates-v2 -> scorecards.trancheH`
+- 当前量化方式：`manual_sample + runtime_snapshot + ci_replay`
+- 当前核心门限：wrong/missed merge、primary subject precision、false tradable subject rate、event family precision、high-value generic fallback share、structured fact coverage、key fact completeness、evidence-linked fact rate、timeline noise ratio
+
 ## 2. 推荐阅读顺序
 
 如果你要快速建立上下文，按下面顺序看：

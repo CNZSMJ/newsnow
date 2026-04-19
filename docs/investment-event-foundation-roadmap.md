@@ -12,6 +12,302 @@
 
 这份文档刻意只讨论 `events` 系统本身，不讨论 thesis、订阅分发、组合管理、提醒策略或执行系统。
 
+一句话定位：
+
+> `event` 要实现的，不是“把新闻展示出来”，而是“当事件发生时，可以高效及时地给用户提供投资洞察与建议”。
+
+因此，`newsnow` 中的 `event` 必须被视为 backend-owned 的 canonical investment object，而不是内容页的投影对象。
+
+它至少要回答下面 5 个问题：
+
+1. 发生了什么事
+   这是真相层，要求 facts-first、evidence-linked，并且能说清事件身份、主体、类型、最小事实和时间语义。
+2. 这个事为什么会发生
+   这是原因层，要求能表达可审计的逻辑链。这里不仅是文字解释，还包括 event-to-event relations、背景驱动和触发关系。
+3. 这个事会影响什么
+   这是影响层，要求能表达影响对象、传导路径和影响方向，而不是只给一个模糊情绪标签。
+4. 这个事背后的关联标的是什么
+   这是投资映射层，要求区分确认主体、受影响对象与观察标的候选，并说明为什么是这些标的。
+5. 后续建议是什么
+   这是行动层，要求输出有边界、有量化约束的投资建议，包括优先级、可交易性、后续验证点和失效条件。
+
+这 5 层里，第一层“发生了什么事”已经有仓内正式量化实现，不允许再用主观描述替代：
+
+- 合同：`tranche-h-scorecard-v1`
+- 暴露位置：`event-quality-gates-v2.scorecards.trancheH`
+- 量化来源：
+  - `manual_sample`：wrong merge、missed merge、primary subject precision、false tradable subject rate、timeline noise ratio
+  - `runtime_snapshot`：high-value generic fallback share、structured fact coverage
+- `ci_replay`：event family precision、key fact completeness、evidence-linked fact rate
+- 设计原则：任何后续能力建设，都不能绕开第一层 scorecard 直接向下游输出更复杂的推理或建议
+
+## 1.1 外部建模实践与借鉴
+
+在收敛 `event` 顶层抽象时，需要明确一件事：`newsnow` 不是从零发明事件模型。
+世界上已经有几类成熟系统，各自解决了不同子问题。我们应当借鉴它们的强项，但不能直接照搬它们的全部形态。
+
+### Wikidata / Wikibase：事实应建模成带上下文的 statement，而不是一段摘要
+
+Wikidata 的核心实践不是“把世界真相写成一句话”，而是将信息表达为：
+
+- statement
+- qualifier
+- reference
+- rank
+
+关键启发：
+
+- 一个对象可以同时拥有多个值，只要它们分别有来源和限定条件
+- `unknown value` / `no value` 也是有效信息，不应被简单抹平
+- 引用和限定条件不是附注，而是 statement 的组成部分
+
+对 `newsnow` 的含义：
+
+- 第一层“发生了什么事”不能只落在 `whatHappened` 文案上
+- 事实应优先落成 `claim`，并带 time / scope / source / confidence / status
+- 冲突事实应允许并存和裁决，而不是先压成一句模糊摘要
+
+参考：
+
+- [Wikidata Help: Statements](https://www.wikidata.org/wiki/Help%3AStatements/en)
+- [Wikidata Help: Sources](https://www.wikidata.org/wiki/Help%3ASources/en)
+
+### W3C PROV-O：provenance 必须是一等公民
+
+PROV-O 的核心价值在于：它把“这条信息是怎么来的”建模成独立、可交换、可扩展的结构，而不是日志里的备注。
+
+关键启发：
+
+- provenance 必须能跨系统交换
+- provenance 可以被业务域专门化
+- 派生链、生成方式、责任主体、时间上下文都应可表达
+
+对 `newsnow` 的含义：
+
+- evidence、提取器、模型调用、repair、merge、correction 都应进入显式 provenance 轨道
+- “证据链接”“由哪个 extractor / llm path 得出”“后续被哪次 correction 改写”都不能只靠调试日志保存
+
+参考：
+
+- [W3C PROV-O](https://www.w3.org/TR/prov-o/)
+
+### SEM / EventKG：event 和 relation 都需要 typed role 与 temporal context
+
+SEM 和 EventKG 的共同价值在于：它们把 event 当成一等对象，也把 relation 当成可加上下文的对象，而不是只有简单边。
+
+关键启发：
+
+- event 需要 actor / place / time / roleType
+- event-event、event-entity、entity-entity 关系都可能带时间和来源
+- temporal relation 与 sub-event / previous / next event 是独立建模能力
+- 没有标准命名的“文本事件”也可以作为 event 对象存在
+
+对 `newsnow` 的含义：
+
+- 第二层“为什么会发生”不能只是一段 free text
+- 需要显式 `event relation graph`
+- 关系至少要带：relation type、direction、time、evidence、confidence、mechanism
+
+参考：
+
+- [Simple Event Model (SEM)](https://semanticweb.cs.vu.nl/2009/11/sem/)
+- [EventKG Tutorial](https://eventkg.l3s.uni-hannover.de/tutorial.html)
+- [EventKG Paper](https://journals.sagepub.com/doi/10.3233/SW-190355)
+
+### GDELT：快速事件骨架值得学习，但不能当投资终态
+
+GDELT 的强项是把海量新闻快速压缩成统一事件骨架，典型形式是：
+
+- Actor1
+- EventCode
+- Actor2
+
+关键启发：
+
+- 大规模事件系统需要统一 taxonomy
+- actor / action / target 骨架适合作为 time-to-first-truth 的快速层
+- 粗粒度事件流很适合做 coverage、热度、时序和分布分析
+
+但它的边界同样明确：
+
+- 它更像通用事件骨架，不是投资级事实系统
+- 它对证据粒度、金融实体身份、因果链、投资映射和建议层支持不足
+
+对 `newsnow` 的含义：
+
+- 可以学习“快速落骨架 + 后续 enrichment”的两段式思路
+- 不能把 `actor-action-target` 当成 `newsnow event` 的终态模型
+
+参考：
+
+- [GDELT Analysis Service: EVENT Timeline](https://analytics.gdeltproject.org/module-event-timeline.html)
+- [GDELT Event Codebook](https://data.gdeltproject.org/documentation/GDELT-Event_Codebook-V2.0.pdf)
+
+### OpenFIGI / FIBO：金融 identity 与 ontology 层要独立于 event
+
+OpenFIGI 和 FIBO 的价值，不在于定义 event 本身，而在于定义金融对象及其 identity / ontology。
+
+关键启发：
+
+- security / issuer / index / regulator / benchmark 需要稳定的 canonical identity
+- 金融对象的映射和命名规则不应由 LLM 或标题 heuristics 决定
+- corporate action、reference rate、business entity 等金融概念需要单独的 ontology 层支持
+
+对 `newsnow` 的含义：
+
+- `entity registry` 必须作为独立基座存在
+- 第四层“关联标的是什么”应基于 registry / ontology 做 grounding，而不是让模型直接输出最终证券真相
+
+参考：
+
+- [OpenFIGI API Documentation](https://www.openfigi.com/api/documentation)
+- [EDM Council FIBO](https://github.com/edmcouncil/fibo)
+
+### schema.org/Event：适合分发投影，不适合 canonical truth
+
+schema.org/Event 擅长的是页面分发、搜索引擎消费和展示场景，关注：
+
+- name
+- description
+- schedule
+- venue
+- organizer
+
+它不擅长：
+
+- 事实冲突
+- claim 级 provenance
+- event-event causal relations
+- 投资级影响链和建议层
+
+对 `newsnow` 的含义：
+
+- schema.org 式模型可以作为 projection 参考
+- 不能把它当成 backend canonical event truth 的设计基线
+
+参考：
+
+- [schema.org/Event](https://schema.org/Event)
+
+## 1.2 `newsnow event` 的正式抽象
+
+基于上面的外部实践，`newsnow` 的顶层抽象不应是“新闻 -> 一段 summary”，而应是 5 层对象协同工作：
+
+### A. `Claim`
+
+`Claim` 是有来源的原子事实。
+
+最小要求：
+
+- fact type
+- subject / object / metric
+- value / delta / direction / unit
+- effective time / publication time / execution window
+- qualifiers
+- evidence reference
+- confidence
+- status（asserted / corrected / withdrawn / provisional / unknown）
+
+`Claim` 是第一层“发生了什么事”的主数据契约。
+
+### B. `Event`
+
+`Event` 是对同一现实变化的一组 claims 的 canonical 组织。
+
+最小要求：
+
+- canonical identity
+- family / subtype
+- primary subject
+- affected entities / markets / topics
+- lifecycle / series / period
+- merged / corrected / superseded semantics
+
+`Event` 负责把原子事实组织成投资可消费的统一对象。
+
+### C. `Relation`
+
+`Relation` 用来表达：
+
+- event -> event
+- event -> entity
+- entity -> event
+- entity -> entity
+
+它至少要包含：
+
+- relation type
+- direction
+- role / mechanism
+- temporal validity
+- evidence
+- confidence
+
+第二层“为什么会发生”和第三层“会影响什么”都会大量依赖这层。
+
+### D. `Projection`
+
+`Projection` 是面向用户和 agent 的解释层输出，而不是底层真相本体。
+
+它负责回答这 5 个问题：
+
+1. 发生了什么事
+2. 为什么会发生
+3. 会影响什么
+4. 关联标的是什么
+5. 后续建议是什么
+
+这里允许更强的解释性，但不能越权篡改底层 truth / provenance / relation。
+
+### E. `Scorecard`
+
+`Scorecard` 不是附属监控，而是 event architecture 的一部分。
+
+原因很简单：
+
+- 这 5 个问题都必须逐层量化
+- 没有 scorecard，就无法知道系统是在提升事实、提升推理，还是只是在提升文案
+
+当前已经正式落地的是第一层 `What Happened` scorecard：
+
+- `tranche-h-scorecard-v1`
+
+后续第二到第五层都应各自拥有独立 scorecard，而不是共享一个模糊总分。
+
+## 1.3 truth / hypothesis / recommendation 三层边界
+
+为了避免系统把推理伪装成事实，`newsnow event` 必须显式区分三层：
+
+### Truth layer
+
+包括：
+
+- canonical event identity
+- claims
+- evidence
+- entity grounding
+- time semantics
+
+### Hypothesis layer
+
+包括：
+
+- why it happened
+- impact transmission
+- candidate causal chains
+- event relation graph 中尚未完全证实的关系
+
+### Recommendation layer
+
+包括：
+
+- watch target candidates
+- tradable now / action bucket
+- next checks
+- invalidation conditions
+
+这三层都可以出现在同一个 detail projection 里，但它们不能共享同一种真实性语义，也不能共享同一种量化标准。
+
 ## 2. 边界
 
 `events` 系统负责：
