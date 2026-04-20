@@ -57,6 +57,21 @@ frontend 和 agent 层都不能自己再做一套事件分类、direction、mate
 
 像 parser family、merge reason、lifecycle reason code 这类内部标签，可以保留给 debug，但不能成为默认的人类或 agent 契约。
 
+### 2.5 模块化高内聚、低耦合是长期演进硬约束
+
+任何工作流下的设计与实现都必须优先保证：
+
+- 业务领域内高内聚
+- 模块间低耦合
+- clear ownership
+- 稳定 contract
+
+不允许出现下面这些情况：
+
+- 同一业务语义散落在多个模块里各算一遍
+- backend truth、projection、prompt、frontend formatter 之间职责漂移
+- 为了短期交付，把关系推理、建议逻辑或事件语义硬塞进不属于它的模块
+
 ## 3. Workstream A：Backend unified event engine
 
 目标：
@@ -228,16 +243,47 @@ frontend 和 agent 层都不能自己再做一套事件分类、direction、mate
 - 大的语义改动在 rollout 前都能 replay 验证
 - 质量回退不需要靠人工浏览才会发现
 
+### A8-A11 是前四层重构主线，不是四个并列散任务
+
+后续启动重构时，A8 到 A11 必须被视为同一条主线的 4 个层次：
+
+1. `A8` 第一层：事件收敛与事实状态机层
+2. `A9` 第二层：时间关系与原因假设层
+3. `A10` 第三层：影响传导与对象映射层
+4. `A11` 第四层：投资映射层
+
+它们的依赖顺序必须保持：
+
+`A8 -> A9 -> A10 -> A11`
+
+不允许出现下面这些启动方式：
+
+- 第一层还没稳，就开始大规模做第二层强因果解释
+- 第二层 relation contract 还没立起来，就开始做第三层传导判断
+- 第三层 impact objects / pathways 还没成型，就直接扩第四层 watch target 结论
+
+每一层重构任务启动前，都应至少满足：
+
+- 上一层 contract 已明确
+- 上一层 replay / shadow / scorecard 已存在
+- 当前层对象边界、LLM 边界、fallback 边界已写入 [investment-event-layer-evolution-plan.md](./investment-event-layer-evolution-plan.md)
+- 当前层对应的 iteration package 已建立，且包含 `PRD`、`TD`、`Tracking`
+- 当前层的第一交付物是 backend schema contract，而不是数据库列或页面字段
+
+这条顺序不是流程偏好，而是为了防止高层结论建立在脏事实和脏关系之上。
+
 ### A8. “发生了什么事”95 分专项
 
 目标：
 
 - 让 canonical event engine 对事件本身的表达达到高置信度，优先把“事件身份、主体、类型、最小事实、时间语义”这五件事做稳
+- 该专项在架构上对应第一层：事件收敛与事实状态机层，而不是单纯的摘要生成层
 
 当前状态：
 
 - 2026-04-19 已完成首轮闭环，scorecard、blind review、subject arbitration、minimal fact template、merge conflict / correction 已上线
 - 后续不再以独立 tranche 重复实施，转入 steady-state 守护：持续维护 replay fixtures、blind review 风险桶覆盖、repair/backfill discipline
+- 后续 steady-state 需要继续把量化从“事实骨架”扩展到“状态演进质量”，避免第一层只测静态事实、不测收敛过程
 
 核心抓手：
 
@@ -283,6 +329,111 @@ frontend 和 agent 层都不能自己再做一套事件分类、direction、mate
 - 用户看到一条高价值事件时，基本不用回原文，就能确信系统对“发生了什么事”说对了
 - 主体、标题、类型、最小事实集和时间语义都达到专项 scorecard 门限
 - 相关 repair、backfill、runbook 和 replay 流程全部闭环
+
+### A9. “这个事为什么会发生”关系推理专项
+
+目标：
+
+- 把第二层正式建设成“时间关系与原因假设层”，而不是模板化解释层
+- 在 backend 内形成独立的 `EventRelation` / `CausalHypothesis` 语义对象与量化合同
+
+当前状态：
+
+- 尚未进入正式 tranche
+- 当前 roadmap 已完成顶层架构定义、外部研究借鉴和模块边界约束
+- 后续实施必须建立在第一层 factual state 稳定可用的前提上，禁止跳过第一层直接做强因果解释
+
+执行原则：
+
+- temporal relation first
+- typed relation second
+- causal hypothesis third
+- projection last
+
+任务：
+
+- 定义第二层 backend contract：`EventRelation`、`CausalHypothesis`
+- 先做 `ordering / phase / window` 级时间关系识别与回放样本
+- 再做 `triggered_by / follow_up_to / confirms / contradicts / correction_of / market_reaction_to / policy_response_to / conditioned_by` 等 typed relations
+- 将 evidence、counter-signals、provenance、confidence 作为第二层一等字段，而不是附注
+- 禁止 frontend、prompt 模板、MCP formatter、临时脚本各自重算“为什么会发生”
+- 为第二层建立独立 scorecard：时间关系质量、关系类型质量、原因假设质量、审计质量
+
+完成标准：
+
+- 第二层默认输出的是关系对象和原因假设，而不是一段不可审计的自由文本
+- 用户或 agent 能看到“为什么这么判断”的证据锚点、反证与置信度
+- 第二层所有主要业务语义都在 backend 内单点收敛，并可通过 replay / shadow / scorecard 观测质量
+
+### A10. “这个事会影响什么”传导路径专项
+
+目标：
+
+- 把第三层正式建设成“影响传导与对象映射层”，而不是情绪标签层
+- 在 backend 内形成独立的 `ImpactObject` / `ImpactPathway` / `ImpactAssessment` 语义对象与量化合同
+
+当前状态：
+
+- 尚未进入正式 tranche
+- 当前 roadmap 已完成第三层的外部研究借鉴、对象模型和模块边界定义
+- 后续实施必须建立在第一层 factual state 与第二层 relation layer 稳定可用的前提上
+
+执行原则：
+
+- exposure first
+- pathway second
+- impact assessment third
+- projection last
+
+任务：
+
+- 定义第三层 backend contract：`ImpactObject`、`ImpactPathway`、`ImpactAssessment`
+- 先做 `issuer / security / industry / commodity / market / macro_variable` 等 impact object grounding
+- 再做 `production_network / competition_substitution / cost_price_pass_through / funding_balance_sheet / policy_feedback / expectation_pricing` 等 pathway 类型
+- 将方向、时间跨度、state dependencies、失效条件、证据锚点与 confidence 作为第三层一等字段
+- 明确区分 `real operating impact` 与 `market pricing impact`
+- 禁止 frontend、prompt 模板、MCP formatter、临时脚本各自拼“会影响什么”
+- 为第三层建立独立 scorecard：对象质量、路径质量、判断质量、审计质量
+
+完成标准：
+
+- 第三层默认输出的是影响对象、传导路径和影响判断，而不是一个不可审计的情绪标签
+- 用户或 agent 能看到“影响谁、怎么传、影响多久、为什么会失效”
+- 第三层所有主要业务语义都在 backend 内单点收敛，并可通过 replay / shadow / scorecard 观测质量
+
+### A11. “这个事背后的关联标的是什么”投资映射专项
+
+目标：
+
+- 把第四层正式建设成“投资映射层”，而不是候选股票列表生成器
+- 在 backend 内形成独立的 `MappedInvestmentSubject` / `WatchTargetCandidate` 语义对象与量化合同
+
+当前状态：
+
+- 已有落地子能力：`watchTargetCandidates`
+- 当前已接入链路：`LLM candidate hypotheses -> registry resolve -> backend dedupe / confidence / fallback`
+- 但目前还只是第四层的一个子集，尚未形成 `confirmed subject / impacted object / watch target candidate` 的统一 contract
+
+执行原则：
+
+- mapping first
+- watch target second
+- projection last
+
+任务：
+
+- 定义第四层 backend contract：`MappedInvestmentSubject`、增强版 `WatchTargetCandidate`
+- 明确区分 `confirmed subject`、`impacted object` 与 `watch target candidate`
+- 保持 `LLM -> registry -> backend arbiter` 的 bounded 模式，禁止 LLM 直接产出最终证券真相
+- 为候选标的补齐 `relationType / supportingImpactPathways / why-this-target` 等 explanation 字段
+- 建立第四层独立 scorecard：映射质量、grounding 质量、候选质量、解释质量
+- 禁止 frontend、prompt 模板、MCP formatter、临时脚本各自重算第四层语义
+
+完成标准：
+
+- 第四层默认输出的是有边界的投资映射对象，而不是“可能受益股”散列表
+- 用户或 agent 能清楚区分：谁是事实主体、谁是受影响对象、谁是值得继续观察的标的
+- 第四层所有主要业务语义都在 backend 内单点收敛，并可通过 replay / shadow / scorecard 观测质量
 
 ## 4. Workstream B：Frontend investor surface
 

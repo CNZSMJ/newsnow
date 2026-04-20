@@ -1,6 +1,6 @@
 import type { IndustryTag } from "@shared/industry"
 import type { AffectedMarket, EventSourceKind } from "@shared/event-profile"
-import type { EventSubType, EventType, InvestmentEntityRef, InvestmentWatchTargetCandidate } from "@shared/types"
+import type { EventSubType, EventType, InvestmentEntityRef, InvestmentWatchTargetCandidate, SourceID } from "@shared/types"
 import { normalizeTitle } from "#/services/event-engine/text"
 import type {
   WatchTargetCandidateExtractionResult,
@@ -36,6 +36,7 @@ export interface WatchTargetRegistryResolver {
 
 export interface ResolveWatchTargetCandidatesInput {
   eventId: string
+  sourceId?: SourceID
   title: string
   summary?: string | null
   eventType: EventType
@@ -46,6 +47,23 @@ export interface ResolveWatchTargetCandidatesInput {
   affectedEntities: InvestmentEntityRef[]
   impactSummary?: string[]
 }
+
+const HIGH_THROUGHPUT_LIVE_WATCH_TARGET_SOURCE_IDS = new Set<SourceID>([
+  "mktnews-flash",
+  "wallstreetcn-quick",
+  "wallstreetcn-news",
+  "wallstreetcn-hot",
+  "cls-telegraph",
+  "cls-depth",
+  "cls-hot",
+  "xueqiu-hotstock",
+  "gelonghui",
+  "fastbull-express",
+  "fastbull-news",
+  "eastmoney-7x24",
+  "sina-7x24",
+  "jin10",
+])
 
 const CURATED_WATCH_TARGET_RULES: CuratedWatchTargetRule[] = [
   {
@@ -267,6 +285,15 @@ export async function resolveWatchTargetCandidates(
   },
 ) {
   if (hasDirectTrackableEntity(input.affectedEntities)) return []
+
+  if (input.sourceId && HIGH_THROUGHPUT_LIVE_WATCH_TARGET_SOURCE_IDS.has(input.sourceId)) {
+    return deriveWatchTargetCandidates({
+      title: input.title,
+      summary: input.summary,
+      affectedEntities: input.affectedEntities,
+      relatedTopics: input.topicTags,
+    })
+  }
 
   if (!options?.extractor || !options.registryResolver) {
     return deriveWatchTargetCandidates({

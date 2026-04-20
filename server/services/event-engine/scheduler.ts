@@ -218,56 +218,91 @@ function buildEventRow(sourceId: SourceID, raw: RawItemRow): {
   }
 }
 
+async function resolvePersistedEventSemantics(input: {
+  sourceId: SourceID
+  rawRow: RawItemRow
+  eventRow: EventRow
+  facts: ReturnType<typeof extractEventFacts>
+  payload: NewsItem
+  resolved: ResolvedEventClassification
+}) {
+  const topicTags = JSON.parse(input.eventRow.topic_tags_json)
+  const affectedMarkets = JSON.parse(input.eventRow.affected_markets_json)
+  const subjectResolution = await resolveEventSubjects({
+    eventId: input.eventRow.event_id,
+    sourceId: input.sourceId,
+    title: input.rawRow.title,
+    summary: input.eventRow.summary,
+    eventType: input.resolved.eventType,
+    eventSubType: input.resolved.eventSubType,
+    sourceKind: input.resolved.profile?.sourceKind,
+    topicTags,
+    affectedMarkets,
+    payload: input.payload,
+    primaryEntityNameHint: input.resolved.primaryEntityName,
+  }, {
+    roleExtractor: getLiveSubjectRoleExtractor(),
+    extractionTimeoutMs: getLiveSubjectRoleExtractorTimeoutMs(),
+  })
+
+  const normalizedEntityLinks = normalizeEntityLinks(subjectResolution.entityLinks)
+  const normalizedFacts = normalizeFactEntityIds(input.facts, normalizedEntityLinks)
+  const watchTargetCandidates = await resolveWatchTargetCandidates({
+    eventId: input.eventRow.event_id,
+    sourceId: input.sourceId,
+    title: input.rawRow.title,
+    summary: input.eventRow.summary,
+    eventType: input.resolved.eventType,
+    eventSubType: input.resolved.eventSubType,
+    sourceKind: input.resolved.profile?.sourceKind,
+    topicTags,
+    affectedMarkets,
+    affectedEntities: normalizedEntityLinks.map(toWatchTargetEntityRef),
+    impactSummary: JSON.parse(input.eventRow.impact_summary_json),
+  }, {
+    extractor: getLiveWatchTargetCandidateExtractor(),
+    extractionTimeoutMs: getLiveWatchTargetCandidateExtractorTimeoutMs(),
+    registryResolver: {
+      resolveByName: resolveSecurityByName,
+    },
+  })
+
+  return {
+    subjectResolution,
+    normalizedEntityLinks,
+    normalizedFacts,
+    watchTargetCandidates,
+  }
+}
+
 async function persistResolvedEvent(input: {
   eventTable: EventTableInstance
   sourceId: SourceID
   rawRow: RawItemRow
   rank: number
 }) {
+  const { eventRow, facts, payload, resolved } = buildEventRow(input.sourceId, input.rawRow)
+  const {
+    subjectResolution,
+    normalizedEntityLinks,
+    normalizedFacts,
+    watchTargetCandidates,
+  } = await resolvePersistedEventSemantics({
+    sourceId: input.sourceId,
+    rawRow: input.rawRow,
+    eventRow,
+    facts,
+    payload,
+    resolved,
+  })
+
+  eventRow.primary_entity_name = normalizePrimaryEntityName(
+    subjectResolution.primaryEntityName ?? null,
+    normalizedEntityLinks,
+  )
+  eventRow.watch_target_candidates_json = JSON.stringify(watchTargetCandidates)
+
   return input.eventTable.withTransaction(async () => {
-    const { eventRow, facts, payload, resolved } = buildEventRow(input.sourceId, input.rawRow)
-    const topicTags = JSON.parse(eventRow.topic_tags_json)
-    const affectedMarkets = JSON.parse(eventRow.affected_markets_json)
-    const subjectResolution = await resolveEventSubjects({
-      eventId: eventRow.event_id,
-      title: input.rawRow.title,
-      summary: eventRow.summary,
-      eventType: resolved.eventType,
-      eventSubType: resolved.eventSubType,
-      sourceKind: resolved.profile?.sourceKind,
-      topicTags,
-      affectedMarkets,
-      payload,
-      primaryEntityNameHint: resolved.primaryEntityName,
-    }, {
-      roleExtractor: getLiveSubjectRoleExtractor(),
-      extractionTimeoutMs: getLiveSubjectRoleExtractorTimeoutMs(),
-    })
-    const normalizedEntityLinks = normalizeEntityLinks(subjectResolution.entityLinks)
-    const normalizedFacts = normalizeFactEntityIds(facts, normalizedEntityLinks)
-    const watchTargetCandidates = await resolveWatchTargetCandidates({
-      eventId: eventRow.event_id,
-      title: input.rawRow.title,
-      summary: eventRow.summary,
-      eventType: resolved.eventType,
-      eventSubType: resolved.eventSubType,
-      sourceKind: resolved.profile?.sourceKind,
-      topicTags,
-      affectedMarkets,
-      affectedEntities: normalizedEntityLinks.map(toWatchTargetEntityRef),
-      impactSummary: JSON.parse(eventRow.impact_summary_json),
-    }, {
-      extractor: getLiveWatchTargetCandidateExtractor(),
-      extractionTimeoutMs: getLiveWatchTargetCandidateExtractorTimeoutMs(),
-      registryResolver: {
-        resolveByName: resolveSecurityByName,
-      },
-    })
-    eventRow.primary_entity_name = normalizePrimaryEntityName(
-      subjectResolution.primaryEntityName ?? null,
-      normalizedEntityLinks,
-    )
-    eventRow.watch_target_candidates_json = JSON.stringify(watchTargetCandidates)
     const previousEvent = await input.eventTable.getEventById(eventRow.event_id)
     const eventMetric = previousEvent ? EVENT_ENGINE_METRICS.eventUpdates : EVENT_ENGINE_METRICS.eventCreates
     const eventMetricLabels = toMetricLabels({
@@ -324,6 +359,10 @@ async function persistResolvedEvent(input: {
       facts: normalizedFacts,
     }
   })
+}
+
+async function yieldIngestionTurn() {
+  await new Promise<void>(resolve => setImmediate(resolve))
 }
 
 function hasMeaningfulEventChange(previous: EventRow, next: EventRow) {
@@ -626,9 +665,11 @@ export async function ingestEventSources(options?: {
           workerLastError = error instanceof Error ? error.message : String(error)
         }
         rank += 1
+        await yieldIngestionTurn()
       }
       ingestedSources.push(sourceId)
       logger.success(`ingest ${sourceId} events (${EVENT_ENGINE_VERSIONS.resolver})`)
+      await yieldIngestionTurn()
     } catch (error) {
       await eventTable.recordSourceFetchRun({
         source_id: sourceId,
@@ -716,6 +757,7 @@ export async function replayEventRawItems(options: {
     replayed += 1
     incrementEventEngineMetric(EVENT_ENGINE_METRICS.replayedRawItems, replayMetricLabels)
     await eventTable.incrementMetric(EVENT_ENGINE_METRICS.replayedRawItems, replayMetricLabels)
+    await yieldIngestionTurn()
   }
 
   return {

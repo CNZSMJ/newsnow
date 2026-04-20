@@ -8,8 +8,8 @@
 
 相关文档：
 
-- [docs/investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
-- [docs/investment-event-delivery-board.md](./investment-event-delivery-board.md)
+- [docs/roadmap.md](./roadmap.md)
+- [docs/architecture.md](./architecture.md)
 - [docs/README.md](./README.md)
 
 ## 1. 目的

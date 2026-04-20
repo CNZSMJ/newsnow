@@ -17,7 +17,7 @@ import type {
   InvestmentTimelineEntry,
 } from "@shared/types"
 import type { DirectionalView, EventSourceKind } from "@shared/event-profile"
-import { industries } from "@shared/industry"
+import { industries, industryAliases } from "@shared/industry"
 import sources from "@shared/sources"
 import { isCodeLikeEntityName, normalizeSecurityCode, normalizeSecurityIdentifier } from "#/services/event-engine/entity-normalization"
 import { isBroadMarketDescriptor, normalizeTitle } from "#/services/event-engine/text"
@@ -106,11 +106,46 @@ function mapEntityTypeLabel(entityType: InvestmentEntityRef["entityType"]) {
   }
 }
 
-function inferPrimaryEntityType(event: Pick<EventRecord, "eventType" | "sourceKind">, label: string): InvestmentEntityRef["entityType"] {
+function isThematicIndustryEvent(event: Pick<EventRecord, "eventType" | "eventSubType" | "sourceKind">) {
+  return event.eventType === "industry"
+    || event.eventSubType === "industry_report"
+    || event.eventSubType === "industry_news"
+    || event.eventSubType === "industry_data"
+    || event.sourceKind === "industry_report_release"
+    || event.sourceKind === "industry_news_feed"
+    || event.sourceKind === "industry_stat_release"
+}
+
+function matchesIndustryAlias(label: string, topicTags: string[]) {
+  const normalizedLabel = normalizeComparableTitleToken(label)
+  if (!normalizedLabel) return false
+
+  return topicTags.some((tag) => {
+    const industryLabel = industries[tag as keyof typeof industries]
+    if (normalizeComparableTitleToken(industryLabel) === normalizedLabel) return true
+    const aliases = industryAliases[tag as keyof typeof industryAliases] ?? []
+    return aliases.some(alias => normalizeComparableTitleToken(alias) === normalizedLabel)
+  })
+}
+
+function shouldSuppressTopicAliasPrimaryEntity(
+  event: Pick<EventRecord, "eventType" | "eventSubType" | "sourceKind" | "topicTags">,
+  label: string,
+) {
+  return isThematicIndustryEvent(event)
+    && event.topicTags.length > 0
+    && matchesIndustryAlias(label, event.topicTags)
+}
+
+function inferPrimaryEntityType(
+  event: Pick<EventRecord, "eventType" | "eventSubType" | "sourceKind" | "topicTags">,
+  label: string,
+): InvestmentEntityRef["entityType"] {
   const institutionPattern = /(?:[部委局署会院行司厅]|中心|协会|信通院|中汽协|药审中心|中国货币网|人民银行|央行)$/
   if (institutionPattern.test(label)) return "institution"
   const industryMatch = Object.entries(industries).find(([, name]) => name === label)
   if (industryMatch) return "industry"
+  if (matchesIndustryAlias(label, Object.keys(industries))) return "industry"
   if (event.eventType === "policy" || event.sourceKind === "official_policy_notice" || event.sourceKind === "official_macro_release")
     return "institution"
   return "issuer"
@@ -204,12 +239,15 @@ function extractInstitutionLabelFromTitle(title: string) {
 }
 
 function getDisplayPrimaryEntityName(
-  event: Pick<EventRecord, "eventType" | "primaryEntityName" | "sourceKind" | "title">,
+  event: Pick<EventRecord, "eventType" | "eventSubType" | "primaryEntityName" | "sourceKind" | "title" | "topicTags">,
   publisherInstitution?: string,
 ) {
   const primaryEntityName = event.primaryEntityName?.trim()
   if (!primaryEntityName) return undefined
   if (event.eventType === "market_move" && event.sourceKind === "media_fast_feed" && isBroadMarketDescriptor(primaryEntityName)) {
+    return undefined
+  }
+  if (shouldSuppressTopicAliasPrimaryEntity(event, primaryEntityName)) {
     return undefined
   }
   if (shouldSuppressDisplayPrimaryEntity(event, primaryEntityName)) {
@@ -311,13 +349,20 @@ function collapseDisplayEntities(entities: InvestmentEntityRef[]) {
 }
 
 function shouldSuppressDisplayEntityLink(
-  event: Pick<EventDetail, "eventType" | "sourceKind">,
+  event: Pick<EventDetail, "eventType" | "eventSubType" | "sourceKind" | "topicTags">,
   entity: EventEntityLink,
 ) {
-  return event.eventType === "market_move"
+  if (
+    event.eventType === "market_move"
     && event.sourceKind === "media_fast_feed"
     && entity.entityType === "company"
     && isBroadMarketDescriptor(entity.entityName)
+  ) {
+    return true
+  }
+
+  return entity.entityType === "company"
+    && shouldSuppressTopicAliasPrimaryEntity(event, entity.entityName)
 }
 
 function collectEntityLookupKeys(entity: InvestmentEntityRef) {
@@ -775,7 +820,14 @@ function deriveTradableNow(tradabilityScore: number | undefined, family?: Invest
   return "no"
 }
 
-function deriveWhatHappened(event: Pick<EventRecord, "title" | "summary" | "eventSubType" | "sourceKind">, family: InvestmentEventFamily) {
+function getNarrativeSubject(event: Pick<EventRecord, "title" | "primaryEntityName">) {
+  return event.primaryEntityName?.trim()
+    || normalizeTitle(event.title).split(/[：:]/)[0]?.trim()
+    || "相关主体"
+}
+
+function deriveWhatHappened(event: Pick<EventRecord, "title" | "summary" | "eventSubType" | "sourceKind" | "primaryEntityName">, family: InvestmentEventFamily) {
+  const subject = getNarrativeSubject(event)
   switch (family) {
     case "rates_liquidity":
       return `利率/资金指标更新：${event.title}`
@@ -794,7 +846,7 @@ function deriveWhatHappened(event: Pick<EventRecord, "title" | "summary" | "even
     case "trading_status":
       return `交易状态变化：${event.title}`
     case "disclosure_signal":
-      return `公告线索：${event.title}`
+      return `${subject}出现正式公告披露，关键要核对公告类型、条款细节和后续执行。`
     case "industry_data":
       return `产业数据更新：${event.title}`
     case "industry_report":
@@ -808,7 +860,18 @@ function deriveWhatHappened(event: Pick<EventRecord, "title" | "summary" | "even
     case "market_move":
       return `市场异动：${event.title}`
     case "corporate_action":
-      return `公司动作更新：${event.title}`
+      switch (event.eventSubType) {
+        case "buyback":
+          return `${subject}披露回购事项，关键看金额、价格区间和执行力度。`
+        case "dividend":
+          return `${subject}披露分红/回报安排，关键看分红率、派息节奏和可持续性。`
+        case "shareholding_change":
+          return `${subject}披露股东持股变动，关键看方向、规模和是否持续。`
+        case "management_change":
+          return `${subject}披露管理层变动，关键看岗位级别和后续经营节奏。`
+        default:
+          return `${subject}披露公司动作，需继续核对正式公告细节。`
+      }
     default:
       return event.summary || event.title
   }
@@ -967,7 +1030,15 @@ function isGenericImpactLine(line: string, family: InvestmentEventFamily) {
   if (!trimmed) return true
   if (trimmed.startsWith("当前信号偏")) return true
   if (trimmed === "快讯提供了新增交易线索") return true
+  if (trimmed === "快讯提示盘中市场异动") return true
   if (trimmed.startsWith("当前更适合作为跟踪线索")) return true
+  if (/：交易所公告$/.test(trimmed)) return true
+  if (trimmed.startsWith("标题：")) return true
+  if (trimmed.startsWith("市场：")) return true
+  if (trimmed.startsWith("阶段：")) return true
+  if (trimmed.startsWith("动作：")) return true
+  if (trimmed.startsWith("属于正式披露")) return true
+  if (trimmed.startsWith("正式披露优先级高于媒体解读")) return true
   if (family === "industry_news" && trimmed.startsWith("行业动态：")) return true
   if (family === "industry_data" && trimmed.startsWith("产业数据发布：")) return true
   if (family === "industry_report" && trimmed.startsWith("行业报告发布：")) return true
@@ -989,7 +1060,7 @@ function deriveThesis(brief: InvestmentEventBrief) {
   return [actionablePrefix, nextWatch].filter(Boolean).join(" ")
 }
 
-function fallbackWhyItMatters(event: Pick<EventRecord, "eventType" | "eventSubType" | "title">, family: InvestmentEventFamily) {
+function fallbackWhyItMatters(event: Pick<EventRecord, "eventType" | "eventSubType" | "title" | "sourceKind">, family: InvestmentEventFamily) {
   const lowerTitle = event.title.toLowerCase()
   switch (family) {
     case "rates_liquidity":
@@ -1027,6 +1098,8 @@ function fallbackWhyItMatters(event: Pick<EventRecord, "eventType" | "eventSubTy
         return "停牌事件会中断价格发现，关键在于停牌原因和后续安排。"
       return "这类交易状态事件直接影响交易可达性和价格发现。"
     case "disclosure_signal":
+      if (event.sourceKind === "exchange_disclosure")
+        return "这类正式公告/法定披露需要重点核对公告类型、关键条款和后续执行节奏。"
       return "这类媒体公告线索可能提前反映经营或披露方向，但需要正式公告或公司口径确认。"
     case "industry_data":
       return "这类产业数据适合用来验证景气度与周期变化。"
@@ -1351,6 +1424,9 @@ export function projectInvestmentEventBrief(event: EventRecord): InvestmentEvent
     eventId: event.eventId,
     title: displayTitle,
     summary: event.summary,
+    eventType: event.eventType,
+    sourceKind: event.sourceKind,
+    ingestedAt: event.ingestedAt,
     eventFamily,
     eventFamilyLabel: getInvestmentEventFamilyLabel(eventFamily),
     actionBucket,

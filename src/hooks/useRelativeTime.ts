@@ -32,12 +32,12 @@ export function useRelativeTime(timestamp: string | number) {
   const visible = useVisibility()
 
   useEffect(() => {
-    if (visible) {
-      const t = relativeTime(timestamp)
-      if (t) {
-        setTime(t)
-      }
+    if (!visible) {
+      return
     }
+
+    const t = relativeTime(timestamp)
+    setTime(t)
   }, [timestamp, timer, visible])
 
   return time

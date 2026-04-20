@@ -131,11 +131,41 @@ When working from this repository, keep the implementation focus here:
 
 Do not push core event-engine responsibilities into external skill repositories or workflow wrappers.
 
+## Documentation rule
+
+Any task that reads, writes, reorganizes, creates, updates, archives, or otherwise changes repository documentation must begin by reading:
+
+- [docs/README.md](./docs/README.md)
+
+Treat `docs/README.md` as the entrypoint for document roles, lifecycle, and current documentation governance before touching any file under `docs/`.
+
+Do not write unsettled or not-yet-agreed content into current-effective documentation.
+If a point is still under discussion, it may only be recorded in the relevant backlog topic's `research.md` until consensus is reached.
+
+## Service operations
+
+For this repository, all routine service lifecycle actions must use `./scripts/service.sh`.
+
+Use:
+
+- `./scripts/service.sh start`
+- `./scripts/service.sh stop`
+- `./scripts/service.sh restart`
+- `./scripts/service.sh status`
+- `./scripts/service.sh logs`
+- `./scripts/service.sh build-start`
+- `./scripts/service.sh launchd-install`
+- `./scripts/service.sh launchd-uninstall`
+
+Do not use ad-hoc start/stop commands such as `pnpm start`, `node dist/output/server/index.mjs`, or manual backgrounding for normal service management when the intent is to run, stop, restart, inspect, or rebuild the local service.
+
+On macOS, once `launchd-install` has been executed, the same `start` / `stop` / `restart` / `status` / `build-start` commands above should remain the only routine interface and will delegate to the installed `launchd` job.
+
 ## Reference documents
 
 - [docs/README.md](./docs/README.md)
-- [docs/investment-event-foundation-roadmap.md](./docs/investment-event-foundation-roadmap.md)
-- [docs/investment-event-agent-interface-plan.md](./docs/investment-event-agent-interface-plan.md)
-- [docs/investment-event-workstreams.md](./docs/investment-event-workstreams.md)
-- [docs/investment-event-delivery-board.md](./docs/investment-event-delivery-board.md)
+- [docs/product-direction.md](./docs/product-direction.md)
+- [docs/roadmap.md](./docs/roadmap.md)
+- [docs/architecture.md](./docs/architecture.md)
+- [docs/api-contract.md](./docs/api-contract.md)
 - [docs/event-operations-runbook.md](./docs/event-operations-runbook.md)

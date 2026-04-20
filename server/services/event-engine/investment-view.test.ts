@@ -43,6 +43,9 @@ describe("investment event projection", () => {
     expect(brief.whyItMatters).toContain("FDR007")
     expect(brief.materialityInsight.band).toBe("高")
     expect(brief.authorityInsight.band).toBe("高")
+    expect(brief.eventType).toBe("macro")
+    expect(brief.sourceKind).toBe("official_rate_fixing")
+    expect(brief.ingestedAt).toBe(Date.UTC(2026, 3, 12, 11, 31, 0))
     expect(brief.sourceSummary.primarySourceName).toBeTruthy()
   })
 
@@ -1270,8 +1273,47 @@ describe("investment event projection", () => {
 
     expect(brief.eventFamily).toBe("disclosure_signal")
     expect(brief.eventFamilyLabel).toBe("公告线索")
-    expect(brief.whatHappened).toContain("公告线索")
+    expect(brief.whatHappened).toContain("正式公告披露")
+    expect(brief.whyItMatters).toContain("正式公告")
     expect(brief.actionBucket).toBe("watch")
+  })
+
+  it("skips generic exchange impact lines and keeps the investor-meaningful explanation", () => {
+    const brief = projectInvestmentEventBrief({
+      eventId: "evt_dividend_disclosure",
+      title: "祥生医疗：祥生医疗未来三年（2026-2028年）股东分红回报规划",
+      eventType: "announcement",
+      eventSubType: "dividend",
+      sourceKind: "exchange_disclosure",
+      primaryEntityName: "祥生医疗",
+      ingestedAt: Date.UTC(2026, 3, 20, 1, 0, 0),
+      importance: "medium",
+      directionalView: "positive",
+      directionalConfidence: 55,
+      materialityScore: 67,
+      tradabilityScore: 52,
+      authorityScore: 90,
+      freshnessScore: 80,
+      surpriseScore: 40,
+      affectedMarkets: ["A"],
+      impactSummary: [
+        "祥生医疗：交易所公告",
+        "标题：祥生医疗：祥生医疗未来三年（2026-2028年）股东分红回报规划",
+        "市场：A",
+        "属于正式披露，优先级高于媒体解读",
+        "动作：dividend",
+        "分红更偏股东回报确认，通常利好确定性但短线弹性弱于回购",
+        "当前信号偏正向",
+      ],
+      degraded: false,
+      topicTags: [],
+      evidenceCount: 1,
+      sourceIds: ["sse-latest"],
+    })
+
+    expect(brief.whatHappened).toContain("披露分红/回报安排")
+    expect(brief.whyItMatters).toContain("股东回报确认")
+    expect(brief.whyItMatters).not.toContain("交易所公告")
   })
 
   it("treats media fast policy items as policy signals instead of confirmed policy events", () => {
@@ -1421,6 +1463,56 @@ describe("investment event projection", () => {
     expect(brief.whatHappened).toContain("行业报告发布")
     expect(brief.whyItMatters).toContain("中期研究")
     expect(brief.whatToWatchNext.join(" ")).toContain("关键假设")
+  })
+
+  it("suppresses generic topic aliases as pseudo-company subjects in industry reports", () => {
+    const projected = projectInvestmentEventDetail({
+      eventId: "evt_ai_report_alias",
+      title: "智能IP广域网（AI WAN）研究报告（2025年）",
+      summary: "行业报告",
+      eventType: "industry",
+      eventSubType: "industry_report",
+      sourceKind: "industry_report_release",
+      primaryEntityName: "AI",
+      ingestedAt: Date.UTC(2026, 3, 20, 1, 0, 0),
+      importance: "medium",
+      directionalView: "unknown",
+      directionalConfidence: 20,
+      materialityScore: 46,
+      tradabilityScore: 24,
+      authorityScore: 78,
+      freshnessScore: 66,
+      surpriseScore: 18,
+      affectedMarkets: ["A"],
+      impactSummary: ["行业报告发布：智能IP广域网（AI WAN）研究报告（2025年）"],
+      degraded: false,
+      topicTags: ["ai-computing"],
+      evidenceCount: 1,
+      sourceIds: ["caict-ai-reports"],
+      evidences: [],
+      entities: [{
+        eventId: "evt_ai_report_alias",
+        entityType: "company",
+        entityName: "AI",
+        confidence: 0.6,
+        resolver: "primary-entity-fallback",
+      }],
+      facts: [],
+      timeline: [],
+    })
+
+    expect(projected.affectedEntities).toEqual([
+      expect.objectContaining({
+        label: "AI/算力",
+        entityType: "industry",
+        entityTypeLabel: "产业赛道",
+      }),
+    ])
+    expect(projected.primarySubject?.entityType).toBe("industry")
+    expect(projected.primarySubject?.label).toBe("AI/算力")
+    expect(projected.subjectSummary).toBe("核心赛道：AI/算力")
+    expect(projected.whoIsAffected).toEqual(["产业赛道：AI/算力"])
+    expect(projected.watchTargetCandidates).toEqual([])
   })
 
   it("adds a readable summary for event-style facts", () => {

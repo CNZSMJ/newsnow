@@ -212,4 +212,55 @@ describe("watch target candidates", () => {
     ])
     expect(candidates.every(item => item.source === "llm-registry")).toBe(true)
   })
+
+  it("skips live watch-target extraction for high-throughput runtime feeds", async () => {
+    let extractorCalled = false
+    const entities: InvestmentEntityRef[] = [{
+      entityId: "光纤",
+      label: "光纤",
+      entityType: "industry",
+      entityTypeLabel: "产业赛道",
+    }]
+
+    const candidates = await resolveWatchTargetCandidates({
+      eventId: "evt_runtime_fast_feed_watch_targets",
+      sourceId: "mktnews-flash",
+      title: "国产光纤全球爆单 部分产品价格暴涨650%",
+      summary: "行业价格与订单同时走强，但未点名具体上市公司。",
+      eventType: "industry",
+      eventSubType: "industry_news",
+      sourceKind: "media_fast_feed",
+      topicTags: [],
+      affectedMarkets: ["A"],
+      affectedEntities: entities,
+      impactSummary: ["光纤价格和订单同步走强，优先找产业链直接受益的上市公司。"],
+    }, {
+      extractor: {
+        extract: async () => {
+          extractorCalled = true
+          return {
+            provider: "llm",
+            confidence: 0.87,
+            candidates: [{
+              label: "长飞光纤",
+              reason: "光纤光缆环节最直接受益于价格和订单上行。",
+              confidence: 0.94,
+            }],
+          }
+        },
+      },
+      registryResolver: {
+        resolveByName: async () => null,
+      },
+    })
+
+    expect(extractorCalled).toBe(false)
+    expect(candidates.map(item => item.entity.label)).toEqual([
+      "长飞光纤",
+      "亨通光电",
+      "中天科技",
+      "烽火通信",
+    ])
+    expect(candidates.every(item => item.source === "industry-watch-registry")).toBe(true)
+  })
 })

@@ -1,119 +1,193 @@
 # 文档索引
 
 状态：使用中
-最后更新：2026-04-19
-范围：`newsnow` 仓库 `docs/` 目录的统一入口与文档生命周期规则
+最后更新：2026-04-20
+范围：`newsnow` 仓库 `docs/` 目录的统一入口与文档治理规则
 
 ## 1. 目的
 
 这份文件是 `docs/` 的唯一入口。
 
-它的职责很简单：
+它只负责三件事：
 
-- 让你一眼知道当前哪些文档是“活文档”
-- 让你区分哪些文档是历史记录，哪些才是当前事实
-- 避免随着系统演进不断新增平行文档，最后没人知道该看哪份
+- 说明当前生效文档有哪些
+- 说明过程文档怎么写、放在哪
+- 说明哪些内容不能写进当前生效文档
 
-核心原则：
+它不负责承载产品定位、架构细节或 API 合同本身。
 
-- 顶层 `docs/` 只保留当前仍在使用、仍然代表事实的文档
-- 已完成的 tracking、被新文档取代的计划、一次性的 review 记录，全部移到 `docs/archive/`
-- 只要现有活文档能承载，就优先更新现有文档，而不是再新建一份“补充说明”
+## 2. 文档治理硬规则
 
-这套文档首先服务于一个前提：
+必须遵守：
 
-> `newsnow` 的 `event` 不是新闻列表，也不是标题摘要。
-> 它是 backend-owned 的 canonical investment event，用来在事件发生时，及时向用户提供有证据约束的投资洞察与建议。
+- 任何涉及 `docs/` 读写的任务，都必须先读这份 `README.md`
+- 未达成共识的内容，不能写入当前生效文档
+- 还在讨论中的内容，只能进入对应 backlog 主题的 `research.md`
+- 所有代码变更都必须先落盘一个 `backlog` 或 `hotfix`
+- 修复现有系统问题，使用 `docs/hotfix/`
+- 改变功能或新增功能，使用 `docs/backlog/`
+- 文档治理规则放在这份 `README.md`
+- 仓库级 AI / agent 协作规则放在根目录 [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/AGENTS.md`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/AGENTS.md)
+- 任何设计与实现都必须优先通过模块化实现业务领域高内聚与模块间低耦合
 
-一个合格的 `event`，至少要回答下面 5 个问题：
+## 3. 当前生效文档
 
-1. 发生了什么事
-2. 这个事为什么会发生
-3. 这个事会影响什么
-4. 这个事背后的关联标的是什么
-5. 后续建议是什么
+顶层 `docs/` 当前生效的文档只保留下面这些：
 
-其中第一层“发生了什么事”已经不是主观感受，而是仓内有实现、有门限的专项 scorecard：
+- [product-direction.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/product-direction.md)
+  - 总产品定位与方向
+- [roadmap.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/roadmap.md)
+  - 长期路线与阶段判断
+- [architecture.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/architecture.md)
+  - 当前系统的总体架构设计与约束
+- [api-contract.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/api-contract.md)
+  - 对外 API 协议与系统边界
+- [event-operations-runbook.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/event-operations-runbook.md)
+  - 运维 runbook
 
-- 当前合同：`tranche-h-scorecard-v1`
-- 当前挂载位置：`event-quality-gates-v2 -> scorecards.trancheH`
-- 当前量化方式：`manual_sample + runtime_snapshot + ci_replay`
-- 当前核心门限：wrong/missed merge、primary subject precision、false tradable subject rate、event family precision、high-value generic fallback share、structured fact coverage、key fact completeness、evidence-linked fact rate、timeline noise ratio
+除此之外：
 
-## 2. 推荐阅读顺序
+- `docs/backlog/` 是功能/重构主题的过程文档
+- `docs/hotfix/` 是现有系统问题修复文档
+- `docs/archive/` 当前只作为历史存量区，默认不代表当前事实
 
-如果你要快速建立上下文，按下面顺序看：
+## 4. Backlog 使用规范
 
-1. [investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
-2. [investment-event-delivery-board.md](./investment-event-delivery-board.md)
-3. [investment-event-workstreams.md](./investment-event-workstreams.md)
-4. [event-operations-runbook.md](./event-operations-runbook.md)
+`docs/backlog/` 用来管理一个需要持续讨论、决策、定义、设计和执行跟踪的工作主体。
 
-只有在任务涉及 provider / agent 边界时，再看：
+### 4.1 什么时候必须创建 backlog 主题
 
-5. [investment-event-agent-interface-plan.md](./investment-event-agent-interface-plan.md)
-6. [investment-event-provider-handoff.md](./investment-event-provider-handoff.md)
+出现下面任一情况时，应在 `docs/backlog/` 下新建一个主题目录：
 
-## 3. 当前活文档
+- 某个改动会改变功能或新增功能
+- 某个主题需要持续多轮讨论，而不是一次性结论
+- 某个改动会跨模块、跨 contract 或跨层语义
+- 某个主题需要明确的产品定义、技术设计和执行状态
+- 某个主体预计会跨多个 sprint 持续推进
 
-| 文档 | 角色 | 什么时候看 | 什么时候更新 |
-| --- | --- | --- | --- |
-| [investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md) | 架构基线 | 你要确认系统边界、终态定义、基础规则或 foundation 历史时 | 长期有效的边界、规则或终态假设发生变化时 |
-| [investment-event-delivery-board.md](./investment-event-delivery-board.md) | 当前执行面 | 你要知道现在在做什么、当前阶段是什么、下个里程碑是什么时 | 当前 tranche、里程碑或执行状态变化时 |
-| [investment-event-workstreams.md](./investment-event-workstreams.md) | 长期 backlog | 你要看 backend / frontend / agent 三条线的长期工作面时 | 长期 backlog 结构或工作流优先级变化时 |
-| [event-operations-runbook.md](./event-operations-runbook.md) | 运维与验证手册 | 你要做 latency triage、repair、backfill、quality gate 验证、人工抽样时 | 运维步骤、命令、修复流程、发布验证规则变化时 |
-| [investment-event-agent-interface-plan.md](./investment-event-agent-interface-plan.md) | provider / agent 边界方案 | 你要改 provider contract、agent 输出边界、`newsnow -> nexus-fi-mcp` 责任分层时 | provider schema、边界规则或 agent 暴露策略变化时 |
-| [investment-event-provider-handoff.md](./investment-event-provider-handoff.md) | 当前 handoff 说明 | 你要确认当前稳定可消费的 provider route、字段和消费方式时 | 稳定 provider surface、canonical 字段或消费约定变化时 |
+### 4.2 目录命名规则
 
-## 4. 已归档文档
+每个 backlog 主题目录必须使用下面格式：
 
-下面这些文档保留历史价值，但不再是当前事实来源：
+`YYYYMMDD-slug`
 
-| 文档 | 归档原因 |
-| --- | --- |
-| [archive/investment-event-engine-upgrade-plan.md](./archive/investment-event-engine-upgrade-plan.md) | 已被 foundation roadmap 和后续执行文档取代 |
-| [archive/investment-event-engine-upgrade-plan-review.md](./archive/investment-event-engine-upgrade-plan-review.md) | 对旧升级计划的评审意见，已不再代表当前执行面 |
-| [archive/investment-event-engine-code-review.md](./archive/investment-event-engine-code-review.md) | 一次性 code review 记录，不属于长期运行文档 |
-| [archive/investment-event-post-foundation-tracking.md](./archive/investment-event-post-foundation-tracking.md) | 已完成 tranche 的执行跟踪，内容已回收进活文档 |
-| [archive/tranche-h-sprint-tracking.md](./archive/tranche-h-sprint-tracking.md) | Tranche H 已完成，执行记录已吸收进 delivery board、workstreams 和 runbook |
+例如：
 
-## 5. 文档生命周期规则
+- `20260420-subject-resolution-hardening`
+- `20260420-document-system-restructure`
 
-### 5.1 顶层 `docs/` 只放活文档
+### 4.3 每个 backlog 主题固定五件套
 
-只要还在顶层，就必须是当前有效、当前要维护、当前能代表事实的文档。
+每个主题目录必须固定包含：
 
-### 5.2 已完成 tracking 一律归档
+- `research.md`
+- `decisions.md`
+- `product-spec.md`
+- `technical-design.md`
+- `delivery-status.md`
 
-任何 tracking 文档一旦进入 `Completed`，并且结果已经吸收到 delivery board / workstreams / runbook，就应移到 `docs/archive/`。
+推荐结构：
 
-### 5.3 被取代的计划一律归档
+```text
+docs/backlog/20260420-subject-resolution-hardening/
+├── research.md
+├── decisions.md
+├── product-spec.md
+├── technical-design.md
+└── delivery-status.md
+```
 
-如果一份计划已经被新的权威文档取代，就不要把两份平级文档同时留在顶层。
+### 4.4 五件套职责
 
-### 5.4 每份活文档都必须声明自己的角色
+`research.md`
 
-每份活文档都应至少写明：
+- 记录问题背景、讨论过程、外部研究、备选方案、争议点和当前共识
+- 未达成共识的内容只能放这里
 
-- 状态
-- 范围
-- 文档角色
-- 什么时候应该更新
+`decisions.md`
 
-这样能防止两份文档同时承担“当前计划”或“当前状态”这种重叠职责。
+- 记录这个主题里已经接受的关键决策
+- 必须分为两个章节：
+  - `Product Decisions`
+  - `Technical Decisions`
 
-### 5.5 优先更新现有活文档
+`product-spec.md`
 
-在新增文档前，先判断这次变化是否应该写进现有活文档。
+- 记录当前生效的产品定义
+- 负责目标、范围、非目标、验收标准和量化方式
 
-只有当主题真的全新，且塞进现有文档会让角色失焦时，才新建文档。
+`technical-design.md`
 
-## 6. 最简单的使用规则
+- 记录当前生效的技术设计
+- 负责模块边界、contract、数据流、测试、迁移和 rollout
 
-如果问题是：
+`delivery-status.md`
 
-- “`newsnow` 想成为什么？”看 roadmap
-- “现在在做什么？”看 delivery board
-- “长期 backlog 是什么？”看 workstreams
-- “怎么排查、怎么修、怎么验？”看 runbook
-- “`newsnow` 怎么给下游 agent 暴露事件能力？”看 agent interface plan 和 provider handoff
+- 记录实施状态、blocker、验证记录和下一步
+
+### 4.5 backlog 正常推进顺序
+
+`research -> decisions -> product-spec -> technical-design -> delivery-status`
+
+它不是瀑布流程。实施过程中如果发现问题，可以回流更新前面的文档。
+
+## 5. Hotfix 使用规范
+
+`docs/hotfix/` 用来管理现有系统问题修复。
+
+### 5.1 什么时候使用 hotfix
+
+出现下面任一情况时，应在 `docs/hotfix/` 下新增一个 hotfix 文档：
+
+- 修复现有系统问题
+- 修复线上或本地已存在的错误行为
+- 修复回归、错误数据、错误投影或错误 contract 实现
+- 修复 scope 明确、以单个 bug 为中心的问题
+
+### 5.2 命名规则
+
+每个 hotfix 文档必须使用下面格式：
+
+`YYYYMMDD-fix-slug.md`
+
+例如：
+
+- `20260420-fix-primary-subject-fallback.md`
+- `20260420-fix-watch-target-regression.md`
+
+### 5.3 固定 4 个部分
+
+每一个 hotfix 文档必须固定包含：
+
+1. 问题现象描述
+2. 问题的根因分析
+3. 修复方案
+4. 实施状态
+
+推荐结构：
+
+```markdown
+# 20260420-fix-xxx
+
+## 1. 问题现象描述
+
+## 2. 问题的根因分析
+
+## 3. 修复方案
+
+## 4. 实施状态
+```
+
+## 6. 文档使用顺序
+
+遇到文档任务时，默认按下面顺序阅读：
+
+1. 先读这份 [README.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/README.md)
+2. 看当前生效文档：
+   - [product-direction.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/product-direction.md)
+   - [roadmap.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/roadmap.md)
+   - [architecture.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/architecture.md)
+   - [api-contract.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/api-contract.md)
+   - [event-operations-runbook.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/event-operations-runbook.md)
+3. 如果是具体功能/重构主题，再进入对应 `backlog/`
+4. 如果是修 bug，再进入对应 `hotfix/`

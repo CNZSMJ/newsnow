@@ -1,6 +1,6 @@
 import type { AffectedMarket, EventSourceKind } from "@shared/event-profile"
 import { industries, resolveIndustryTagsFromKeywordQuery } from "@shared/industry"
-import type { EventEntityType, EventSubType, EventType, NewsItem } from "@shared/types"
+import type { EventEntityType, EventSubType, EventType, NewsItem, SourceID } from "@shared/types"
 import type { EntityLinkRow } from "#/types"
 import { getEntityAliasKey, normalizeSecurityIdentifier } from "#/services/event-engine/entity-registry"
 import { resolveSecurityByCode, resolveSecurityByName } from "#/services/tdx-api"
@@ -50,6 +50,7 @@ export interface SubjectRegistryResolver {
 
 export interface SubjectResolutionInput {
   eventId: string
+  sourceId?: SourceID
   title: string
   summary?: string | null
   eventType: EventType
@@ -76,6 +77,22 @@ const INSTITUTION_RE = /(?:部|委|局|署|会|院|厅|办|法院|检察院|税�
 const INSTITUTION_PREFIX_RE = /^([\u4e00-\u9fa5A-Za-z*“”"《》（）()\s]{2,64}?)(?:发布|印发|关于|答记者问|就|开展|推出|宣布|官宣)/
 const NON_ENTITY_CANDIDATE_RE = /(推出|发布|發布|举行|召开|回购|公告|方案|意见|通知|平台|系统|电话会|法说会|業績|说明会|發布會|需求|强劲|持續|持续|定调|实录|增长|下滑|改善|(?:称|表示)$)/
 const INDUSTRY_SUFFIX_RE = /(行业|產業鏈|产业链|产业|板块|賽道|赛道|概念|主线|主題|主题)$/u
+const HIGH_THROUGHPUT_LIVE_SUBJECT_SOURCE_IDS = new Set<SourceID>([
+  "mktnews-flash",
+  "wallstreetcn-quick",
+  "wallstreetcn-news",
+  "wallstreetcn-hot",
+  "cls-telegraph",
+  "cls-depth",
+  "cls-hot",
+  "xueqiu-hotstock",
+  "gelonghui",
+  "fastbull-express",
+  "fastbull-news",
+  "eastmoney-7x24",
+  "sina-7x24",
+  "jin10",
+])
 
 function unique<T>(items: T[]) {
   return Array.from(new Set(items))
@@ -209,6 +226,28 @@ function buildDeterministicSlots(input: SubjectResolutionInput): SubjectRoleExtr
   }
 }
 
+function shouldAttemptLiveSubjectResolution(input: SubjectResolutionInput) {
+  // Runtime ingestion passes sourceId. High-throughput feeds should stay on
+  // deterministic extraction so one worker tick does not stall for minutes or hours.
+  if (input.sourceId) {
+    if (HIGH_THROUGHPUT_LIVE_SUBJECT_SOURCE_IDS.has(input.sourceId)) {
+      return false
+    }
+
+    switch (input.sourceKind) {
+      case "exchange_disclosure":
+      case "official_rate_fixing":
+      case "official_central_bank_operation":
+      case "industry_stat_release":
+        return false
+      default:
+        break
+    }
+  }
+
+  return true
+}
+
 function getExtractionConfidence(extraction: SubjectRoleExtractionResult, fallback: number) {
   const normalized = Number(extraction.confidence)
   if (!Number.isFinite(normalized)) return fallback
@@ -314,7 +353,7 @@ export async function resolveEventSubjects(
   let timedOut = false
   let usedFallback = false
 
-  if (options?.roleExtractor) {
+  if (options?.roleExtractor && shouldAttemptLiveSubjectResolution(input)) {
     try {
       const extracted = await withTimeout(
         options.roleExtractor.extract(input),

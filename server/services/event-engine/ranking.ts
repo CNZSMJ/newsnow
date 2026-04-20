@@ -1,4 +1,5 @@
 import type { EventRecord } from "@shared/types"
+import { getPrimaryEventTimestamp } from "@shared/investment-event-time"
 
 function getLifecycleBoost(event: EventRecord, options?: {
   confirmed?: number
@@ -29,7 +30,13 @@ function getDirectionalBoost(event: EventRecord, divisor = 10) {
 }
 
 export function getEventRecencyAnchor(event: EventRecord) {
-  return event.latestLifecycleAt ?? event.publishedAt ?? event.ingestedAt
+  return getPrimaryEventTimestamp({
+    eventType: event.eventType,
+    sourceKind: event.sourceKind,
+    publishedAt: event.publishedAt,
+    latestLifecycleAt: event.latestLifecycleAt,
+    ingestedAt: event.ingestedAt,
+  })
 }
 
 export function scoreInvestmentEvent(event: EventRecord, options?: {

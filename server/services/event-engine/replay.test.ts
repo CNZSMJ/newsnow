@@ -500,6 +500,30 @@ describe("event-engine replay fixtures", () => {
     const raw = createXueqiuHotstockFixture()
     const payload = JSON.parse(raw.payload_json)
     const resolved = resolveEventClassification(raw.source_id, raw.title, payload.extra?.info)
+    const identityHints = buildEventIdentityHints({
+      sourceId: raw.source_id,
+      sourceKind: resolved.profile?.sourceKind,
+      eventSubType: resolved.eventSubType,
+      raw,
+      payload,
+    })
+    const identity = buildEventIdentity({
+      eventType: resolved.eventType,
+      eventSubType: resolved.eventSubType,
+      sourceKind: resolved.profile?.sourceKind,
+      title: raw.title,
+      primaryEntityName: resolved.primaryEntityName,
+      publishedAt: raw.published_at ?? undefined,
+      identityHints,
+    })
+    const facts = extractEventFacts({
+      eventId: identity.eventId,
+      rawId: raw.raw_id,
+      sourceId: raw.source_id,
+      raw,
+      payload,
+      resolved,
+    })
 
     expect(resolved.eventType).toBe("market_move")
     expect(resolved.eventSubType).toBe("other")
@@ -508,6 +532,9 @@ describe("event-engine replay fixtures", () => {
       eventSubType: resolved.eventSubType,
       sourceKind: resolved.profile?.sourceKind,
     })).toBe("market_move")
+    expect(facts[0]?.metric_name).toBe("market_move_signal")
+    expect(facts[0]?.payload_json).toContain("\"subjectText\":\"寒武纪\"")
+    expect(facts[0]?.payload_json).toContain("\"market\":\"A\"")
   })
 
   it("extracts issuer context from teaser-style CLS interpretation items", async () => {

@@ -21,25 +21,40 @@
 它至少要回答下面 5 个问题：
 
 1. 发生了什么事
-   这是真相层，要求 facts-first、evidence-linked，并且能说清事件身份、主体、类型、最小事实和时间语义。
+   这是事件收敛与事实状态机层。它负责把混杂输入收敛成带 `status` 与 `confidence` 的 canonical factual state。
 2. 这个事为什么会发生
-   这是原因层，要求能表达可审计的逻辑链。这里不仅是文字解释，还包括 event-to-event relations、背景驱动和触发关系。
+   这是时间关系与原因假设层。它负责在时间约束和证据约束下表达事件关系与原因假设。
 3. 这个事会影响什么
-   这是影响层，要求能表达影响对象、传导路径和影响方向，而不是只给一个模糊情绪标签。
+   这是影响传导与对象映射层。它负责表达影响对象、传导路径、影响方向与时间跨度，而不是情绪标签。
 4. 这个事背后的关联标的是什么
-   这是投资映射层，要求区分确认主体、受影响对象与观察标的候选，并说明为什么是这些标的。
+   这是投资映射层。它负责区分确认主体、受影响对象与观察标的候选，并通过 registry grounding 与 backend 裁决完成投资映射。
 5. 后续建议是什么
    这是行动层，要求输出有边界、有量化约束的投资建议，包括优先级、可交易性、后续验证点和失效条件。
 
-这 5 层里，第一层“发生了什么事”已经有仓内正式量化实现，不允许再用主观描述替代：
+### 前四层统一架构总览
 
-- 合同：`tranche-h-scorecard-v1`
-- 暴露位置：`event-quality-gates-v2.scorecards.trancheH`
-- 量化来源：
-  - `manual_sample`：wrong merge、missed merge、primary subject precision、false tradable subject rate、timeline noise ratio
-  - `runtime_snapshot`：high-value generic fallback share、structured fact coverage
-- `ci_replay`：event family precision、key fact completeness、evidence-linked fact rate
-- 设计原则：任何后续能力建设，都不能绕开第一层 scorecard 直接向下游输出更复杂的推理或建议
+前四层不是 4 段平行文案，而是 4 个前后依赖、语义边界不同的 backend layers：
+
+`factual state -> relation graph / causal hypotheses -> impact pathways / assessments -> investment mappings`
+
+统一原则：
+
+- 后层不能回写前层 truth
+- 每层都必须有自己的对象合同
+- 每层都必须有自己的 scorecard
+- 核心语义必须 backend-owned
+- LLM 只能做 bounded assistive work
+- 逐层推进顺序固定为 `A8 -> A9 -> A10 -> A11`
+
+前四层的详细对象合同、当前状态、LLM 边界、gate 与启动前提，统一维护在：
+
+- [investment-event-layer-evolution-plan.md](./investment-event-layer-evolution-plan.md)
+
+第一层已经拥有正式量化合同：
+
+- `tranche-h-scorecard-v1`
+
+具体指标、运行方式与 steady-state 守护策略不再写在 roadmap，统一看分层推进文档和 runbook。
 
 ## 1.1 外部建模实践与借鉴
 
@@ -308,6 +323,23 @@ schema.org/Event 擅长的是页面分发、搜索引擎消费和展示场景，
 
 这三层都可以出现在同一个 detail projection 里，但它们不能共享同一种真实性语义，也不能共享同一种量化标准。
 
+## 1.4 分层推进文档边界
+
+`roadmap` 只保留高层规划、产品架构、技术架构、分层依赖和阶段路线。
+任何一层的详细对象合同、推进状态、当前 gate、下一步执行设计，都不应继续堆在这里。
+
+这些细节统一迁移到：
+
+- [investment-event-layer-evolution-plan.md](./investment-event-layer-evolution-plan.md)
+- [iterations/README.md](./iterations/README.md)
+
+因此，`roadmap` 在前四层上只保留 4 件事：
+
+1. 分层目标是什么
+2. 层与层的依赖关系是什么
+3. 长期终态和阶段路线是什么
+4. 哪些全局架构红线必须一直成立
+
 ## 2. 边界
 
 `events` 系统负责：
@@ -385,6 +417,26 @@ LLM 只允许用作有限辅助，用于模糊、长文本、低结构场景。
 
 entity normalization 不能靠零散正则和临时 heuristics 撑着。
 canonical entity registry / nomenclature layer 必须作为事件基座的一部分存在，并被 extractor、resolver、merge、query 共同使用。
+
+### 4.8 任何设计与实现都必须遵守模块化高内聚、低耦合
+
+长期演进的事件系统不能依赖跨模块散落的隐式逻辑。
+
+所有设计与实现都必须优先满足：
+
+- 业务领域内高内聚
+- 模块间低耦合
+- clear ownership
+- 可替换、可测试、可观测
+
+对 `newsnow` 的直接要求是：
+
+- `claim / event / relation / projection / scorecard` 必须保持边界清晰
+- 不允许把第二层关系推理散落进 frontend、MCP formatter、prompt 模板和临时脚本
+- 不允许让同一业务语义同时由多个模块各算一遍
+- 模块之间优先通过稳定 contract 交互，而不是共享隐式状态或彼此读取内部实现细节
+
+这不是工程风格偏好，而是长期系统迭代的基石。
 
 ## 5. 阶段总览
 

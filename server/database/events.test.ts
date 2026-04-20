@@ -612,6 +612,108 @@ describe("event table migration", () => {
     await expect(table.countEvents({ topic: "semiconductor" })).resolves.toBe(1)
   })
 
+  it("applies explicit topic filtering before the global fetch limit window", async () => {
+    const db = createTempDb("topic-prefilter-window")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.now()
+
+    await table.upsertEvent({
+      event_id: "evt_noise_newer_1",
+      cluster_key: "cluster_noise_newer_1",
+      title: "普通公告 1",
+      summary: null,
+      event_type: "announcement",
+      event_subtype: "other",
+      source_kind: "exchange_disclosure",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://example.com/noise-1",
+      primary_entity_name: null,
+      importance: "medium",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 30,
+      materiality_score: 40,
+      tradability_score: 35,
+      authority_score: 70,
+      freshness_score: 90,
+      surprise_score: 20,
+      affected_markets_json: "[]",
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: JSON.stringify(["medicine"]),
+      last_seen_at: now,
+      status: "active",
+    })
+    await table.upsertEvent({
+      event_id: "evt_noise_newer_2",
+      cluster_key: "cluster_noise_newer_2",
+      title: "普通公告 2",
+      summary: null,
+      event_type: "announcement",
+      event_subtype: "other",
+      source_kind: "exchange_disclosure",
+      published_at: now - 1_000,
+      ingested_at: now - 1_000,
+      canonical_url: "https://example.com/noise-2",
+      primary_entity_name: null,
+      importance: "medium",
+      sentiment: null,
+      directional_view: "neutral",
+      directional_confidence: 30,
+      materiality_score: 40,
+      tradability_score: 35,
+      authority_score: 70,
+      freshness_score: 85,
+      surprise_score: 20,
+      affected_markets_json: "[]",
+      impact_summary_json: "[]",
+      degraded: 0,
+      topic_tags_json: JSON.stringify(["medicine"]),
+      last_seen_at: now - 1_000,
+      status: "active",
+    })
+    await table.upsertEvent({
+      event_id: "evt_photovoltaic_hit",
+      cluster_key: "cluster_photovoltaic_hit",
+      title: "光伏玻璃价格回暖",
+      summary: "光伏产业链景气跟踪",
+      event_type: "industry",
+      event_subtype: "industry_news",
+      source_kind: "industry_news_feed",
+      published_at: now - 2_000,
+      ingested_at: now - 2_000,
+      canonical_url: "https://example.com/pv-hit",
+      primary_entity_name: null,
+      importance: "medium",
+      sentiment: null,
+      directional_view: "positive",
+      directional_confidence: 55,
+      materiality_score: 62,
+      tradability_score: 48,
+      authority_score: 78,
+      freshness_score: 80,
+      surprise_score: 36,
+      affected_markets_json: JSON.stringify(["A"]),
+      impact_summary_json: JSON.stringify(["产业链边际改善"]),
+      degraded: 0,
+      topic_tags_json: JSON.stringify(["photovoltaic"]),
+      last_seen_at: now - 2_000,
+      status: "active",
+    })
+
+    const results = await table.listEvents({
+      limit: 5,
+      topic: "photovoltaic",
+      sortBy: "latest",
+      scanLimit: 2,
+    })
+
+    expect(results.map(item => item.eventId)).toEqual(["evt_photovoltaic_hit"])
+  })
+
   it("normalizes stale exchange disclosure subtype and scores on read", async () => {
     const db = createTempDb("legacy-disclosure-read")
     const table = new EventTable(db as any)
@@ -1007,6 +1109,72 @@ describe("event table migration", () => {
     ])
     expect(periodResults.map(item => item.eventId)).toEqual(["evt_series_mar"])
     expect(seriesCount).toBe(2)
+  })
+
+  it("prefers observed time over future disclosure time when sortBy is latest", async () => {
+    const db = createTempDb("latest-deferred-publication")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.UTC(2026, 3, 20, 1, 45, 0)
+    vi.spyOn(Date, "now").mockReturnValue(now)
+
+    const commonRow = {
+      summary: null,
+      primary_entity_name: null,
+      importance: "medium" as const,
+      sentiment: null,
+      directional_view: "neutral" as const,
+      directional_confidence: 55,
+      materiality_score: 60,
+      tradability_score: 42,
+      authority_score: 90,
+      freshness_score: 76,
+      surprise_score: 18,
+      affected_markets_json: JSON.stringify(["A"]),
+      impact_summary_json: JSON.stringify(["test"]),
+      degraded: 0,
+      topic_tags_json: "[]",
+      status: "active" as const,
+    }
+
+    await table.upsertEvent({
+      event_id: "evt_future_disclosure",
+      cluster_key: "cluster_future_disclosure",
+      title: "未来披露公告",
+      event_type: "announcement",
+      event_subtype: "other",
+      source_kind: "exchange_disclosure",
+      published_at: Date.UTC(2026, 3, 20, 8, 0, 0),
+      ingested_at: Date.UTC(2026, 3, 19, 16, 51, 0),
+      canonical_url: "https://example.com/future-disclosure",
+      last_seen_at: Date.UTC(2026, 3, 19, 16, 51, 0),
+      ...commonRow,
+    })
+
+    await table.upsertEvent({
+      event_id: "evt_live_flash",
+      cluster_key: "cluster_live_flash",
+      title: "盘中快讯",
+      event_type: "industry",
+      event_subtype: "industry_news",
+      source_kind: "media_fast_feed",
+      published_at: now - 60_000,
+      ingested_at: now - 60_000,
+      canonical_url: "https://example.com/live-flash",
+      last_seen_at: now - 60_000,
+      ...commonRow,
+    })
+
+    const results = await table.listEvents({
+      limit: 5,
+      sortBy: "latest",
+    })
+
+    expect(results.slice(0, 2).map(item => item.eventId)).toEqual([
+      "evt_live_flash",
+      "evt_future_disclosure",
+    ])
   })
 
   it("reports recent operational volume and ingest latency stats", async () => {
@@ -3671,6 +3839,96 @@ describe("event table migration", () => {
     ]))
     expect(nestedDetail?.entities.some(entity => entity.entityType === "stock" && entity.fullCode === "sh600018")).toBe(false)
     expect(broadDetail?.entities.some(entity => entity.entityType === "company" && entity.entityName === "数字货币市场走高")).toBe(false)
+  })
+
+  it("enriches single-stock fast market move titles and summaries from extracted facts", async () => {
+    const db = createTempDb("market-move-display-enrichment")
+    const table = new EventTable(db as any)
+    await table.init()
+
+    const now = Date.UTC(2026, 3, 20, 1, 0, 0)
+    await table.upsertEvent({
+      event_id: "evt_market_move_display",
+      cluster_key: "cluster_market_move_display",
+      title: "英维克",
+      summary: null,
+      event_type: "market_move",
+      event_subtype: "other",
+      source_kind: "media_fast_feed",
+      published_at: now,
+      ingested_at: now,
+      canonical_url: "https://xueqiu.com/s/SZ002837",
+      primary_entity_name: "英维克",
+      importance: "medium",
+      sentiment: null,
+      directional_view: "unknown",
+      directional_confidence: 25,
+      materiality_score: 74,
+      tradability_score: 72,
+      authority_score: 60,
+      freshness_score: 80,
+      surprise_score: 35,
+      affected_markets_json: JSON.stringify(["A"]),
+      impact_summary_json: JSON.stringify(["快讯提供了新增交易线索"]),
+      degraded: 0,
+      topic_tags_json: "[]",
+      last_seen_at: now,
+      status: "active",
+    })
+    await table.addEvidence({
+      event_id: "evt_market_move_display",
+      raw_id: "raw_market_move_display",
+      source_id: "xueqiu-hotstock",
+      source_item_id: "SZ002837",
+      title: "英维克",
+      summary: null,
+      canonical_url: "https://xueqiu.com/s/SZ002837",
+      published_at: now,
+      fetched_at: now,
+      source_priority: 0,
+      authority_level: "media",
+      parser_family: "media_fast",
+      passthrough_payload_json: "{}",
+      extraction_status: "ready",
+      extraction_error: null,
+      rank: 0,
+    })
+    await table.upsertEventFacts([{
+      fact_id: "fact_market_move_display",
+      event_id: "evt_market_move_display",
+      evidence_id: "raw_market_move_display",
+      fact_type: "media_fast_signal",
+      metric_name: "media_fast_signal",
+      value: "4.23",
+      unit: "%",
+      previous_value: null,
+      delta: null,
+      direction: null,
+      effective_at: now,
+      entity_id: null,
+      confidence: 0.72,
+      payload_json: JSON.stringify({
+        market: null,
+        subjectText: null,
+        magnitudeText: "4.23%",
+        driverText: null,
+        text: "英维克 4.23% SZ",
+        sourceId: "xueqiu-hotstock",
+        raw: {},
+      }),
+    }])
+
+    const [brief] = await table.listEvents({
+      limit: 1,
+      sortBy: "latest",
+    })
+    const detail = await table.getEventDetail("evt_market_move_display")
+
+    expect(brief?.title).toBe("英维克涨4.23%")
+    expect(brief?.summary).toContain("英维克盘中走强")
+    expect(brief?.summary).toContain("4.23%")
+    expect(detail?.title).toBe("英维克涨4.23%")
+    expect(detail?.summary).toContain("英维克盘中走强")
   })
 
   it("repairs exchange disclosure affected markets to the actual listing venue", async () => {

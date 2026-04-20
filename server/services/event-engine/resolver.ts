@@ -19,7 +19,9 @@ function classifyEventSubType(eventType: EventType, title: string, summary?: str
     if (hasAny("减持", "增持", "股份变动", "持股变动", "持股比例变动", "持股计划", "增持计划", "减持计划", "持股5%以上", "股权变动")) {
       return "shareholding_change"
     }
-    if (hasAny("聘任", "辞任", "董事会", "监事会", "高级管理人员", "总经理", "董事长")) return "management_change"
+    if (hasAny("聘任", "辞任", "辞职", "辞去", "改选", "补选", "换届", "高级管理人员", "总经理", "董事长", "监事辞任", "董事辞任")) {
+      return "management_change"
+    }
     if (hasAny("问询函", "监管函", "纪律处分", "立案", "警示函", "处罚")) return "regulation"
     if (hasAny("回购")) return "buyback"
     if (hasAny("分红", "派息", "利润分配")) return "dividend"

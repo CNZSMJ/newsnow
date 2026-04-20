@@ -174,6 +174,18 @@ describe("resolveEventClassification", () => {
     expect(resolved.profile?.sourceKind).toBe("exchange_disclosure")
   })
 
+  it("does not over-classify governance routine disclosures as management changes", () => {
+    const resolved = resolveEventClassification(
+      "sse-latest",
+      "祥生医疗：祥生医疗2025年度董事会审计委员会工作报告",
+      null,
+    )
+
+    expect(resolved.eventType).toBe("announcement")
+    expect(resolved.eventSubType).toBe("other")
+    expect(resolved.profile?.sourceKind).toBe("exchange_disclosure")
+  })
+
   it("strips event-container suffixes from primary entity names in industry news titles", () => {
     const resolved = resolveEventClassification(
       "semi-semiconductor",

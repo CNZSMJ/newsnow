@@ -200,14 +200,30 @@ export async function queryWatchlistEvents(query: WatchlistQuery, options?: {
   return sortWatchlistEvents(filtered, sortBy).slice(0, limit)
 }
 
+let sharedWatchlistTable: WatchlistTable | undefined
+let sharedWatchlistTablePromise: Promise<WatchlistTable | undefined> | undefined
+
 export async function getWatchlistTable() {
-  try {
-    const db = useDatabase()
-    if (process.env.ENABLE_CACHE === "false") return
-    const watchlistTable = new WatchlistTable(db)
-    if (process.env.INIT_TABLE !== "false") await watchlistTable.init()
-    return watchlistTable
-  } catch (e) {
-    logger.error("failed to init watchlist database ", e)
+  if (process.env.ENABLE_CACHE === "false") return
+  if (sharedWatchlistTable) return sharedWatchlistTable
+  if (sharedWatchlistTablePromise) return sharedWatchlistTablePromise
+
+  sharedWatchlistTablePromise = (async () => {
+    try {
+      const db = useDatabase()
+      const watchlistTable = new WatchlistTable(db)
+      if (process.env.INIT_TABLE !== "false") await watchlistTable.init()
+      sharedWatchlistTable = watchlistTable
+      return watchlistTable
+    } catch (e) {
+      logger.error("failed to init watchlist database ", e)
+      return undefined
+    }
+  })()
+
+  const table = await sharedWatchlistTablePromise
+  if (!table) {
+    sharedWatchlistTablePromise = undefined
   }
+  return table
 }

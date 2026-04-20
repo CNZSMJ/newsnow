@@ -1,16 +1,16 @@
 import { useRegisterSW } from "virtual:pwa-register/react"
-import { useMount } from "react-use"
 import { useToast } from "./useToast"
 
 export function usePWA() {
   const toaster = useToast()
   const { updateServiceWorker, needRefresh: [needRefresh] } = useRegisterSW()
+  const promptedRef = useRef(false)
 
-  useMount(async () => {
-    const update = () => {
-      updateServiceWorker().then(() => localStorage.setItem("updated", "1"))
-    }
-    await delay(1000)
+  const update = useCallback(() => {
+    return updateServiceWorker().then(() => localStorage.setItem("updated", "1"))
+  }, [updateServiceWorker])
+
+  useEffect(() => {
     if (localStorage.getItem("updated")) {
       localStorage.removeItem("updated")
       toaster("更新成功，赶快体验吧", {
@@ -21,22 +21,20 @@ export function usePWA() {
           },
         },
       })
-    } else if (needRefresh) {
-      if (!navigator) return
-
-      if ("connection" in navigator && !navigator.onLine) return
-
-      const resp = await myFetch("latest")
-
-      if (resp.v && resp.v !== Version) {
-        toaster("有更新，5 秒后自动更新", {
-          action: {
-            label: "立刻更新",
-            onClick: update,
-          },
-          onDismiss: update,
-        })
-      }
     }
-  })
+  }, [toaster])
+
+  useEffect(() => {
+    if (!needRefresh || promptedRef.current) return
+    if ("onLine" in navigator && !navigator.onLine) return
+
+    promptedRef.current = true
+    toaster("前端已有新构建，5 秒后自动刷新", {
+      action: {
+        label: "立刻刷新",
+        onClick: update,
+      },
+      onDismiss: update,
+    })
+  }, [needRefresh, toaster, update])
 }

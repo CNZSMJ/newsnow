@@ -1,8 +1,11 @@
 import process from "node:process"
 import { jwtVerify } from "jose"
+import { isLoginConfigured } from "#/utils/login-config"
 
 function isPublicApi(pathname: string, method: string) {
   if ([
+    "/api/health",
+    "/api/enable-login",
     "/api/s",
     "/api/proxy",
     "/api/latest",
@@ -40,7 +43,7 @@ export default defineEventHandler(async (event) => {
   const url = getRequestURL(event)
   if (!url.pathname.startsWith("/api")) return
   const publicApi = isPublicApi(url.pathname, event.node.req.method ?? "GET")
-  if (["JWT_SECRET", "G_CLIENT_ID", "G_CLIENT_SECRET"].find(k => !process.env[k])) {
+  if (!isLoginConfigured(process.env)) {
     event.context.disabledLogin = true
     if (!publicApi)
       throw createError({ statusCode: 506, message: "Server not configured, disable login" })

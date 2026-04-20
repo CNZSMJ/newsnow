@@ -214,4 +214,49 @@ describe("subject resolution", () => {
       }),
     ]))
   })
+
+  it("skips live role extraction for high-throughput runtime feeds", async () => {
+    let extractorCalled = false
+
+    const result = await resolveEventSubjects({
+      eventId: "evt_runtime_fast_feed",
+      sourceId: "mktnews-flash",
+      title: "TRUMP: TALKS ARE TO TAKE PLACE IN ISLAMABAD ONLY - ABC",
+      summary: "高频快讯运行时样本",
+      eventType: "news",
+      eventSubType: "other",
+      sourceKind: "media_fast_feed",
+      topicTags: [],
+      affectedMarkets: ["global_macro"],
+    }, {
+      roleExtractor: {
+        extract: async () => {
+          extractorCalled = true
+          return {
+            provider: "llm",
+            confidence: 0.9,
+            slots: {
+              eventPhrases: ["地缘谈判进展"],
+              explicitCompanies: [],
+              explicitTickers: [],
+              institutions: [],
+              industries: [],
+              markets: ["全球宏观"],
+              nonEntityPhrases: [],
+              causalDrivers: [],
+            },
+          }
+        },
+      },
+      registryResolver: {
+        resolveByName: async () => null,
+        resolveByCode: async () => null,
+      },
+    })
+
+    expect(extractorCalled).toBe(false)
+    expect(result.audit.provider).toBe("deterministic")
+    expect(result.audit.usedFallback).toBe(false)
+    expect(result.audit.timedOut).toBe(false)
+  })
 })

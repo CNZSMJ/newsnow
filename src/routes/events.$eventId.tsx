@@ -14,7 +14,7 @@ import type {
 } from "@shared/types"
 import dayjs from "dayjs"
 import { useTitle } from "react-use"
-import { useRelativeTime } from "~/hooks/useRelativeTime"
+import { EventTimeMeta } from "~/components/event-time-meta"
 import { myFetch } from "~/utils"
 import { getMatchingWatchlists } from "~/utils/watchlist-links"
 
@@ -170,10 +170,9 @@ function EventDetailPage() {
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-neutral-500">
-          <span>{item.subjectSummary}</span>
-          <span>发布时间：{formatTimestamp(item.publishedAt ?? item.latestLifecycleAt ?? Date.now())}</span>
-          <RelativeStamp timestamp={item.latestLifecycleAt ?? item.publishedAt ?? Date.now()} />
+        <div className="mt-4 space-y-3 text-xs text-neutral-500">
+          <span className="block">{item.subjectSummary}</span>
+          <EventTimeMeta item={item} showEmpty />
         </div>
       </section>
 
@@ -219,11 +218,11 @@ function EventDetailPage() {
             </div>
           </InfoCard>
 
-          <InfoCard title="后续跟踪对象" count={item.affectedEntities.length}>
-            {!item.affectedEntities.length && <EmptyText text="当前暂无可用于串联后续事件的跟踪对象。" />}
+          <InfoCard title="已识别对象" count={item.affectedEntities.length}>
+            {!item.affectedEntities.length && <EmptyText text="当前事件未识别出明确主体、赛道或市场对象。" />}
             {!!item.affectedEntities.length && (
               <p className="mb-3 text-xs leading-5 text-neutral-500">
-                这些对象用于把当前事件和后续同主体、同赛道、同市场的事件串起来。只有标注为“交易标的”的对象，才更接近直接可交易对象。
+                这里展示的是当前事件里已经明确识别出的主体、赛道或市场对象；下方的“赛道观察标的”是后端基于赛道线索额外推导的候选标的，两者不是一回事。
               </p>
             )}
             <div className="space-y-2">
@@ -402,10 +401,12 @@ function RelatedEventCard({ item }: { item: InvestmentEventBrief }) {
       </div>
       <p className="mt-2 text-sm font-medium leading-6">{item.title}</p>
       <p className="mt-1 text-xs text-neutral-500 line-clamp-2">{item.whyItMatters}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-neutral-500">
-        <span>{item.tradableNowLabel}</span>
-        <span>{formatScore(item.materialityScore)} 分重要性</span>
-        <span>{formatTimestamp(item.publishedAt ?? item.latestLifecycleAt ?? Date.now())}</span>
+      <div className="mt-2 space-y-2 text-xs text-neutral-500">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span>{item.tradableNowLabel}</span>
+          <span>{formatScore(item.materialityScore)} 分重要性</span>
+        </div>
+        <EventTimeMeta item={item} compact />
       </div>
     </Link>
   )
@@ -470,11 +471,6 @@ function EmptyText({ text }: { text: string }) {
       {text}
     </div>
   )
-}
-
-function RelativeStamp({ timestamp }: { timestamp: number }) {
-  const relative = useRelativeTime(timestamp)
-  return <span>{relative || formatTimestamp(timestamp)}</span>
 }
 
 function directionTone(value: DirectionalView) {

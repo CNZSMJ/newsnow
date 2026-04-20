@@ -9,6 +9,7 @@
 相关文档：
 
 - [docs/investment-event-foundation-roadmap.md](./investment-event-foundation-roadmap.md)
+- [docs/iterations/README.md](./iterations/README.md)
 - [docs/README.md](./README.md)
 
 ## 1. 总原则
@@ -19,6 +20,15 @@
 > frontend investor view 和 agent-facing interface 都只是同一事实的 projection
 
 任何任务都不允许把业务语义挪到 frontend 或 agent 包装层里。
+
+这份 board 只维护当前执行面和近期里程碑。
+它不是长期 backlog，也不是某一轮迭代的 `PRD` / `TD` / `Tracking` 容器。
+
+如果某轮工作已经进入正式实施，应在：
+
+- [docs/iterations/README.md](./iterations/README.md)
+
+定义的迭代文档包中维护该轮的产品设计、技术设计和执行跟踪。
 
 ## 2. 工作流状态快照
 

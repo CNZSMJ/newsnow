@@ -8,9 +8,9 @@ import type {
 } from "@shared/types"
 import { industries } from "@shared/industry"
 import type { AffectedMarket } from "@shared/event-profile"
-import dayjs from "dayjs"
 import type { ReactNode } from "react"
 import { useTitle } from "react-use"
+import { EventTimeMeta } from "~/components/event-time-meta"
 import { useRelativeTime } from "~/hooks/useRelativeTime"
 import { myFetch } from "~/utils"
 
@@ -59,6 +59,7 @@ function WatchlistDetailPage() {
     },
     staleTime: 60 * 1000,
   })
+  const lastCheckedRelative = useRelativeTime(query.data?.lastCheckedAt ?? 0)
 
   useTitle(query.data ? `NewsNow | ${query.data.name}` : "NewsNow | Watchlist")
 
@@ -129,7 +130,7 @@ function WatchlistDetailPage() {
           <div className="text-xs text-neutral-500">
             最近检查：
             {" "}
-            {item.lastCheckedAt ? <Relative timestamp={item.lastCheckedAt} /> : "未检查"}
+            {item.lastCheckedAt ? lastCheckedRelative ?? "刚刚" : "未检查"}
           </div>
         </div>
 
@@ -292,10 +293,9 @@ function WatchlistEventCard({ item }: { item: InvestmentEventBrief }) {
         <Metric label="权威度" value={String(item.authorityScore)} />
         <Metric label="当前动作" value={item.tradableNowLabel} />
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-neutral-500">
-        <span>{item.whatHappened}</span>
-        <span>{formatTimestamp(item.publishedAt ?? item.latestLifecycleAt ?? Date.now())}</span>
-        <Relative timestamp={item.latestLifecycleAt ?? item.publishedAt ?? Date.now()} />
+      <div className="mt-3 space-y-2 text-xs text-neutral-500">
+        <span className="block">{item.whatHappened}</span>
+        <EventTimeMeta item={item} compact />
       </div>
     </article>
   )
@@ -336,15 +336,6 @@ function Metric({ label, value }: { label: string, value: string }) {
       <p className="mt-1 font-semibold">{value}</p>
     </div>
   )
-}
-
-function Relative({ timestamp }: { timestamp: number }) {
-  const relative = useRelativeTime(timestamp)
-  return <span>{relative || dayjs(timestamp).format("MM-DD HH:mm")}</span>
-}
-
-function formatTimestamp(value: number) {
-  return dayjs(value).format("MM-DD HH:mm")
 }
 
 function actionBucketTone(value: InvestmentActionBucket) {

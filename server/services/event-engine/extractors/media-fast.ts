@@ -28,13 +28,16 @@ function detectMarket(text: string) {
   const normalized = text.toLowerCase()
   if (/沪指|深成指|创业板指|科创50|a股/.test(normalized)) return "A"
   if (/恒指|恒生科技|港股|恒生指数/.test(normalized)) return "HK"
+  if (/\b(?:sh|sz|bj)\b/i.test(text)) return "A"
+  if (/\bhk\b/i.test(text)) return "HK"
   if (/shibor|dr007|fdr007|fr007|国债|逆回购|mlf|资金面|利率债|同业存单/.test(normalized)) return "CN_rates"
   if (/cpi|ppi|pmi|gdp|社融|m2|出口|进口|非农|美联储|鲍威尔/.test(normalized)) return "CN_macro"
   return null
 }
 
-function detectMetricName(text: string) {
+function detectMetricName(text: string, sourceId?: SourceID) {
   const normalized = text.toLowerCase()
+  if (sourceId === "xueqiu-hotstock") return "market_move_signal"
   if (/shibor|dr007|fdr007|fr007|lpr/.test(normalized)) return "macro_rate_signal"
   if (/逆回购|mlf|降准|降息|存款准备金率|货币政策/.test(normalized)) return "policy_signal"
   if (/沪指|深成指|创业板指|恒指|恒生科技|a股|港股/.test(normalized)) return "market_move_signal"
@@ -47,7 +50,9 @@ function extractSubjectText(text: string) {
   const matched = text.match(/(沪指|深成指|创业板指|科创50|恒指|恒生科技|A股|港股|比特币|以太坊)(?=涨超|涨逾|上涨|拉升|走高|跌超|跌逾|下跌|跳水|走低|回落)/)
   if (matched?.[1]) return matched[1]
   const leading = text.match(/^(沪指|深成指|创业板指|恒指|恒生科技|A股|港股)/)
-  return leading?.[1] ?? null
+  if (leading?.[1]) return leading[1]
+  const securityLead = text.match(/^([\u4e00-\u9fa5A-Za-z*]{2,24})(?=\s*[-+]?[\d.]+\s*%)/)
+  return securityLead?.[1] ?? null
 }
 
 function extractMagnitudeText(text: string) {
@@ -78,7 +83,7 @@ export function extractMediaFastFacts(input: {
   ].filter(Boolean).join(" ")
 
   const direction = detectDirection(text)
-  const metricName = detectMetricName(text)
+  const metricName = detectMetricName(text, input.sourceId)
   const amountMagnitude = text.match(/([\d,.]+)\s*亿元/)
     ? { value: text.match(/([\d,.]+)\s*亿元/)?.[1]?.replace(/,/g, "") ?? null, unit: "CNY_100M" }
     : null

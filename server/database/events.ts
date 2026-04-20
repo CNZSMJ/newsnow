@@ -2,6 +2,7 @@ import process from "node:process"
 import md5 from "md5"
 import type { AffectedMarket, DirectionalView, EventSourceKind } from "@shared/event-profile"
 import { type IndustryTag, allIndustryTags, resolveIndustryTagsFromKeywordQuery } from "@shared/industry"
+import { DEFERRED_PUBLISH_GAP_MS } from "@shared/investment-event-time"
 import type {
   EventDetail,
   EventEntityLink,
@@ -90,6 +91,127 @@ interface EventEvidenceQueryRow {
   parser_family?: string | null
   extraction_status?: string | null
   extraction_error?: string | null
+}
+
+interface TopicMatchQueryRow {
+  title: string
+  summary?: string | null
+  impact_summary_json: string
+  topic_tags_json: string
+}
+
+function parseNumericFactValue(value?: string | null) {
+  if (value === undefined || value === null || value === "") return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function parseFactPayload(row: Pick<EventFactRow, "payload_json">) {
+  return parseJSON<Record<string, unknown>>(row.payload_json, {})
+}
+
+function normalizeFactText(value?: string | null) {
+  return typeof value === "string" ? value.trim() || undefined : undefined
+}
+
+function inferFastSignalDirection(fact: EventFactRow) {
+  if (fact.direction === "up" || fact.direction === "down" || fact.direction === "flat") {
+    return fact.direction
+  }
+
+  const payload = parseFactPayload(fact)
+  const magnitudeText = normalizeFactText(typeof payload.magnitudeText === "string" ? payload.magnitudeText : undefined)
+  if (magnitudeText?.includes("涨")) return "up"
+  if (magnitudeText?.includes("跌")) return "down"
+  if (magnitudeText?.includes("平")) return "flat"
+
+  const numericValue = parseNumericFactValue(fact.value)
+  if (numericValue === undefined) return undefined
+  if (numericValue > 0) return "up"
+  if (numericValue < 0) return "down"
+  return "flat"
+}
+
+function formatFastSignalMagnitude(fact: EventFactRow) {
+  const payload = parseFactPayload(fact)
+  const magnitudeText = normalizeFactText(typeof payload.magnitudeText === "string" ? payload.magnitudeText : undefined)
+  if (magnitudeText) return magnitudeText.replace(/\s+/g, "")
+
+  const numericValue = parseNumericFactValue(fact.value)
+  if (numericValue === undefined) return undefined
+
+  if (fact.unit === "%") return `${Math.abs(numericValue)}%`
+  if (fact.unit === "bp") return `${Math.abs(numericValue)}bp`
+  if (fact.unit === "CNY_100M") return `${Math.abs(numericValue)}亿元`
+  return `${Math.abs(numericValue)}`
+}
+
+function buildMarketMoveDisplayTitle(event: EventRecord, facts?: EventFactRow[]) {
+  if (event.eventType !== "market_move" || !facts?.length) return undefined
+
+  const signalFact = facts.find(fact => fact.fact_type === "media_fast_signal")
+  if (!signalFact) return undefined
+
+  const payload = parseFactPayload(signalFact)
+  const subject = normalizeFactText(typeof payload.subjectText === "string" ? payload.subjectText : undefined)
+    ?? event.primaryEntityName?.trim()
+    ?? event.title.trim()
+  const magnitudeText = formatFastSignalMagnitude(signalFact)
+  const direction = inferFastSignalDirection(signalFact)
+
+  if (!subject || !magnitudeText) return undefined
+  if (event.title.includes(magnitudeText) || /涨|跌|走高|走低|拉升|跳水|回落|反弹|异动/.test(event.title)) {
+    return event.title
+  }
+
+  if (magnitudeText.includes("涨") || magnitudeText.includes("跌")) {
+    return `${subject}${magnitudeText}`
+  }
+  if (direction === "up") return `${subject}涨${magnitudeText}`
+  if (direction === "down") return `${subject}跌${magnitudeText}`
+  return `${subject}异动 ${magnitudeText}`.trim()
+}
+
+function buildMarketMoveDisplaySummary(event: EventRecord, facts?: EventFactRow[]) {
+  if (event.summary || event.eventType !== "market_move" || !facts?.length) return event.summary
+
+  const signalFact = facts.find(fact => fact.fact_type === "media_fast_signal")
+  if (!signalFact) return event.summary
+
+  const payload = parseFactPayload(signalFact)
+  const subject = normalizeFactText(typeof payload.subjectText === "string" ? payload.subjectText : undefined)
+    ?? event.primaryEntityName?.trim()
+    ?? event.title.trim()
+  const magnitudeText = formatFastSignalMagnitude(signalFact)
+  const driverText = normalizeFactText(typeof payload.driverText === "string" ? payload.driverText : undefined)
+  const direction = inferFastSignalDirection(signalFact)
+
+  if (!subject) return event.summary
+
+  const movement = direction === "up"
+    ? "盘中走强"
+    : direction === "down"
+      ? "盘中走弱"
+      : "盘中出现异动"
+
+  return [
+    `${subject}${movement}`,
+    magnitudeText ? `幅度 ${magnitudeText}` : undefined,
+    driverText,
+    "需继续确认成交、扩散和后续权威证据。",
+  ].filter(Boolean).join("，")
+}
+
+function shouldLoadFactsForEventRow(row: EventQueryRow) {
+  if (row.event_type === "market_move") return true
+  return row.directional_view === null
+    || row.directional_confidence === null
+    || row.materiality_score === null
+    || row.tradability_score === null
+    || row.authority_score === null
+    || row.freshness_score === null
+    || row.surprise_score === null
+    || row.impact_summary_json === "[]"
 }
 
 export interface EventOperationalLatencyDiagnosticBucket {
@@ -299,6 +421,7 @@ function toWatchTargetEntityRef(entity: EntityLinkRow): InvestmentEntityRef {
 
 async function computePersistedWatchTargetCandidates(input: {
   eventId: string
+  sourceId?: SourceID
   title: string
   summary?: string | null
   eventType: EventType
@@ -311,6 +434,7 @@ async function computePersistedWatchTargetCandidates(input: {
 }) {
   return resolveWatchTargetCandidates({
     eventId: input.eventId,
+    sourceId: input.sourceId,
     title: input.title,
     summary: input.summary,
     eventType: input.eventType,
@@ -336,6 +460,7 @@ function parseWatchTargetCandidatesJson(value?: string | null) {
 export class EventTable {
   private db
   private transactionDepth = 0
+  private runtimeConfigured = false
 
   constructor(db: Database) {
     this.db = db
@@ -374,6 +499,7 @@ export class EventTable {
   }
 
   async init() {
+    await this.configureRuntime()
     await this.db.prepare(`
       CREATE TABLE IF NOT EXISTS raw_items (
         raw_id TEXT PRIMARY KEY,
@@ -460,6 +586,7 @@ export class EventTable {
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_events_published ON events(published_at DESC, ingested_at DESC);`).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type, published_at DESC);`).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_events_subtype ON events(event_subtype, published_at DESC);`).run()
+    await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_events_recency_anchor ON events(COALESCE(published_at, ingested_at) DESC, ingested_at DESC);`).run()
 
     await this.db.prepare(`
       CREATE TABLE IF NOT EXISTS event_evidence (
@@ -495,6 +622,7 @@ export class EventTable {
     await this.ensureColumn("event_evidence", "extraction_status", "TEXT")
     await this.ensureColumn("event_evidence", "extraction_error", "TEXT")
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_event_evidence_source ON event_evidence(source_id, event_id);`).run()
+    await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_event_evidence_event_source ON event_evidence(event_id, source_id);`).run()
 
     await this.db.prepare(`
       CREATE TABLE IF NOT EXISTS event_sources (
@@ -545,6 +673,7 @@ export class EventTable {
       );
     `).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_event_timeline_event ON event_timeline(event_id, changed_at DESC);`).run()
+    await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_event_timeline_event_changed_id ON event_timeline(event_id, changed_at DESC, timeline_id DESC);`).run()
 
     await this.db.prepare(`
       CREATE TABLE IF NOT EXISTS event_metrics (
@@ -575,6 +704,14 @@ export class EventTable {
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_entity_links_name ON entity_links(entity_name, entity_type);`).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_entity_links_code ON entity_links(code, full_code);`).run()
     getEventTableLogger().success("init event tables")
+  }
+
+  private async configureRuntime() {
+    if (this.runtimeConfigured) return
+    await this.db.prepare("PRAGMA busy_timeout = 5000").run()
+    await this.db.prepare("PRAGMA synchronous = NORMAL").run()
+    await this.db.prepare("PRAGMA journal_mode = WAL").run()
+    this.runtimeConfigured = true
   }
 
   async upsertRawItem(row: RawItemRow) {
@@ -2028,6 +2165,7 @@ export class EventTable {
             const payload = parseJSON<Record<string, unknown>>(evidence.payload_json, {}) as any
             return resolveEventSubjects({
               eventId,
+              sourceId: evidence.source_id,
               title: eventRow.title,
               summary: eventRow.summary ?? evidence.summary ?? undefined,
               eventType: resolved.eventType,
@@ -2178,6 +2316,7 @@ export class EventTable {
 
         const nextCandidates = await computePersistedWatchTargetCandidates({
           eventId: row.event_id,
+          sourceId: undefined,
           title: row.title,
           summary: row.summary ?? undefined,
           eventType: row.event_type,
@@ -2278,6 +2417,7 @@ export class EventTable {
             )
             const subjectResolution = await resolveEventSubjects({
               eventId,
+              sourceId: raw.source_id,
               title: eventRow.title,
               summary: eventRow.summary ?? undefined,
               eventType: resolved.eventType,
@@ -2648,6 +2788,10 @@ export class EventTable {
       `)
       params.push(...options.sourceIds)
     }
+    if (options.topic) {
+      clauses.push("e.topic_tags_json LIKE ?")
+      params.push(`%\"${options.topic}\"%`)
+    }
     if (options.market) {
       clauses.push("e.affected_markets_json LIKE ?")
       params.push(`%\"${options.market}\"%`)
@@ -2727,9 +2871,26 @@ export class EventTable {
       : options.topic
         ? Math.max(baseFetchLimit * 4, 300)
         : baseFetchLimit
+    const now = Date.now()
+    const orderParams: Array<string | number> = []
     const orderBy = options.sortBy === "changed"
       ? "ORDER BY COALESCE(latest_lifecycle_at, COALESCE(e.published_at, e.ingested_at)) DESC, COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC"
-      : "ORDER BY COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC"
+      : options.sortBy === "latest"
+        ? (() => {
+            orderParams.push(now, DEFERRED_PUBLISH_GAP_MS)
+            return `
+              ORDER BY CASE
+                WHEN e.published_at IS NOT NULL
+                  AND e.published_at > ?
+                  AND e.published_at - COALESCE(latest_lifecycle_at, e.ingested_at) >= ?
+                THEN COALESCE(latest_lifecycle_at, e.ingested_at)
+                ELSE COALESCE(e.published_at, latest_lifecycle_at, e.ingested_at)
+              END DESC,
+              COALESCE(latest_lifecycle_at, e.ingested_at) DESC,
+              e.ingested_at DESC
+            `
+          })()
+        : "ORDER BY COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC"
 
     const rows = getRows<EventQueryRow>(await this.db.prepare(`
       SELECT
@@ -2764,12 +2925,36 @@ export class EventTable {
       ${where}
       ${orderBy}
       LIMIT ?
-    `).all(...params, fetchLimit))
+    `).all(...params, ...orderParams, fetchLimit))
 
-    let items = rows.map(row => this.normalizeEventRecord(this.toEventRecord(row)))
-    if (options.topic) {
-      items = items.filter(item => this.matchesTopic(item, options.topic!))
+    const narrowedRows = options.topic
+      ? rows.filter(row => this.matchesTopicRow(row, options.topic!))
+      : rows
+
+    const factsByEventId = new Map<string, EventFactRow[]>()
+    const factTargetRows = narrowedRows.filter(shouldLoadFactsForEventRow)
+    if (factTargetRows.length) {
+      const factRows = getRows<EventFactRow>(await this.db.prepare(`
+        SELECT fact_id, event_id, evidence_id, fact_type, metric_name, value, unit, previous_value, delta, direction, effective_at, entity_id, confidence, payload_json
+        FROM event_facts
+        WHERE event_id IN (${factTargetRows.map(() => "?").join(", ")})
+        ORDER BY effective_at DESC, fact_type ASC, metric_name ASC
+      `).all(...factTargetRows.map(row => row.event_id)))
+
+      for (const fact of factRows) {
+        const bucket = factsByEventId.get(fact.event_id)
+        if (bucket) {
+          bucket.push(fact)
+        } else {
+          factsByEventId.set(fact.event_id, [fact])
+        }
+      }
     }
+
+    let items = narrowedRows.map(row => this.normalizeEventRecord(
+      this.toEventRecord(row),
+      factsByEventId.get(row.event_id),
+    ))
     if (options.sortBy === "investment") {
       items.sort((a, b) => {
         const scoreDiff = scoreInvestmentEvent(b) - scoreInvestmentEvent(a)
@@ -2825,6 +3010,10 @@ export class EventTable {
         )
       `)
       params.push(...options.sourceIds)
+    }
+    if (options.topic) {
+      clauses.push("e.topic_tags_json LIKE ?")
+      params.push(`%\"${options.topic}\"%`)
     }
     if (options.market) {
       clauses.push("e.affected_markets_json LIKE ?")
@@ -2904,74 +3093,56 @@ export class EventTable {
       return Number(row?.total_count) || 0
     }
 
-    const rows = getRows<EventQueryRow>(await this.db.prepare(`
+    const rows = getRows<TopicMatchQueryRow>(await this.db.prepare(`
       SELECT
-        e.*,
-        (
-          SELECT COUNT(*)
-          FROM event_evidence ee
-          WHERE ee.event_id = e.event_id
-        ) AS evidence_count,
-        (
-          SELECT json_group_array(DISTINCT ee.source_id)
-          FROM event_evidence ee
-          WHERE ee.event_id = e.event_id
-        ) AS source_ids_json,
-        (
-          SELECT et.state_to
-          FROM event_timeline et
-          WHERE et.event_id = e.event_id
-            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
-          ORDER BY et.changed_at DESC, et.timeline_id DESC
-          LIMIT 1
-        ) AS latest_lifecycle_state,
-        (
-          SELECT et.changed_at
-          FROM event_timeline et
-          WHERE et.event_id = e.event_id
-            AND COALESCE(et.reason, '') != 'canonical_identity_merge'
-          ORDER BY et.changed_at DESC, et.timeline_id DESC
-          LIMIT 1
-        ) AS latest_lifecycle_at
+        e.title,
+        e.summary,
+        e.impact_summary_json,
+        e.topic_tags_json
       FROM events e
       ${where}
-      ORDER BY COALESCE(e.published_at, e.ingested_at) DESC, e.ingested_at DESC
     `).all(...params))
 
-    return rows
-      .map(row => this.normalizeEventRecord(this.toEventRecord(row)))
-      .filter(item => this.matchesTopic(item, options.topic!))
-      .length
+    return rows.filter(row => this.matchesTopicRow(row, options.topic!)).length
   }
 
-  private matchesTopic(event: EventRecord, topic: string) {
+  private matchesTopicRow(row: TopicMatchQueryRow, topic: string) {
     const target = topic as IndustryTag
-    const assigned = this.normalizeTopicTags(event)
-    const inferred = assigned
+    const assigned = this.normalizeTopicTagsFromSnapshot({
+      title: row.title,
+      summary: row.summary,
+      impactSummary: parseJSON<string[]>(row.impact_summary_json, []),
+      topicTags: parseJSON<IndustryTag[]>(row.topic_tags_json, []),
+    })
+    const originalTags = parseJSON<IndustryTag[]>(row.topic_tags_json, [])
 
-    if (inferred.includes(target)) return true
-
-    if (!assigned.includes(target)) return false
-
-    if (assigned.length >= allIndustryTags.length) return false
-
+    if (assigned.includes(target)) return true
+    if (!originalTags.includes(target)) return false
+    if (originalTags.length >= allIndustryTags.length) return false
     return true
   }
 
   private normalizeEventRecord(event: EventRecord, facts?: EventFactRow[]) {
     const nextTopicTags = this.normalizeTopicTags(event)
     const primarySourceId = event.sourceIds[0]
+    const enrichedTitle = buildMarketMoveDisplayTitle(event, facts) ?? event.title
+    const enrichedSummary = buildMarketMoveDisplaySummary(event, facts)
+    const enrichedEvent = {
+      ...event,
+      title: enrichedTitle,
+      summary: enrichedSummary,
+    }
 
     if (!primarySourceId) {
       return {
-        ...event,
+        ...enrichedEvent,
         topicTags: nextTopicTags,
       }
     }
 
-    const resolved = resolveEventClassification(primarySourceId, event.title, event.summary)
+    const resolved = resolveEventClassification(primarySourceId, enrichedEvent.title, enrichedEvent.summary)
     const normalized = {
-      ...event,
+      ...enrichedEvent,
       sourceKind: event.sourceKind ?? resolved.profile?.sourceKind,
       primaryEntityName: event.primaryEntityName?.trim() || undefined,
       topicTags: nextTopicTags.length ? nextTopicTags : resolved.topicTags,
@@ -3013,11 +3184,25 @@ export class EventTable {
   }
 
   private normalizeTopicTags(event: EventRecord) {
-    const assigned = event.topicTags ?? []
-    const combinedSummary = [event.summary, ...(event.impactSummary ?? [])]
+    return this.normalizeTopicTagsFromSnapshot({
+      title: event.title,
+      summary: event.summary,
+      impactSummary: event.impactSummary,
+      topicTags: event.topicTags,
+    })
+  }
+
+  private normalizeTopicTagsFromSnapshot(input: {
+    title: string
+    summary?: string | null
+    impactSummary?: string[]
+    topicTags?: IndustryTag[]
+  }) {
+    const assigned = input.topicTags ?? []
+    const combinedSummary = [input.summary, ...(input.impactSummary ?? [])]
       .filter(Boolean)
       .join(" ")
-    const inferred = inferIndustryTagsFromText(event.title, combinedSummary)
+    const inferred = inferIndustryTagsFromText(input.title, combinedSummary)
 
     if (inferred.length) {
       if (!assigned.length) return inferred
@@ -3217,14 +3402,30 @@ export class EventTable {
   }
 }
 
+let sharedEventTable: EventTable | undefined
+let sharedEventTablePromise: Promise<EventTable | undefined> | undefined
+
 export async function getEventTable() {
-  try {
-    const db = useDatabase()
-    if (process.env.ENABLE_CACHE === "false") return
-    const eventTable = new EventTable(db)
-    if (process.env.INIT_TABLE !== "false") await eventTable.init()
-    return eventTable
-  } catch (e) {
-    getEventTableLogger().error("failed to init event database ", e)
+  if (process.env.ENABLE_CACHE === "false") return
+  if (sharedEventTable) return sharedEventTable
+  if (sharedEventTablePromise) return sharedEventTablePromise
+
+  sharedEventTablePromise = (async () => {
+    try {
+      const db = useDatabase()
+      const eventTable = new EventTable(db)
+      if (process.env.INIT_TABLE !== "false") await eventTable.init()
+      sharedEventTable = eventTable
+      return eventTable
+    } catch (e) {
+      getEventTableLogger().error("failed to init event database ", e)
+      return undefined
+    }
+  })()
+
+  const table = await sharedEventTablePromise
+  if (!table) {
+    sharedEventTablePromise = undefined
   }
+  return table
 }

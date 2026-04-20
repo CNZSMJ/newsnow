@@ -11,8 +11,8 @@ import type {
   InvestmentProviderEventListResponse,
   WatchlistRecord,
 } from "@shared/types"
-import dayjs from "dayjs"
 import { useTitle } from "react-use"
+import { EventTimeMeta } from "~/components/event-time-meta"
 import { myFetch } from "~/utils"
 import { useRelativeTime } from "~/hooks/useRelativeTime"
 import { getMatchingWatchlists } from "~/utils/watchlist-links"
@@ -178,6 +178,7 @@ function EventsListPage() {
     enabled: searchEnabled,
     staleTime: 60 * 1000,
   })
+  const updatedRelative = useRelativeTime(query.data?.updatedTime ?? 0)
 
   const updatedTime = query.data?.updatedTime
   const allItems = query.data?.items ?? []
@@ -228,7 +229,7 @@ function EventsListPage() {
           <div className="text-xs text-neutral-500">
             最近更新：
             {" "}
-            {updatedTime ? <Relative timestamp={updatedTime} /> : "加载中"}
+            {updatedTime ? updatedRelative ?? "刚刚" : "加载中"}
           </div>
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-6">
@@ -649,10 +650,9 @@ function EventCard({
         {!compact && <Metric label="当前动作" value={item.tradableNowLabel} />}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-neutral-500">
-        <span>{item.subjectSummary}</span>
-        <span>{formatTimestamp(item.publishedAt ?? item.latestLifecycleAt ?? Date.now())}</span>
-        <Relative timestamp={item.latestLifecycleAt ?? item.publishedAt ?? Date.now()} />
+      <div className="mt-4 space-y-2 text-xs text-neutral-500">
+        <span className="block">{item.subjectSummary}</span>
+        <EventTimeMeta item={item} compact />
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Link
@@ -707,17 +707,8 @@ function Metric({ label, value }: { label: string, value: string }) {
   )
 }
 
-function Relative({ timestamp }: { timestamp: number }) {
-  const relative = useRelativeTime(timestamp)
-  return <span>{relative || formatTimestamp(timestamp)}</span>
-}
-
 function formatScore(value?: number) {
   return value === undefined ? "--" : `${value}`
-}
-
-function formatTimestamp(value: number) {
-  return dayjs(value).format("MM-DD HH:mm")
 }
 
 function formatActionBucket(value: InvestmentActionBucket) {

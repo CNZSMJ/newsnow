@@ -385,6 +385,9 @@ export interface InvestmentEventBrief {
   eventId: string
   title: string
   summary?: string
+  eventType?: EventType
+  sourceKind?: EventSourceKind
+  ingestedAt?: number
   eventFamily: InvestmentEventFamily
   eventFamilyLabel: string
   actionBucket: InvestmentActionBucket
