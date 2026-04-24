@@ -46,10 +46,10 @@
 - 读取合并终稿 `technical-design-review.md`，将 `source_fetch_runs` owner 张力和 neutral priority class interface 候选要求写入方案
 - 按 Sprint 执行提示词完成阶段 0 阅读：当前生效文档、backlog 五件套、技术审查记录和关键代码文件
 - 确认现有验证命令可运行：`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm events:ops-report`、`pnpm events:check-quality`
+- Sprint 2 Step 2.1 完成 `Cache.getEntire` parameterized query 安全修复：空输入直接返回空数组，source ids 使用 `IN (?,...)` 参数绑定，不再拼接 SQL fragment
 
 ## 3. 进行中
 
-- Sprint 2 Step 2.1：`Cache.getEntire` parameterized query 安全修复
 - Sprint 2 Step 2.2：News Snapshot Model 测试与基础实现
 - Sprint 2 Step 2.3：`/api/s` 常规路径收敛到 snapshot
 - Sprint 2 Step 2.4：`/api/s/entire` 明确为 News Query Service batch read
@@ -62,7 +62,6 @@
 - docs 当前生效文档偏 investment event 线，后续如果要更新顶层事实，需要单独达成共识
 - 后续实现必须持续检查跨业务线 import、跨业务线 SQL join、跨业务线 fallback，避免短期共享基础设施演变成长期业务耦合
 - 后续 sprint 设计必须写明它推进的最终目标模块、临时兼容路径退出条件和 backlog-level definition of done 影响
-- `/api/s/entire` / `Cache.getEntire` 存在字符串拼接 SQL，Sprint 2 必须作为安全问题修复
 - `investment-view.ts` 函数级 write-time vs query-time 分类尚未完成，必须作为 Sprint 3 前置条件
 - SQL owner declaration 规则尚未工程化落地
 - projection consistency check 尚未设计
@@ -118,11 +117,13 @@
 - Sprint 1 收尾验证：`pnpm typecheck` 通过
 - Sprint 1 收尾验证：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
 - Sprint 1 收尾服务验证：build 后已通过 `./scripts/service.sh restart` 重启，`./scripts/service.sh status` 显示 launchd 服务运行中
+- Sprint 2 Step 2.1 TDD red：`server/database/cache.test.ts` 新增空输入与 SQL fragment 防御测试后，旧 `Cache.getEntire` 对空数组抛 `SQLITE_ERROR`，恶意 source id 可读出 `safe-source`
+- Sprint 2 Step 2.1 TDD green：`Cache.getEntire` 改为参数化 `IN (?,...)` 后，`pnpm test -- server/database/cache.test.ts` 通过，32 个 test files / 253 tests
+- Sprint 2 Step 2.1 类型验证：`pnpm typecheck` 通过
 
 尚未完成：
 
 - query model shadow validation
-- `Cache.getEntire` parameterized query 修复验证
 - `investment-view.ts` write-time vs query-time 分类
 - SQL owner declaration 检查机制
 - projection consistency check
@@ -130,9 +131,8 @@
 
 ## 6. 下一步
 
-1. Sprint 2 Step 2.1：先写 `Cache.getEntire` parameterized query 测试，再修复实现
-2. Sprint 2 Step 2.2：先写 News Snapshot Model CRUD / freshness / batch / fallback 测试，再实现模型
-3. Sprint 2 Step 2.3-2.5：按 News Query Service 收敛 `/api/s`、`/api/s/entire`、新闻 MCP 和前端重复 refetch
-4. Sprint 2 Step 2.6：建立新增 SQL owner declaration 规则
-5. 在 Sprint 3 实施前完成 `investment-view.ts` write-time vs query-time 分类
-6. Sprint 3 前补 projection consistency check 设计
+1. Sprint 2 Step 2.2：先写 News Snapshot Model CRUD / freshness / batch / fallback 测试，再实现模型
+2. Sprint 2 Step 2.3-2.5：按 News Query Service 收敛 `/api/s`、`/api/s/entire`、新闻 MCP 和前端重复 refetch
+3. Sprint 2 Step 2.6：建立新增 SQL owner declaration 规则
+4. 在 Sprint 3 实施前完成 `investment-view.ts` write-time vs query-time 分类
+5. Sprint 3 前补 projection consistency check 设计
