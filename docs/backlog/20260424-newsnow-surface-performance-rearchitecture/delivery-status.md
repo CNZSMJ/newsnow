@@ -7,7 +7,8 @@
 ## 1. 当前状态
 
 - Sprint 1 已完成：Baseline 与 Shared Source Runtime 设计落地
-- Sprint 2 执行中：News Snapshot Model 与新闻 Surface 收敛
+- Sprint 2 已完成：News Snapshot Model 与新闻 Surface 收敛
+- Sprint 3 执行中：Investment Event Query Model 主查询收敛
 - 阶段 0 已完成：文档、关键代码和现有验证命令已确认
 - 已创建单一 backlog 主题
 - 已完成前期代码审查和文档边界校正
@@ -55,10 +56,11 @@
 - Sprint 2 Step 2.5 完成新闻前端初步治理：首页 `useEntireQuery` 批量结果直接写入 `["source", id]` query cache，卡片单源 query 在 preload pending 时不再重复发起 `GET /api/s?id=...`
 - Sprint 2 Step 2.6 完成 `source_fetch_runs` shared-source contract 第一阶段分离：新增 `SourceFetchRunsTable`，`EventTable` 仅保留 migration bridge 委托，不再内联维护该表的 DDL / DAO
 - Sprint 2 Step 2.6 完成 SQL owner declaration 工程化规则：新增 `sql-ownership` baseline / declaration / assertion，新增 `source_snapshots`、`source_items`、`source_fetch_runs` 访问声明和测试
+- Sprint 3 前置条件完成第一步：新增 `investment-view-classification`，按函数级别声明 `investment-view.ts` 当前 exported helpers 的 write-time / query-time / presentation 分类和目标 projection contract
 
 ## 3. 进行中
 
-- Sprint 3 前置准备：`investment-view.ts` write-time vs query-time 分类与 Investment Event Query Model projection / consistency 设计
+- Sprint 3 Step 3.1：Investment Event Query Model projection / index schema 与 consistency check TDD 设计
 
 ## 4. Blockers / 风险
 
@@ -147,17 +149,18 @@
 - Sprint 2 gate：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`news_user` P50 3.51ms / P95 5.2ms，`news_agent` 3.03ms，`investment_user` P50 19.19ms / P95 144.01ms，`investment_agent` P50 8.89ms / P95 16.49ms
 - Sprint 2 gate：`pnpm perf:query-plans` 通过；`source_fetch_runs` 仍命中 `idx_source_fetch_runs_source_fetched`
 - Sprint 2 额外事件线检查：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 失败，release blocker 为既有 `tradeCriticalInitialCanonicalLatencyP95Ms`
+- Sprint 3 前置 TDD red：新增 `server/services/event-engine/investment-view-classification.test.ts` 后缺失 `./investment-view-classification` 模块
+- Sprint 3 前置 TDD green：实现 `investment-view-classification` 后，`pnpm test -- server/services/event-engine/investment-view-classification.test.ts` 通过，38 个 test files / 272 tests
 
 尚未完成：
 
 - query model shadow validation
-- `investment-view.ts` write-time vs query-time 分类
 - projection consistency check
 - Sprint 3 / Sprint 4 route-level 切换清单
 
 ## 6. 下一步
 
-1. 提交 Sprint 2 实现，保持 `data.db` 等无关本地文件不入库
-2. 在 Sprint 3 实施前完成 `investment-view.ts` write-time vs query-time 分类
-3. Sprint 3 前补 projection consistency check 设计
-4. Sprint 3 开始 Investment Event Query Model projection / indexes 的 TDD 实施
+1. 提交 Sprint 3 前置分类基线，保持 `data.db` 等无关本地文件不入库
+2. Sprint 3 Step 3.1：设计并测试 event projection / query indexes schema
+3. Sprint 3 Step 3.2：实现 canonical -> projection 写入管线和 consistency check
+4. Sprint 3 Step 3.3：实现 Investment Query Service 并切换 latest/search/entity
