@@ -47,10 +47,10 @@
 - 按 Sprint 执行提示词完成阶段 0 阅读：当前生效文档、backlog 五件套、技术审查记录和关键代码文件
 - 确认现有验证命令可运行：`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm events:ops-report`、`pnpm events:check-quality`
 - Sprint 2 Step 2.1 完成 `Cache.getEntire` parameterized query 安全修复：空输入直接返回空数组，source ids 使用 `IN (?,...)` 参数绑定，不再拼接 SQL fragment
+- Sprint 2 Step 2.2 完成 News Snapshot Model 基础实现：新增 `source_snapshots` 与 `source_items` read model，支持 source snapshot CRUD、fresh / stale / failed / missing 状态、batch read 和失败后 stale fallback item 保留
 
 ## 3. 进行中
 
-- Sprint 2 Step 2.2：News Snapshot Model 测试与基础实现
 - Sprint 2 Step 2.3：`/api/s` 常规路径收敛到 snapshot
 - Sprint 2 Step 2.4：`/api/s/entire` 明确为 News Query Service batch read
 - Sprint 2 Step 2.5：新闻 MCP tool 与新闻前端初步治理
@@ -120,6 +120,9 @@
 - Sprint 2 Step 2.1 TDD red：`server/database/cache.test.ts` 新增空输入与 SQL fragment 防御测试后，旧 `Cache.getEntire` 对空数组抛 `SQLITE_ERROR`，恶意 source id 可读出 `safe-source`
 - Sprint 2 Step 2.1 TDD green：`Cache.getEntire` 改为参数化 `IN (?,...)` 后，`pnpm test -- server/database/cache.test.ts` 通过，32 个 test files / 253 tests
 - Sprint 2 Step 2.1 类型验证：`pnpm typecheck` 通过
+- Sprint 2 Step 2.2 TDD red：新增 `server/database/news-snapshots.test.ts` 后，缺失 `#/database/news-snapshots` 模块导致测试失败
+- Sprint 2 Step 2.2 TDD green：实现 `NewsSnapshotTable` 后，`pnpm test -- server/database/news-snapshots.test.ts` 通过，33 个 test files / 257 tests
+- Sprint 2 Step 2.2 类型验证：`pnpm typecheck` 通过
 
 尚未完成：
 
@@ -131,8 +134,7 @@
 
 ## 6. 下一步
 
-1. Sprint 2 Step 2.2：先写 News Snapshot Model CRUD / freshness / batch / fallback 测试，再实现模型
-2. Sprint 2 Step 2.3-2.5：按 News Query Service 收敛 `/api/s`、`/api/s/entire`、新闻 MCP 和前端重复 refetch
-3. Sprint 2 Step 2.6：建立新增 SQL owner declaration 规则
-4. 在 Sprint 3 实施前完成 `investment-view.ts` write-time vs query-time 分类
-5. Sprint 3 前补 projection consistency check 设计
+1. Sprint 2 Step 2.3-2.5：按 News Query Service 收敛 `/api/s`、`/api/s/entire`、新闻 MCP 和前端重复 refetch
+2. Sprint 2 Step 2.6：建立新增 SQL owner declaration 规则
+3. 在 Sprint 3 实施前完成 `investment-view.ts` write-time vs query-time 分类
+4. Sprint 3 前补 projection consistency check 设计
