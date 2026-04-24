@@ -1,5 +1,7 @@
 import type { Database } from "db0"
 import type { NewsItem } from "@shared/types"
+import process from "node:process"
+import { declareSqlAccess } from "#/database/sql-ownership"
 
 export type NewsSnapshotState = "fresh" | "stale" | "failed" | "missing"
 
@@ -30,6 +32,27 @@ export interface NewsSnapshotRecord {
   itemCount: number
   items: NewsItem[]
 }
+
+export const NEWS_SNAPSHOT_SQL_DECLARATIONS = [
+  declareSqlAccess({
+    name: "news_snapshot_schema",
+    owner: "news",
+    tables: ["source_snapshots", "source_items"],
+    decisionRefs: ["TD-2", "TD-10", "TD-13"],
+  }),
+  declareSqlAccess({
+    name: "news_snapshot_write",
+    owner: "news",
+    tables: ["source_snapshots", "source_items"],
+    decisionRefs: ["TD-2", "TD-10", "TD-13"],
+  }),
+  declareSqlAccess({
+    name: "news_snapshot_read",
+    owner: "news",
+    tables: ["source_snapshots", "source_items"],
+    decisionRefs: ["TD-2", "TD-10", "TD-13"],
+  }),
+] as const
 
 interface SourceSnapshotRow {
   source_id: string
@@ -206,5 +229,16 @@ export class NewsSnapshotTable {
       itemsBySourceId.get(sourceId) ?? [],
       options,
     ))
+  }
+}
+
+export async function getNewsSnapshotTable() {
+  try {
+    const db = useDatabase()
+    const table = new NewsSnapshotTable(db)
+    if (process.env.INIT_TABLE !== "false") await table.init()
+    return table
+  } catch (error) {
+    logger.error("failed to init news snapshot database ", error)
   }
 }

@@ -11,6 +11,7 @@ import { autoRefreshSources } from "~/utils/data"
 
 export interface ItemsProps extends React.HTMLAttributes<HTMLDivElement> {
   id: SourceID
+  preloadPending?: boolean
   /**
    * 是否显示透明度，拖动时原卡片的样式
    */
@@ -20,10 +21,11 @@ export interface ItemsProps extends React.HTMLAttributes<HTMLDivElement> {
 
 interface NewsCardProps {
   id: SourceID
+  preloadPending?: boolean
   setHandleRef?: (ref: HTMLElement | null) => void
 }
 
-export const CardWrapper = forwardRef<HTMLElement, ItemsProps>(({ id, isDragging, setHandleRef, style, ...props }, dndRef) => {
+export const CardWrapper = forwardRef<HTMLElement, ItemsProps>(({ id, preloadPending, isDragging, setHandleRef, style, ...props }, dndRef) => {
   const ref = useRef<HTMLDivElement>(null)
 
   const inView = useInView(ref, {
@@ -48,12 +50,12 @@ export const CardWrapper = forwardRef<HTMLElement, ItemsProps>(({ id, isDragging
       }}
       {...props}
     >
-      {inView && <NewsCard id={id} setHandleRef={setHandleRef} />}
+      {inView && <NewsCard id={id} preloadPending={preloadPending} setHandleRef={setHandleRef} />}
     </div>
   )
 })
 
-function NewsCard({ id, setHandleRef }: NewsCardProps) {
+function NewsCard({ id, preloadPending, setHandleRef }: NewsCardProps) {
   const { refresh } = useRefetch()
   const isUltraFast = ultraFastSourceIds.includes(id)
   const sourceTags = (sources[id].tags ?? []).map(tag => industries[tag])
@@ -103,6 +105,7 @@ function NewsCard({ id, setHandleRef }: NewsCardProps) {
       return response
     },
     placeholderData: prev => prev,
+    enabled: !preloadPending || cacheSources.has(id) || refetchSources.has(id) || autoRefreshSources.has(id),
     staleTime: Infinity,
     refetchOnMount: false,
     refetchOnReconnect: false,

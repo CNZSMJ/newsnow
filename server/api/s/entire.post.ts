@@ -1,21 +1,18 @@
 import type { SourceID, SourceResponse } from "@shared/types"
-import { getCacheTable } from "#/database/cache"
+import { getNewsQueryService } from "#/services/news-query/factory"
 
 export default defineEventHandler(async (event) => {
   try {
     const { sources: _ }: { sources: SourceID[] } = await readBody(event)
-    const cacheTable = await getCacheTable()
     const ids = _?.filter(k => sources[k])
-    if (ids?.length && cacheTable) {
-      const caches = await cacheTable.getEntire(ids)
-      const now = Date.now()
-      return caches.map(cache => ({
-        status: "cache",
-        id: cache.id,
-        items: cache.items,
-        updatedTime: now - cache.updated < sources[cache.id].interval ? now : cache.updated,
-      })) as SourceResponse[]
-    }
+    if (!ids?.length) return [] as SourceResponse[]
+
+    const service = await getNewsQueryService()
+    return await service.getSourcesBatch({
+      sourceIds: ids,
+      getIntervalMs: sourceId => sources[sourceId].interval,
+      waitUntil: event.context.waitUntil?.bind(event.context),
+    })
   } catch {
     //
   }

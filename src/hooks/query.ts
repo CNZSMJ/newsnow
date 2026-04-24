@@ -18,8 +18,8 @@ export function useUpdateQuery() {
 }
 
 export function useEntireQuery(items: SourceID[]) {
-  const update = useUpdateQuery()
-  useQuery({
+  const queryClient = useQueryClient()
+  return useQuery({
     // sort in place
     queryKey: ["entire", [...items].sort()],
     queryFn: async ({ queryKey }) => {
@@ -32,16 +32,13 @@ export function useEntireQuery(items: SourceID[]) {
         },
       })
       if (res?.length) {
-        const s = [] as SourceID[]
         res.forEach((v) => {
           const id = v.id
           if (!cacheSources.has(id) || cacheSources.get(id)!.updatedTime < v.updatedTime) {
-            s.push(id)
             cacheSources.set(id, v)
+            queryClient.setQueryData(["source", id], v)
           }
         })
-        // update now
-        update(...s)
 
         return res
       }

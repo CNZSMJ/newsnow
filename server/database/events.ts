@@ -21,6 +21,7 @@ import sources from "@shared/sources"
 import { consola } from "consola"
 import type { Database } from "db0"
 import { getRows, parseJSON } from "#/database/sqlite"
+import { SourceFetchRunsTable } from "#/database/source-fetch-runs"
 import {
   getEntityLinkPersistenceKey,
   normalizeEntityLinks,
@@ -459,11 +460,13 @@ function parseWatchTargetCandidatesJson(value?: string | null) {
 
 export class EventTable {
   private db
+  private sourceFetchRuns
   private transactionDepth = 0
   private runtimeConfigured = false
 
   constructor(db: Database) {
     this.db = db
+    this.sourceFetchRuns = new SourceFetchRunsTable(db)
   }
 
   async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
@@ -518,19 +521,7 @@ export class EventTable {
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_raw_items_source_fetched ON raw_items(source_id, fetched_at DESC);`).run()
     await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_raw_items_fingerprint ON raw_items(fingerprint);`).run()
 
-    await this.db.prepare(`
-      CREATE TABLE IF NOT EXISTS source_fetch_runs (
-        source_id TEXT NOT NULL,
-        fetched_at INTEGER NOT NULL,
-        status TEXT NOT NULL,
-        item_count INTEGER NOT NULL DEFAULT 0,
-        error TEXT,
-        prev_successful_fetched_at INTEGER,
-        fetch_gap_ms INTEGER
-      );
-    `).run()
-    await this.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_source_fetch_runs_source_fetched ON source_fetch_runs(source_id, fetched_at DESC);`).run()
-    await this.db.prepare(`CREATE INDEX IF NOT EXISTS idx_source_fetch_runs_status_source_fetched ON source_fetch_runs(source_id, status, fetched_at DESC);`).run()
+    await this.sourceFetchRuns.init()
 
     await this.db.prepare(`
       CREATE TABLE IF NOT EXISTS events (
@@ -741,50 +732,11 @@ export class EventTable {
     item_count: number
     error?: string | null
   }) {
-    const previousSuccessfulRun = input.status === "success"
-      ? await this.db.prepare(`
-          SELECT fetched_at
-          FROM source_fetch_runs
-          WHERE source_id = ?
-            AND status = 'success'
-            AND fetched_at < ?
-          ORDER BY fetched_at DESC
-          LIMIT 1
-        `).get(input.source_id, input.fetched_at) as { fetched_at?: number | null } | undefined
-      : undefined
-
-    const prevSuccessfulFetchedAt = previousSuccessfulRun?.fetched_at ?? null
-    const fetchGapMs = typeof prevSuccessfulFetchedAt === "number"
-      ? Math.max(0, input.fetched_at - prevSuccessfulFetchedAt)
-      : null
-
-    await this.db.prepare(`
-      INSERT OR REPLACE INTO source_fetch_runs (
-        source_id, fetched_at, status, item_count, error, prev_successful_fetched_at, fetch_gap_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      input.source_id,
-      input.fetched_at,
-      input.status,
-      input.item_count,
-      input.error ?? null,
-      prevSuccessfulFetchedAt,
-      fetchGapMs,
-    )
+    return await this.sourceFetchRuns.recordSourceFetchRun(input)
   }
 
   async getLastFetchedAtBySourceIds(ids: SourceID[]) {
-    if (!ids.length) return {} as Partial<Record<SourceID, number>>
-    const where = ids.map(() => "?").join(", ")
-    const rows = getRows<{ source_id: SourceID, fetched_at: number }>(
-      await this.db.prepare(`
-        SELECT source_id, MAX(fetched_at) AS fetched_at
-        FROM source_fetch_runs
-        WHERE source_id IN (${where})
-        GROUP BY source_id
-      `).all(...ids),
-    )
-    return Object.fromEntries(rows.map(row => [row.source_id, Number(row.fetched_at) || 0])) as Partial<Record<SourceID, number>>
+    return await this.sourceFetchRuns.getLastFetchedAtBySourceIds(ids)
   }
 
   async getEventIdByClusterKey(clusterKey: string) {

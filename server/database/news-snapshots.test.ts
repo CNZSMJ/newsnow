@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from "vitest"
 import { createDatabase } from "db0"
 import sqliteConnector from "db0/connectors/better-sqlite3"
 import type { NewsItem } from "@shared/types"
-import { NewsSnapshotTable } from "#/database/news-snapshots"
+import { NEWS_SNAPSHOT_SQL_DECLARATIONS, NewsSnapshotTable } from "#/database/news-snapshots"
+import { assertSqlAccessDeclarations } from "#/database/sql-ownership"
 
 const cleanupPaths: string[] = []
 
@@ -36,6 +37,11 @@ function item(id: string, title = id): NewsItem {
 }
 
 describe("newsSnapshotTable", () => {
+  it("declares news ownership for snapshot SQL access", () => {
+    expect(() => assertSqlAccessDeclarations(NEWS_SNAPSHOT_SQL_DECLARATIONS)).not.toThrow()
+    expect(NEWS_SNAPSHOT_SQL_DECLARATIONS.every(declaration => declaration.owner === "news")).toBe(true)
+  })
+
   it("stores and reads a source snapshot with ordered items", async () => {
     const table = createSnapshotTable()
     await table.init()

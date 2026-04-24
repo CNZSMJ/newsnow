@@ -1,4 +1,4 @@
-export type SchemaOwner = "news" | "investment-event" | "shared-source" | "ops"
+import type { SchemaOwner } from "#/database/sql-ownership"
 
 export interface SurfaceQueryPlanStatement {
   name: string

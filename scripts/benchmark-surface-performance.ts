@@ -268,10 +268,10 @@ function buildProbes(args: Args, eventId?: string, watchlistId?: string): HttpPr
       metadata: { decisionRefs: ["PD-4", "TD-10"], currentHotPath: "news_batch_http" },
     },
     {
-      name: "news_agent_current_mcp_hot_path",
+      name: "news_agent_news_query_service_probe",
       surface: "news_agent",
       path: `/api/s?id=${encodeURIComponent(args.newsSource)}`,
-      metadata: { decisionRefs: ["PD-4", "TD-4"], currentHotPath: "get_hotest_latest_news -> /api/s" },
+      metadata: { decisionRefs: ["PD-4", "TD-4"], currentHotPath: "get_hotest_latest_news -> NewsQueryService", probeTransport: "http_adapter_equivalent" },
     },
     {
       name: "investment_user_latest",

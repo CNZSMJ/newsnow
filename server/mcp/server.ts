@@ -5,7 +5,6 @@ import type {
   InvestmentProviderEventDetailResponse,
   InvestmentProviderEventListResponse,
   InvestmentProviderWatchlistDetailResponse,
-  SourceResponse,
   WatchlistRecord,
 } from "@shared/types"
 import packageJSON from "../../package.json"
@@ -15,6 +14,7 @@ import {
   formatInvestmentScanFocusLabel,
   type InvestmentScanFocus,
 } from "./investment-tools.js"
+import { getHottestLatestNews } from "./news-tools.js"
 import { type McpInvestmentEventBrief, toMcpEventBrief, toMcpEventDetail, toMcpWatchlistDetail } from "./projection.js"
 
 const eventTypeEnum = ["news", "announcement", "policy", "macro", "industry", "market_move"] as const
@@ -82,20 +82,7 @@ export function getServer() {
       count: countSchema.describe("count of news to return."),
     },
     async ({ id, count }): Promise<CallToolResult> => {
-      let n = Number(count)
-      if (Number.isNaN(n) || n < 1) {
-        n = 10
-      }
-
-      const res: SourceResponse = await $fetch(`/api/s?id=${id}`)
-      return {
-        content: res.items.slice(0, count).map((item) => {
-          return {
-            text: `[${item.title}](${item.url})`,
-            type: "text",
-          }
-        }),
-      }
+      return await getHottestLatestNews({ id, count })
     },
   )
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { assertSqlAccessDeclarations } from "#/database/sql-ownership"
 import { buildSurfaceQueryPlanStatements } from "./sql-plan"
 
 describe("surface query plan statements", () => {
@@ -11,6 +12,7 @@ describe("surface query plan statements", () => {
       expect(plan.decisionRefs.length).toBeGreaterThan(0)
       expect(plan.tables.length).toBeGreaterThan(0)
     }
+    expect(() => assertSqlAccessDeclarations(plans)).not.toThrow()
   })
 
   it("uses parameter placeholders for benchmark inputs", () => {

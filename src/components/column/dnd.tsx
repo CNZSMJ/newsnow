@@ -22,7 +22,7 @@ const WIDTH = 350
 export function Dnd() {
   const [items, setItems] = useAtom(currentSourcesAtom)
   const [parent] = useAutoAnimate({ duration: AnimationDuration })
-  useEntireQuery(items)
+  const entireQuery = useEntireQuery(items)
   useAutoRefresh(items)
   const { width } = useWindowSize()
   const minWidth = useMemo(() => {
@@ -82,7 +82,7 @@ export function Dnd() {
                 },
               }}
             >
-              <SortableCardWrapper id={id} />
+              <SortableCardWrapper id={id} preloadPending={entireQuery.isPending || entireQuery.isFetching} />
             </motion.li>
           ))}
         </motion.ol>
@@ -168,7 +168,7 @@ function CardOverlay({ id }: { id: SourceID }) {
   )
 }
 
-function SortableCardWrapper({ id }: ItemsProps) {
+function SortableCardWrapper({ id, preloadPending }: ItemsProps) {
   const {
     isDragging,
     setNodeRef,
@@ -187,6 +187,7 @@ function SortableCardWrapper({ id }: ItemsProps) {
       <CardWrapper
         ref={setNodeRef}
         id={id}
+        preloadPending={preloadPending}
         isDragging={isDragging}
         setHandleRef={setHandleRef}
       />

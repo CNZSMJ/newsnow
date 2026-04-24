@@ -13,6 +13,7 @@
 - 已完成前期代码审查和文档边界校正
 - Sprint 1 Step 1.1-1.6 已完成；Sprint 1 gate 的 benchmark、SQL plan、MCP transport、frontend request-count 和 worker active / inactive 基线入口已补齐
 - Sprint 1 gate 已通过：`pnpm test`、`pnpm typecheck`、`pnpm build` 均通过，本地服务已按规范重启
+- Sprint 2 Step 2.1-2.6 已完成；Sprint 2 code gate 已通过
 
 ## 2. 已完成内容
 
@@ -48,13 +49,16 @@
 - 确认现有验证命令可运行：`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm events:ops-report`、`pnpm events:check-quality`
 - Sprint 2 Step 2.1 完成 `Cache.getEntire` parameterized query 安全修复：空输入直接返回空数组，source ids 使用 `IN (?,...)` 参数绑定，不再拼接 SQL fragment
 - Sprint 2 Step 2.2 完成 News Snapshot Model 基础实现：新增 `source_snapshots` 与 `source_items` read model，支持 source snapshot CRUD、fresh / stale / failed / missing 状态、batch read 和失败后 stale fallback item 保留
+- Sprint 2 Step 2.3 完成 `/api/s` 路由收敛：常规请求优先读取 News Snapshot Model，stale / failed snapshot 走 stale response + neutral refresh intent，`latest` 只保留为受控 force refresh 兼容路径
+- Sprint 2 Step 2.4 完成 `/api/s/entire` 定位收敛：该路由现在是 News Query Service batch read adapter，不再直接绕过 News Snapshot Model 读取 `cache` blob；`cache` 只作为 migration fallback
+- Sprint 2 Step 2.5 完成新闻 MCP 初步收敛：`get_hotest_latest_news` 改为通过 News Query Service 读取，并返回 `structuredContent`
+- Sprint 2 Step 2.5 完成新闻前端初步治理：首页 `useEntireQuery` 批量结果直接写入 `["source", id]` query cache，卡片单源 query 在 preload pending 时不再重复发起 `GET /api/s?id=...`
+- Sprint 2 Step 2.6 完成 `source_fetch_runs` shared-source contract 第一阶段分离：新增 `SourceFetchRunsTable`，`EventTable` 仅保留 migration bridge 委托，不再内联维护该表的 DDL / DAO
+- Sprint 2 Step 2.6 完成 SQL owner declaration 工程化规则：新增 `sql-ownership` baseline / declaration / assertion，新增 `source_snapshots`、`source_items`、`source_fetch_runs` 访问声明和测试
 
 ## 3. 进行中
 
-- Sprint 2 Step 2.3：`/api/s` 常规路径收敛到 snapshot
-- Sprint 2 Step 2.4：`/api/s/entire` 明确为 News Query Service batch read
-- Sprint 2 Step 2.5：新闻 MCP tool 与新闻前端初步治理
-- Sprint 2 Step 2.6：`source_fetch_runs` shared-source contract 与 SQL owner declaration 规则
+- Sprint 3 前置准备：`investment-view.ts` write-time vs query-time 分类与 Investment Event Query Model projection / consistency 设计
 
 ## 4. Blockers / 风险
 
@@ -63,9 +67,10 @@
 - 后续实现必须持续检查跨业务线 import、跨业务线 SQL join、跨业务线 fallback，避免短期共享基础设施演变成长期业务耦合
 - 后续 sprint 设计必须写明它推进的最终目标模块、临时兼容路径退出条件和 backlog-level definition of done 影响
 - `investment-view.ts` 函数级 write-time vs query-time 分类尚未完成，必须作为 Sprint 3 前置条件
-- SQL owner declaration 规则尚未工程化落地
+- SQL owner declaration 已对 Sprint 2 新增 news / shared-source SQL 落地；Sprint 3 起必须扩展到 event projection / query indexes / watchlist match / related-events query model
 - projection consistency check 尚未设计
 - Sprint 3 / Sprint 4 的 route-level 切换顺序尚未在具体 sprint 设计中细化
+- 额外运行 `pnpm events:check-quality` 当前失败，blocker 是既有 Tier A 初始 canonical 延迟 P95 24,023,959ms > 300,000ms；这不是 Sprint 2 code gate 项，但必须在后续事件线性能 sprint 中处理
 
 ## 5. 验证记录
 
@@ -123,18 +128,36 @@
 - Sprint 2 Step 2.2 TDD red：新增 `server/database/news-snapshots.test.ts` 后，缺失 `#/database/news-snapshots` 模块导致测试失败
 - Sprint 2 Step 2.2 TDD green：实现 `NewsSnapshotTable` 后，`pnpm test -- server/database/news-snapshots.test.ts` 通过，33 个 test files / 257 tests
 - Sprint 2 Step 2.2 类型验证：`pnpm typecheck` 通过
+- Sprint 2 Step 2.3-2.5 TDD red：新增 `server/services/news-query/service.test.ts` 后缺失 `./service` 模块；新增 `server/mcp/news-tools.test.ts` 后缺失 `./news-tools` 模块
+- Sprint 2 Step 2.3-2.5 TDD green：实现 `NewsQueryService`、News Query Service factory、新闻 MCP helper 和路由 adapter 后，`pnpm test -- server/mcp/news-tools.test.ts server/services/news-query/service.test.ts server/database/news-snapshots.test.ts server/database/cache.test.ts` 通过，35 个 test files / 264 tests
+- Sprint 2 Step 2.3-2.5 类型验证：`pnpm typecheck` 通过
+- Sprint 2 Step 2.3-2.5 build 验证：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Sprint 2 Step 2.3-2.5 服务验证：`./scripts/service.sh restart` 后 launchd 服务运行，pid 75239
+- Sprint 2 Step 2.3-2.5 live API smoke：`GET /api/s?id=wallstreetcn-quick` 返回 200 / `cache` / 30 items；`POST /api/s/entire` 三源 batch 返回 200 / 3 rows / 全部 `cache`
+- Sprint 2 Step 2.5 actual MCP transport smoke：`pnpm perf:mcp-smoke` 通过；`get_hotest_latest_news` 10.12ms，`hasStructuredContent=true`；`event_get_latest_events` 675.4ms，`hasStructuredContent=true`
+- Sprint 2 Step 2.5 frontend request-count 复测：首页导航总请求 28，本地 API 请求 2 个：`/api/enable-login` 与 `POST /api/s/entire`；基线中的 4 个重复 `GET /api/s?id=...` 已消除
+- Sprint 2 Step 2.3-2.5 surface benchmark：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`news_user` P50 23.77ms / P95 63.88ms，`news_agent` 1.42ms，`investment_user` P50 18.84ms / P95 137.37ms，`investment_agent` P50 10.14ms / P95 83.48ms
+- Sprint 2 Step 2.6 TDD red：新增 `server/database/sql-ownership.test.ts` 与 `server/database/source-fetch-runs.test.ts` 后缺失 `#/database/sql-ownership` 和 `#/database/source-fetch-runs` 模块
+- Sprint 2 Step 2.6 TDD green：实现 `sql-ownership`、`SourceFetchRunsTable`、News Snapshot SQL declarations，并将 `EventTable` 的 `source_fetch_runs` DDL / DAO 委托到 shared-source contract 后，`pnpm test -- server/database/sql-ownership.test.ts server/database/source-fetch-runs.test.ts server/database/news-snapshots.test.ts server/database/events.test.ts server/services/performance/sql-plan.test.ts` 通过，37 个 test files / 270 tests
+- Sprint 2 gate：`pnpm test` 通过，37 个 test files / 270 tests
+- Sprint 2 gate：`pnpm typecheck` 通过
+- Sprint 2 gate：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Sprint 2 gate：build 后通过 `./scripts/service.sh restart` 重启，`./scripts/service.sh status` 显示 launchd 服务运行中，pid 11192
+- Sprint 2 gate：`pnpm perf:mcp-smoke` 通过；`get_hotest_latest_news` 13.82ms，`hasStructuredContent=true`；`event_get_latest_events` 694.32ms，`hasStructuredContent=true`
+- Sprint 2 gate：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`news_user` P50 3.51ms / P95 5.2ms，`news_agent` 3.03ms，`investment_user` P50 19.19ms / P95 144.01ms，`investment_agent` P50 8.89ms / P95 16.49ms
+- Sprint 2 gate：`pnpm perf:query-plans` 通过；`source_fetch_runs` 仍命中 `idx_source_fetch_runs_source_fetched`
+- Sprint 2 额外事件线检查：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 失败，release blocker 为既有 `tradeCriticalInitialCanonicalLatencyP95Ms`
 
 尚未完成：
 
 - query model shadow validation
 - `investment-view.ts` write-time vs query-time 分类
-- SQL owner declaration 检查机制
 - projection consistency check
 - Sprint 3 / Sprint 4 route-level 切换清单
 
 ## 6. 下一步
 
-1. Sprint 2 Step 2.3-2.5：按 News Query Service 收敛 `/api/s`、`/api/s/entire`、新闻 MCP 和前端重复 refetch
-2. Sprint 2 Step 2.6：建立新增 SQL owner declaration 规则
-3. 在 Sprint 3 实施前完成 `investment-view.ts` write-time vs query-time 分类
-4. Sprint 3 前补 projection consistency check 设计
+1. 提交 Sprint 2 实现，保持 `data.db` 等无关本地文件不入库
+2. 在 Sprint 3 实施前完成 `investment-view.ts` write-time vs query-time 分类
+3. Sprint 3 前补 projection consistency check 设计
+4. Sprint 3 开始 Investment Event Query Model projection / indexes 的 TDD 实施
