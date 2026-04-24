@@ -57,10 +57,11 @@
 - Sprint 2 Step 2.6 完成 `source_fetch_runs` shared-source contract 第一阶段分离：新增 `SourceFetchRunsTable`，`EventTable` 仅保留 migration bridge 委托，不再内联维护该表的 DDL / DAO
 - Sprint 2 Step 2.6 完成 SQL owner declaration 工程化规则：新增 `sql-ownership` baseline / declaration / assertion，新增 `source_snapshots`、`source_items`、`source_fetch_runs` 访问声明和测试
 - Sprint 3 前置条件完成第一步：新增 `investment-view-classification`，按函数级别声明 `investment-view.ts` 当前 exported helpers 的 write-time / query-time / presentation 分类和目标 projection contract
+- Sprint 3 Step 3.1 完成 projection / index schema 第一阶段：新增 `event_projection` 与 `event_query_indexes` DAO，覆盖 latest / search / entity / watchlist / detail / related 六类目标 index name
 
 ## 3. 进行中
 
-- Sprint 3 Step 3.1：Investment Event Query Model projection / index schema 与 consistency check TDD 设计
+- Sprint 3 Step 3.2：canonical -> projection 写入管线与 projection consistency check
 
 ## 4. Blockers / 风险
 
@@ -151,6 +152,9 @@
 - Sprint 2 额外事件线检查：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 失败，release blocker 为既有 `tradeCriticalInitialCanonicalLatencyP95Ms`
 - Sprint 3 前置 TDD red：新增 `server/services/event-engine/investment-view-classification.test.ts` 后缺失 `./investment-view-classification` 模块
 - Sprint 3 前置 TDD green：实现 `investment-view-classification` 后，`pnpm test -- server/services/event-engine/investment-view-classification.test.ts` 通过，38 个 test files / 272 tests
+- Sprint 3 Step 3.1 TDD red：新增 `server/database/event-projections.test.ts` 后缺失 `#/database/event-projections` 模块
+- Sprint 3 Step 3.1 TDD green：实现 `EventProjectionTable`、`event_projection` / `event_query_indexes` schema、SQL owner declarations 和 index read/write 后，`pnpm test -- server/database/event-projections.test.ts` 通过，39 个 test files / 274 tests
+- Sprint 3 Step 3.1 类型验证：`pnpm typecheck` 通过
 
 尚未完成：
 
@@ -161,6 +165,6 @@
 ## 6. 下一步
 
 1. 提交 Sprint 3 前置分类基线，保持 `data.db` 等无关本地文件不入库
-2. Sprint 3 Step 3.1：设计并测试 event projection / query indexes schema
-3. Sprint 3 Step 3.2：实现 canonical -> projection 写入管线和 consistency check
-4. Sprint 3 Step 3.3：实现 Investment Query Service 并切换 latest/search/entity
+2. Sprint 3 Step 3.2：实现 canonical -> projection 写入管线和 consistency check
+3. Sprint 3 Step 3.3：实现 Investment Query Service 并切换 latest/search/entity
+4. Sprint 3 Step 3.4：补 watchlist / related-events 索引策略测试
