@@ -16,11 +16,14 @@ Backlog 协议：
 
 1. 进入用户指定的 `<BACKLOG_DIR>`。
 2. 读取 `delivery-status.md`，恢复当前进度、已完成项、blocker 和下一步。
-3. 读取 `implementation-plan.md`，找到下一个未完成 Sprint / TDD step。
-4. 按 `implementation-plan.md` 执行：TDD red -> green -> refactor -> validation。
-5. 需要理解产品或设计时，按需读取 `research.md`、`decisions.md`、`product-spec.md`、`technical-design.md`。
-6. 每完成一个 step，更新 `delivery-status.md`。
-7. 持续推进直到 `implementation-plan.md` 的最终 Definition of Done 全部完成。
+3. 读取 `technical-design.md`，确认状态明确为“审批通过”。
+4. 读取 `implementation-plan.md`，确认文件存在且已声明与 `technical-design.md` 的一致性检查。
+5. 如果 `technical-design.md` 未审批通过、`implementation-plan.md` 不存在，或一致性检查缺失 / 不通过，不得进入代码实现；先补齐计划并等待确认。
+6. 从 `implementation-plan.md` 找到下一个未完成 Sprint / TDD step。
+7. 按 `implementation-plan.md` 执行：TDD red -> green -> refactor -> validation。
+8. 需要理解产品或设计时，按需读取 `research.md`、`decisions.md`、`product-spec.md`、`technical-design.md`。
+9. 每完成一个 step，更新 `delivery-status.md`。
+10. 持续推进直到 `implementation-plan.md` 的最终 Definition of Done 全部完成，且 `delivery-status.md` 进入 `Completed`。
 
 Hotfix 协议：
 
@@ -28,13 +31,16 @@ Hotfix 协议：
 2. 从“实施状态”恢复当前进度。
 3. 以“问题现象描述”和“问题的根因分析”确定修复边界。
 4. 以“修复方案”理解修复方向。
-5. 读取“实施计划”，找到下一个未完成 TDD step。
-6. 按“实施计划”执行：red regression test / reproducible failing check -> green fix -> refactor -> validation。
-7. 每完成一个 step，更新 `<HOTFIX_DOC>` 的“实施状态”。
-8. 持续推进直到问题已修复、验证通过、hotfix 文档状态闭环。
-9. 如果修复范围超出单个 bug，停止扩大实现，并把后续工作转入 backlog。
+5. 读取“实施计划”，确认其已声明与“修复方案”的一致性检查。
+6. 如果“实施计划”不存在，或一致性检查缺失 / 不通过，不得进入代码实现；先补齐计划并等待确认。
+7. 从“实施计划”找到下一个未完成 TDD step。
+8. 按“实施计划”执行：red regression test / reproducible failing check -> green fix -> refactor -> validation。
+9. 每完成一个 step，更新 `<HOTFIX_DOC>` 的“实施状态”。
+10. 持续推进直到问题已修复、验证通过、hotfix 文档状态进入 `Completed`。
+11. 如果修复范围超出单个 bug，停止扩大实现，并把后续工作转入 backlog。
 
 通用收尾：
 
 1. 不遗留临时文件。
-2. 提交前检查工作区状态、验证结果和文档状态。
+2. 提交前运行 `pnpm docs:check`。
+3. 提交前检查工作区状态、验证结果和文档状态。

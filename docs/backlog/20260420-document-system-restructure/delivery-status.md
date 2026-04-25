@@ -30,3 +30,10 @@
 ## 4. 下一步
 
 - 后续任何文档变化，按新的 `README.md` 规则继续推进
+
+## 5. 验证记录
+
+- 顶层当前文档集合已收敛到 `docs/README.md` 定义的当前生效文档。
+- `docs/archive/`、`docs/backlog/`、`docs/hotfix/` 的职责边界已建立。
+- `AGENTS.md` 已更新为读取 `docs/README.md` 作为文档治理入口。
+- 本 backlog 为文档治理规则建立前完成的历史重构；已补齐 `implementation-plan.md` 作为后续 agent 恢复入口。

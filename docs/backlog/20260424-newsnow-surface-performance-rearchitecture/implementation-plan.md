@@ -8,6 +8,7 @@
 
 - 从 `delivery-status.md` 恢复当前进度，避免重复执行已完成工作。
 - 从 `technical-design.md` 读取目标架构、模块边界、route 边界和数据流。
+- 进入实现前必须完成 `implementation-plan.md` 与已审批通过的 `technical-design.md` 的一致性检查；如果冲突，先修正实施计划。
 - 每个 sprint 必须按 TDD red -> green -> refactor -> validation 推进。
 - 每完成一个 step，必须更新 `delivery-status.md`。
 - 不允许留下临时文件、临时分支状态、未说明的兼容层或未关闭的验证缺口。

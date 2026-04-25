@@ -1,6 +1,6 @@
 # NewsNow Surface Performance Rearchitecture Technical Design
 
-状态：已实施；最终架构和 review follow-up 已闭环
+状态：审批通过；已实施；最终架构和 review follow-up 已闭环
 最后更新：2026-04-25
 范围：`newsnow` 双业务线系统性性能优化的目标架构、模块边界、迁移和验证方案
 

@@ -1,6 +1,6 @@
 # Document System Restructure Technical Design
 
-状态：进行中
+状态：审批通过；已完成
 最后更新：2026-04-20
 范围：`docs/` 目录重构的实施设计
 
