@@ -50,7 +50,7 @@
 - 已在 `technical-design.md` 增加当前 schema ownership baseline 草案
 - 按最新 review findings 修正 `technical-design.md`：拆分 `/api/watchlists` metadata 与 event-read 路径、补齐 Sprint 3 planned owner baseline、修正 rollback surface group 表述
 - 读取合并终稿 `technical-design-review.md`，将 `source_fetch_runs` owner 张力和 neutral priority class interface 候选要求写入方案
-- 按 Sprint 执行提示词完成阶段 0 阅读：当前生效文档、backlog 五件套、技术审查记录和关键代码文件
+- 按 Sprint 执行提示词完成阶段 0 阅读：当前生效文档、当时的 backlog 五件套、技术审查记录和关键代码文件
 - 确认现有验证命令可运行：`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm events:ops-report`、`pnpm events:check-quality`
 - Sprint 2 Step 2.1 完成 `Cache.getEntire` parameterized query 安全修复：空输入直接返回空数组，source ids 使用 `IN (?,...)` 参数绑定，不再拼接 SQL fragment
 - Sprint 2 Step 2.2 完成 News Snapshot Model 基础实现：新增 `source_snapshots` 与 `source_items` read model，支持 source snapshot CRUD、fresh / stale / failed / missing 状态、batch read 和失败后 stale fallback item 保留
@@ -89,6 +89,8 @@
 - Review follow-up 完成 watchlist event-read 最优修复：Investment Query Service 不再从 bounded global `latest/all` slice 过滤 watchlist，而是按 entity / topic / source / market index seed 查询、合并去重并保留最终 query filter
 - Review follow-up 完成 Investment Event Query Model 索引补齐：`event_query_indexes` 增加 `topic`、`source`、`market` index，watchlist seed query 和 query-plan 覆盖同步更新
 - Review follow-up 完成 `sort=latest` 语义修复：`event_projection` latest 排序恢复 deferred publication guard，未来发布时间不会抢占当前已观测事件
+- 规范补充完成：新增 `implementation-plan.md`，将本 backlog 的 Sprint-by-Sprint / TDD 执行计划归档为后续 agent 恢复入口
+- 规范补充完成：新增仓库级固定启动提示词 `docs/prompt/agent-start-prompt.md`，支持“激活提示词 ...，实施 <BACKLOG_DIR>”的短指令使用方式
 
 ## 3. 进行中
 

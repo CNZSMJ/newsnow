@@ -1,7 +1,7 @@
 # 文档索引
 
 状态：使用中
-最后更新：2026-04-20
+最后更新：2026-04-26
 范围：`newsnow` 仓库 `docs/` 目录的统一入口与文档治理规则
 
 ## 1. 目的
@@ -49,6 +49,7 @@
 
 - `docs/backlog/` 是功能/重构主题的过程文档
 - `docs/hotfix/` 是现有系统问题修复文档
+- `docs/prompt/` 是仓库级固定 agent 启动提示词
 - `docs/archive/` 当前只作为历史存量区，默认不代表当前事实
 
 ## 4. Backlog 使用规范
@@ -76,14 +77,15 @@
 - `20260420-subject-resolution-hardening`
 - `20260420-document-system-restructure`
 
-### 4.3 每个 backlog 主题固定五件套
+### 4.3 进入实现阶段的 backlog 主题固定六件套
 
-每个主题目录必须固定包含：
+每个进入实现阶段的 backlog 主题必须固定包含：
 
 - `research.md`
 - `decisions.md`
 - `product-spec.md`
 - `technical-design.md`
+- `implementation-plan.md`
 - `delivery-status.md`
 
 推荐结构：
@@ -94,10 +96,11 @@ docs/backlog/20260420-subject-resolution-hardening/
 ├── decisions.md
 ├── product-spec.md
 ├── technical-design.md
+├── implementation-plan.md
 └── delivery-status.md
 ```
 
-### 4.4 五件套职责
+### 4.4 六件套职责
 
 `research.md`
 
@@ -121,15 +124,43 @@ docs/backlog/20260420-subject-resolution-hardening/
 - 记录当前生效的技术设计
 - 负责模块边界、contract、数据流、测试、迁移和 rollout
 
+`implementation-plan.md`
+
+- 记录从 technical design 进入 TDD 开发的实施计划
+- 必须把方案拆成 Sprint-by-Sprint / Step-by-Step
+- 每个 step 必须说明 TDD red、green、refactor、validation 和完成标准
+- 必须定义最终 Definition of Done
+- 必须让任意 agent 能结合 `delivery-status.md` 恢复并继续执行
+
 `delivery-status.md`
 
 - 记录实施状态、blocker、验证记录和下一步
 
 ### 4.5 backlog 正常推进顺序
 
-`research -> decisions -> product-spec -> technical-design -> delivery-status`
+`research -> decisions -> product-spec -> technical-design -> implementation-plan -> delivery-status`
 
 它不是瀑布流程。实施过程中如果发现问题，可以回流更新前面的文档。
+
+进入实现前必须满足：
+
+- `technical-design.md` 已经完成必要审查
+- `implementation-plan.md` 已经把技术方案拆成可执行 Sprint / TDD step
+- `delivery-status.md` 已经初始化，可记录执行进度
+
+### 4.6 固定 agent 启动提示词
+
+仓库级固定启动提示词放在：
+
+- [prompt/agent-start-prompt.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/prompt/agent-start-prompt.md)
+
+推荐使用方式：
+
+```text
+激活提示词 docs/prompt/agent-start-prompt.md，实施 docs/backlog/<YYYYMMDD-slug>
+```
+
+固定提示词只定义执行协议，不承载具体需求。具体需求、设计、计划和进度必须来自用户指定的 backlog 目录。
 
 ## 5. Hotfix 使用规范
 
@@ -190,4 +221,5 @@ docs/backlog/20260420-subject-resolution-hardening/
    - [api-contract.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/api-contract.md)
    - [event-operations-runbook.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/event-operations-runbook.md)
 3. 如果是具体功能/重构主题，再进入对应 `backlog/`
-4. 如果是修 bug，再进入对应 `hotfix/`
+4. 如果是从 backlog 进入实现，读取该 backlog 的 `delivery-status.md` 和 `implementation-plan.md`
+5. 如果是修 bug，再进入对应 `hotfix/`
