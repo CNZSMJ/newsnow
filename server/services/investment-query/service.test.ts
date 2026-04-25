@@ -8,7 +8,10 @@ class MemoryProjectionQueryStore {
   readonly countCalls: EventProjectionQueryOptions[] = []
   readonly getCalls: string[] = []
 
-  constructor(private readonly records: EventProjectionRecord[]) {}
+  constructor(
+    private readonly records: EventProjectionRecord[],
+    private readonly relatedIndex: Record<string, string[]> = {},
+  ) {}
 
   async listProjections(options: EventProjectionQueryOptions) {
     this.listCalls.push(options)
@@ -32,7 +35,8 @@ class MemoryProjectionQueryStore {
         if (!(record.brief.affectedMarkets as readonly string[]).includes(options.indexValue)) return false
       }
       if (options.indexName === "related" && options.indexValue) {
-        if (record.eventId !== "evt_related") return false
+        const relatedEventIds = this.relatedIndex[options.indexValue] ?? ["evt_related"]
+        if (!relatedEventIds.includes(record.eventId)) return false
       }
       if (options.topic && !(record.brief.relatedTopics as readonly string[]).includes(options.topic)) return false
       if (options.market && !record.brief.affectedMarkets.includes(options.market)) return false
@@ -134,6 +138,29 @@ function projection(record = brief()): EventProjectionRecord {
     brief: record,
     detail: detail(record),
   }
+}
+
+function differentEntityBrief(overrides: Partial<InvestmentEventBrief> = {}): InvestmentEventBrief {
+  return brief({
+    affectedEntities: [{
+      entityId: "other",
+      label: "其他公司",
+      entityType: "security",
+      entityTypeLabel: "交易标的",
+      code: "000001",
+      market: "A",
+    }],
+    primarySubject: {
+      entityId: "other",
+      label: "其他公司",
+      entityType: "security",
+      entityTypeLabel: "交易标的",
+      code: "000001",
+      market: "A",
+    },
+    subjectSummary: "其他公司",
+    ...overrides,
+  })
 }
 
 function detail(input = brief()): InvestmentEventDetail {
@@ -247,6 +274,68 @@ describe("investmentQueryService", () => {
       expect.objectContaining({ topic: "ai-computing" }),
       expect.objectContaining({ market: "A" }),
       expect.objectContaining({ eventFamily: "policy_signal" }),
+    ]))
+  })
+
+  it("orders related sections, prioritizes indexed related, dedupes across sections, and clamps limits", async () => {
+    const store = new MemoryProjectionQueryStore([
+      projection(),
+      projection(brief({
+        eventId: "evt_related",
+        title: "索引相关事件",
+      })),
+      projection(brief({
+        eventId: "evt_entity",
+        title: "同主体事件",
+        eventFamily: "earnings",
+        relatedTopics: ["medicine"],
+        affectedMarkets: ["HK"],
+      })),
+      projection(differentEntityBrief({
+        eventId: "evt_topic",
+        title: "同主题事件",
+        eventFamily: "industry_data",
+        relatedTopics: ["ai-computing"],
+        affectedMarkets: ["global_macro"],
+      })),
+      projection(differentEntityBrief({
+        eventId: "evt_market",
+        title: "同市场事件",
+        eventFamily: "financing",
+        relatedTopics: ["steel"],
+        affectedMarkets: ["A"],
+      })),
+      projection(differentEntityBrief({
+        eventId: "evt_family",
+        title: "同事件族事件",
+        eventFamily: "policy_signal",
+        relatedTopics: ["medicine"],
+        affectedMarkets: ["HK"],
+      })),
+    ], {
+      evt_1: ["evt_related"],
+    })
+    const service = new InvestmentQueryService(store)
+
+    const sections = await service.getRelatedEvents(detail(), {
+      limitPerSection: 0,
+      sortBy: "latest",
+    })
+
+    expect(sections.map(section => section.context)).toEqual(["entity", "topic", "market", "family"])
+    expect(sections.map(section => section.items.map(item => item.eventId))).toEqual([
+      ["evt_related"],
+      ["evt_topic"],
+      ["evt_market"],
+      ["evt_family"],
+    ])
+    expect(sections.flatMap(section => section.items.map(item => item.eventId))).not.toContain("evt_1")
+    expect(store.listCalls).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexName: "related", indexValue: "evt_1", limit: 6, sortBy: "latest" }),
+      expect.objectContaining({ indexName: "entity", indexValue: "sh688256", limit: 6, sortBy: "latest" }),
+      expect.objectContaining({ topic: "ai-computing", limit: 6, sortBy: "latest" }),
+      expect.objectContaining({ market: "A", limit: 6, sortBy: "latest" }),
+      expect.objectContaining({ eventFamily: "policy_signal", limit: 6, sortBy: "latest" }),
     ]))
   })
 

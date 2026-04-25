@@ -79,6 +79,41 @@ interface EventQueryIndexRow {
   metadata_json: string
 }
 
+interface ProjectionRowInput {
+  eventId: string
+  projectionUpdatedAt: number
+  canonicalUpdatedAt: number
+  canonicalChecksum: string
+  eventType: EventType | null
+  eventSubType: EventSubType | null
+  sourceKind: EventSourceKind | null
+  eventFamily: InvestmentEventFamily
+  actionBucket: string
+  directionalView: DirectionalView
+  materialityScore: number
+  tradabilityScore: number
+  authorityScore: number
+  latestLifecycleAt: number | null
+  publishedAt: number | null
+  ingestedAt: number | null
+  seriesKey: string | null
+  periodKey: string | null
+  primarySubjectJson: string | null
+  affectedMarketsJson: string
+  topicTagsJson: string
+  sourceIdsJson: string
+  searchText: string
+  briefJson: string
+  detailJson: string | null
+}
+
+interface EventQueryIndexEntryInput {
+  indexName: EventQueryIndexName
+  indexValue: string
+  eventId: string
+  metadata?: Record<string, unknown>
+}
+
 export interface EventProjectionInput {
   eventId: string
   canonicalUpdatedAt: number
@@ -175,12 +210,103 @@ function getRankScore(brief: InvestmentEventBrief) {
   return (brief.materialityScore * 0.4) + (brief.tradabilityScore * 0.35) + (brief.authorityScore * 0.25)
 }
 
+function buildProjectionRowInput(input: EventProjectionInput, projectionUpdatedAt: number): ProjectionRowInput {
+  return {
+    eventId: input.eventId,
+    projectionUpdatedAt,
+    canonicalUpdatedAt: input.canonicalUpdatedAt,
+    canonicalChecksum: input.canonicalChecksum,
+    eventType: input.eventType ?? input.brief.eventType ?? null,
+    eventSubType: input.eventSubType ?? null,
+    sourceKind: input.sourceKind ?? input.brief.sourceKind ?? null,
+    eventFamily: input.brief.eventFamily,
+    actionBucket: input.brief.actionBucket,
+    directionalView: input.brief.signalDirection,
+    materialityScore: input.brief.materialityScore,
+    tradabilityScore: input.brief.tradabilityScore,
+    authorityScore: input.brief.authorityScore,
+    latestLifecycleAt: input.brief.latestLifecycleAt ?? null,
+    publishedAt: input.brief.publishedAt ?? null,
+    ingestedAt: input.brief.ingestedAt ?? null,
+    seriesKey: input.seriesKey ?? input.brief.seriesKey ?? null,
+    periodKey: input.periodKey ?? input.brief.periodKey ?? null,
+    primarySubjectJson: input.brief.primarySubject ? JSON.stringify(input.brief.primarySubject) : null,
+    affectedMarketsJson: JSON.stringify(input.brief.affectedMarkets),
+    topicTagsJson: JSON.stringify(input.brief.relatedTopics),
+    sourceIdsJson: JSON.stringify(input.sourceIds ?? [input.brief.sourceSummary.primarySourceId].filter(Boolean)),
+    searchText: buildSearchText(input.brief),
+    briefJson: JSON.stringify(input.brief),
+    detailJson: input.detail ? JSON.stringify(input.detail) : null,
+  }
+}
+
+function buildProjectionUpsertParams(row: ProjectionRowInput) {
+  return [
+    row.eventId,
+    row.projectionUpdatedAt,
+    row.canonicalUpdatedAt,
+    row.canonicalChecksum,
+    row.eventType,
+    row.eventSubType,
+    row.sourceKind,
+    row.eventFamily,
+    row.actionBucket,
+    row.directionalView,
+    row.materialityScore,
+    row.tradabilityScore,
+    row.authorityScore,
+    row.latestLifecycleAt,
+    row.publishedAt,
+    row.ingestedAt,
+    row.seriesKey,
+    row.periodKey,
+    row.primarySubjectJson,
+    row.affectedMarketsJson,
+    row.topicTagsJson,
+    row.sourceIdsJson,
+    row.searchText,
+    row.briefJson,
+    row.detailJson,
+  ]
+}
+
 function jsonArrayContains(value: string) {
   return `%\"${value}\"%`
 }
 
 function normalizeEntityIndexValues(values: string[]) {
   return uniqueValues(values.flatMap(value => [value, value.toLowerCase()]))
+}
+
+function buildRelatedEventIndexEntries(input: EventProjectionInput): EventQueryIndexEntryInput[] {
+  return uniqueValues(input.relatedEventIds ?? []).map(value => ({
+    indexName: "related" as const,
+    indexValue: input.eventId,
+    eventId: value,
+    metadata: { relatedTo: input.eventId },
+  }))
+}
+
+function buildEventQueryIndexEntries(input: EventProjectionInput): EventQueryIndexEntryInput[] {
+  return [
+    { indexName: "latest", indexValue: "all", eventId: input.eventId },
+    { indexName: "detail", indexValue: input.eventId, eventId: input.eventId },
+    ...uniqueValues([
+      input.brief.title,
+      input.brief.eventFamily,
+      input.brief.primarySubject?.label,
+      ...input.brief.relatedTopics,
+    ]).map(value => ({ indexName: "search" as const, indexValue: value.toLowerCase(), eventId: input.eventId })),
+    ...normalizeEntityIndexValues(uniqueValues([
+      ...input.brief.affectedEntities.flatMap(entity => [entity.entityId, entity.label, entity.code]),
+      ...input.indexedEntities ?? [],
+    ])).map(value => ({ indexName: "entity" as const, indexValue: value, eventId: input.eventId })),
+    ...uniqueValues(input.brief.relatedTopics).map(value => ({ indexName: "topic" as const, indexValue: value, eventId: input.eventId })),
+    ...uniqueValues(input.sourceIds ?? [input.brief.sourceSummary.primarySourceId].filter(Boolean)).map(value => ({ indexName: "source" as const, indexValue: value, eventId: input.eventId })),
+    ...uniqueValues(input.brief.affectedMarkets).map(value => ({ indexName: "market" as const, indexValue: value, eventId: input.eventId })),
+    ...uniqueValues(input.watchlistKeys ?? []).map(value => ({ indexName: "watchlist" as const, indexValue: value, eventId: input.eventId })),
+    ...buildRelatedEventIndexEntries(input),
+  ]
 }
 
 function buildProjectionQueryParts(options: EventProjectionQueryOptions) {
@@ -412,6 +538,7 @@ export class EventProjectionTable {
 
   async upsertProjection(input: EventProjectionInput) {
     const now = Date.now()
+    const rowInput = buildProjectionRowInput(input, now)
     const sortTime = getSortTime(input.brief)
     const rankScore = getRankScore(input.brief)
 
@@ -473,33 +600,7 @@ export class EventProjectionTable {
         search_text = excluded.search_text,
         brief_json = excluded.brief_json,
         detail_json = excluded.detail_json;
-    `).run(
-      input.eventId,
-      now,
-      input.canonicalUpdatedAt,
-      input.canonicalChecksum,
-      input.eventType ?? input.brief.eventType ?? null,
-      input.eventSubType ?? null,
-      input.sourceKind ?? input.brief.sourceKind ?? null,
-      input.brief.eventFamily,
-      input.brief.actionBucket,
-      input.brief.signalDirection,
-      input.brief.materialityScore,
-      input.brief.tradabilityScore,
-      input.brief.authorityScore,
-      input.brief.latestLifecycleAt ?? null,
-      input.brief.publishedAt ?? null,
-      input.brief.ingestedAt ?? null,
-      input.seriesKey ?? input.brief.seriesKey ?? null,
-      input.periodKey ?? input.brief.periodKey ?? null,
-      input.brief.primarySubject ? JSON.stringify(input.brief.primarySubject) : null,
-      JSON.stringify(input.brief.affectedMarkets),
-      JSON.stringify(input.brief.relatedTopics),
-      JSON.stringify(input.sourceIds ?? [input.brief.sourceSummary.primarySourceId].filter(Boolean)),
-      buildSearchText(input.brief),
-      JSON.stringify(input.brief),
-      input.detail ? JSON.stringify(input.detail) : null,
-    )
+    `).run(...buildProjectionUpsertParams(rowInput))
 
     await this.db.prepare(`
       DELETE FROM event_query_indexes
@@ -560,30 +661,7 @@ export class EventProjectionTable {
         index_name, index_value, event_id, rank_score, sort_time, metadata_json
       ) VALUES (?, ?, ?, ?, ?, ?)
     `)
-    const entries: Array<{ indexName: EventQueryIndexName, indexValue: string, eventId: string, metadata?: Record<string, unknown> }> = [
-      { indexName: "latest", indexValue: "all", eventId: input.eventId },
-      { indexName: "detail", indexValue: input.eventId, eventId: input.eventId },
-      ...uniqueValues([
-        input.brief.title,
-        input.brief.eventFamily,
-        input.brief.primarySubject?.label,
-        ...input.brief.relatedTopics,
-      ]).map(value => ({ indexName: "search" as const, indexValue: value.toLowerCase(), eventId: input.eventId })),
-      ...normalizeEntityIndexValues(uniqueValues([
-        ...input.brief.affectedEntities.flatMap(entity => [entity.entityId, entity.label, entity.code]),
-        ...input.indexedEntities ?? [],
-      ])).map(value => ({ indexName: "entity" as const, indexValue: value, eventId: input.eventId })),
-      ...uniqueValues(input.brief.relatedTopics).map(value => ({ indexName: "topic" as const, indexValue: value, eventId: input.eventId })),
-      ...uniqueValues(input.sourceIds ?? [input.brief.sourceSummary.primarySourceId].filter(Boolean)).map(value => ({ indexName: "source" as const, indexValue: value, eventId: input.eventId })),
-      ...uniqueValues(input.brief.affectedMarkets).map(value => ({ indexName: "market" as const, indexValue: value, eventId: input.eventId })),
-      ...uniqueValues(input.watchlistKeys ?? []).map(value => ({ indexName: "watchlist" as const, indexValue: value, eventId: input.eventId })),
-      ...uniqueValues(input.relatedEventIds ?? []).map(value => ({
-        indexName: "related" as const,
-        indexValue: input.eventId,
-        eventId: value,
-        metadata: { relatedTo: input.eventId },
-      })),
-    ]
+    const entries = buildEventQueryIndexEntries(input)
 
     for (const entry of entries) {
       await insert.run(

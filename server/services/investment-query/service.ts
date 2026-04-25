@@ -69,6 +69,33 @@ export interface InvestmentEntityQueryOptions extends Omit<InvestmentBaseQueryOp
   entity: string
 }
 
+type RelatedEventsSectionContext = InvestmentRelatedEventsSection["context"]
+
+interface RelatedEventLookupPlan {
+  limitPerSection: number
+  queryLimit: number
+  sortBy: NonNullable<InvestmentRelatedEventsOptions["sortBy"]>
+  primaryEntityLabel?: string
+  primaryEntityLookup?: string
+  primaryTopic?: string
+  primaryMarket?: AffectedMarket
+  familyLabel: string
+}
+
+interface RelatedEventLookupResults {
+  indexedRelated: EventProjectionRecord[]
+  entityItems: InvestmentEventBrief[]
+  topicItems: InvestmentEventBrief[]
+  marketItems: InvestmentEventBrief[]
+  familyItems: InvestmentEventBrief[]
+}
+
+interface RelatedSectionInput {
+  context: RelatedEventsSectionContext
+  label?: string
+  items: InvestmentEventBrief[]
+}
+
 function normalizeLimit(limit?: number) {
   if (!Number.isFinite(limit)) return 20
   return Math.min(Math.max(Math.floor(limit as number), 1), 400)
@@ -203,6 +230,52 @@ function buildWatchlistProjectionFilters(query: WatchlistQuery): Partial<EventPr
   }
 }
 
+function buildRelatedEventLookups(
+  detail: InvestmentEventDetail,
+  options: InvestmentRelatedEventsOptions,
+): RelatedEventLookupPlan {
+  const limitPerSection = Math.min(Math.max(Math.floor(options.limitPerSection ?? 4), 1), 12)
+  const primaryEntity = detail.primarySubject ?? detail.affectedEntities[0]
+
+  return {
+    limitPerSection,
+    queryLimit: Math.max(limitPerSection + 2, 6),
+    sortBy: options.sortBy ?? "investment",
+    primaryEntityLabel: primaryEntity?.label,
+    primaryEntityLookup: primaryEntity ? collectEntityKeys(primaryEntity).find(Boolean) : undefined,
+    primaryTopic: detail.relatedTopics[0],
+    primaryMarket: detail.affectedMarkets[0],
+    familyLabel: getInvestmentEventFamilyLabel(detail.eventFamily),
+  }
+}
+
+function buildRelatedSectionLabel(context: RelatedEventsSectionContext, label: string) {
+  return getInvestmentRelatedSectionDisplayLabel(context, label)
+}
+
+function appendDistinctRelatedSection(
+  sections: InvestmentRelatedEventsSection[],
+  seen: Set<string>,
+  limitPerSection: number,
+  input: RelatedSectionInput,
+) {
+  if (!input.label) return
+  const filtered: InvestmentEventBrief[] = []
+  for (const item of input.items) {
+    if (seen.has(item.eventId)) continue
+    seen.add(item.eventId)
+    filtered.push(item)
+    if (filtered.length >= limitPerSection) break
+  }
+  if (!filtered.length) return
+  sections.push({
+    context: input.context,
+    label: input.label,
+    displayLabel: buildRelatedSectionLabel(input.context, input.label),
+    items: filtered,
+  })
+}
+
 export class InvestmentQueryService {
   constructor(private readonly store: InvestmentProjectionQueryStore) {}
 
@@ -291,87 +364,94 @@ export class InvestmentQueryService {
   }
 
   async getRelatedEvents(detail: InvestmentEventDetail, options: InvestmentRelatedEventsOptions = {}): Promise<InvestmentRelatedEventsSection[]> {
-    const limitPerSection = Math.min(Math.max(Math.floor(options.limitPerSection ?? 4), 1), 12)
-    const queryLimit = Math.max(limitPerSection + 2, 6)
-    const sortBy = options.sortBy ?? "investment"
-    const seen = new Set<string>([detail.eventId])
-    const primaryEntity = detail.primarySubject ?? detail.affectedEntities[0]
-    const primaryEntityLookup = primaryEntity
-      ? collectEntityKeys(primaryEntity).find(Boolean)
-      : undefined
-    const primaryTopic = detail.relatedTopics[0]
-    const primaryMarket = detail.affectedMarkets[0]
-    const familyLabel = getInvestmentEventFamilyLabel(detail.eventFamily)
+    const plan = buildRelatedEventLookups(detail, options)
+    const results = await this.executeRelatedEventLookups(detail, plan)
+    return this.buildRelatedEventSections(detail, plan, results)
+  }
 
+  private async executeRelatedEventLookups(
+    detail: InvestmentEventDetail,
+    plan: RelatedEventLookupPlan,
+  ): Promise<RelatedEventLookupResults> {
     const [indexedRelated, entityResult, topicResult, marketResult, familyResult] = await Promise.all([
       this.store.listProjections({
         indexName: "related",
         indexValue: detail.eventId,
-        limit: queryLimit,
-        sortBy,
+        limit: plan.queryLimit,
+        sortBy: plan.sortBy,
       }),
-      primaryEntityLookup
+      plan.primaryEntityLookup
         ? this.getEntityEvents({
-            entity: primaryEntityLookup,
-            limit: queryLimit,
-            sortBy,
+            entity: plan.primaryEntityLookup,
+            limit: plan.queryLimit,
+            sortBy: plan.sortBy,
             includeTotalCount: false,
           })
         : Promise.resolve(null),
-      primaryTopic
+      plan.primaryTopic
         ? this.listLatestEvents({
-            topic: primaryTopic,
-            limit: queryLimit,
-            sortBy,
+            topic: plan.primaryTopic,
+            limit: plan.queryLimit,
+            sortBy: plan.sortBy,
             includeTotalCount: false,
           })
         : Promise.resolve(null),
-      primaryMarket
+      plan.primaryMarket
         ? this.listLatestEvents({
-            market: primaryMarket,
-            limit: queryLimit,
-            sortBy,
+            market: plan.primaryMarket,
+            limit: plan.queryLimit,
+            sortBy: plan.sortBy,
             includeTotalCount: false,
           })
         : Promise.resolve(null),
       this.listLatestEvents({
         eventFamily: detail.eventFamily,
-        limit: queryLimit,
-        sortBy,
+        limit: plan.queryLimit,
+        sortBy: plan.sortBy,
         includeTotalCount: false,
       }),
     ])
 
-    const sections: InvestmentRelatedEventsSection[] = []
-    const appendSection = (
-      context: InvestmentRelatedEventsSection["context"],
-      label: string | undefined,
-      items: InvestmentEventBrief[],
-    ) => {
-      if (!label) return
-      const filtered: InvestmentEventBrief[] = []
-      for (const item of items) {
-        if (seen.has(item.eventId)) continue
-        seen.add(item.eventId)
-        filtered.push(item)
-        if (filtered.length >= limitPerSection) break
-      }
-      if (!filtered.length) return
-      sections.push({
-        context,
-        label,
-        displayLabel: getInvestmentRelatedSectionDisplayLabel(context, label),
-        items: filtered,
-      })
+    return {
+      indexedRelated,
+      entityItems: entityResult?.items ?? [],
+      topicItems: topicResult?.items ?? [],
+      marketItems: marketResult?.items ?? [],
+      familyItems: familyResult.items,
     }
+  }
 
-    appendSection("entity", primaryEntity?.label, [
-      ...indexedRelated.map(record => record.brief),
-      ...(entityResult?.items ?? []),
-    ])
-    appendSection("topic", primaryTopic, topicResult?.items ?? [])
-    appendSection("market", primaryMarket, marketResult?.items ?? [])
-    appendSection("family", familyLabel, familyResult.items)
+  private buildRelatedEventSections(
+    detail: InvestmentEventDetail,
+    plan: RelatedEventLookupPlan,
+    results: RelatedEventLookupResults,
+  ) {
+    const seen = new Set<string>([detail.eventId])
+    const sections: InvestmentRelatedEventsSection[] = []
+
+    appendDistinctRelatedSection(sections, seen, plan.limitPerSection, {
+      context: "entity",
+      label: plan.primaryEntityLabel,
+      items: [
+        ...results.indexedRelated.map(record => record.brief),
+        ...results.entityItems,
+      ],
+    })
+    appendDistinctRelatedSection(sections, seen, plan.limitPerSection, {
+      context: "topic",
+      label: plan.primaryTopic,
+      items: results.topicItems,
+    })
+    appendDistinctRelatedSection(sections, seen, plan.limitPerSection, {
+      context: "market",
+      label: plan.primaryMarket,
+      items: results.marketItems,
+    })
+    appendDistinctRelatedSection(sections, seen, plan.limitPerSection, {
+      context: "family",
+      label: plan.familyLabel,
+      items: results.familyItems,
+    })
 
     return sections
   }

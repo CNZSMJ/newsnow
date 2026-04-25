@@ -75,6 +75,8 @@ function resolveSnapshotState(snapshot: NewsSnapshotRecord, now: number, interva
   return now - snapshot.updatedAt <= intervalMs ? "fresh" : "stale"
 }
 
+type NewsSnapshotState = ReturnType<typeof resolveSnapshotState>
+
 export class NewsQueryService {
   private readonly snapshots?: NewsSnapshotStore | NewsSnapshotTable
   private readonly cache?: NewsCacheStore
@@ -98,43 +100,22 @@ export class NewsQueryService {
     })
     const snapshotState = snapshot ? resolveSnapshotState(snapshot, now, query.intervalMs) : "missing"
 
-    if (snapshot?.items.length && snapshotState === "fresh" && !query.forceRefresh) {
-      return toSourceResponse({
-        sourceId: query.sourceId,
-        status: "success",
-        updatedTime: now,
-        items: snapshot.items,
-      })
-    }
-
     if (snapshot?.items.length && !query.forceRefresh) {
-      this.submitRefreshIntent(query.sourceId, now, query.waitUntil)
-      return toSourceResponse({
-        sourceId: query.sourceId,
-        status: "cache",
-        updatedTime: snapshot.updatedAt ?? now,
-        items: snapshot.items,
-      })
+      if (snapshotState !== "fresh") {
+        this.submitRefreshIntent(query.sourceId, now, query.waitUntil)
+      }
+      return this.responseFromSnapshot(query.sourceId, snapshot, snapshotState, now)
     }
 
     if (!query.forceRefresh) {
       const legacy = await this.cache?.get(query.sourceId)
       if (legacy) {
-        this.persistSnapshot({
-          sourceId: query.sourceId,
-          fetchedAt: legacy.updated,
-          items: legacy.items,
-          waitUntil: query.waitUntil,
-        })
-        if (!isFreshCache(legacy, now, query.intervalMs)) {
+        this.persistLegacyAsSnapshot(query.sourceId, legacy, query.waitUntil)
+        const legacyIsFresh = isFreshCache(legacy, now, query.intervalMs)
+        if (!legacyIsFresh) {
           this.submitRefreshIntent(query.sourceId, now, query.waitUntil)
         }
-        return toSourceResponse({
-          sourceId: query.sourceId,
-          status: isFreshCache(legacy, now, query.intervalMs) ? "success" : "cache",
-          updatedTime: isFreshCache(legacy, now, query.intervalMs) ? now : legacy.updated,
-          items: legacy.items,
-        })
+        return this.responseFromLegacyCache(query.sourceId, legacy, legacyIsFresh, now)
       }
     }
 
@@ -154,32 +135,7 @@ export class NewsQueryService {
         items,
       })
     } catch (error) {
-      await this.snapshots?.recordFetchFailure({
-        sourceId: query.sourceId,
-        failedAt: now,
-        error: getErrorMessage(error),
-      })
-
-      if (snapshot?.items.length) {
-        return toSourceResponse({
-          sourceId: query.sourceId,
-          status: "cache",
-          updatedTime: snapshot.updatedAt ?? now,
-          items: snapshot.items,
-        })
-      }
-
-      const legacy = await this.cache?.get(query.sourceId)
-      if (legacy) {
-        return toSourceResponse({
-          sourceId: query.sourceId,
-          status: "cache",
-          updatedTime: legacy.updated,
-          items: legacy.items,
-        })
-      }
-
-      throw error
+      return await this.fallbackAfterFetchFailure(query.sourceId, now, snapshot, error)
     }
   }
 
@@ -203,32 +159,18 @@ export class NewsQueryService {
         this.submitRefreshIntent(sourceId, now, query.waitUntil)
       }
 
-      responsesBySourceId.set(sourceId, toSourceResponse({
-        sourceId,
-        status: snapshotState === "fresh" ? "success" : "cache",
-        updatedTime: snapshotState === "fresh" ? now : snapshot.updatedAt ?? now,
-        items: snapshot.items,
-      }))
+      responsesBySourceId.set(sourceId, this.responseFromSnapshot(sourceId, snapshot, snapshotState, now))
     }
 
     const legacyRows = await this.readLegacyCaches(missingSourceIds)
     for (const legacy of legacyRows) {
       const sourceId = legacy.id
-      this.persistSnapshot({
-        sourceId,
-        fetchedAt: legacy.updated,
-        items: legacy.items,
-        waitUntil: query.waitUntil,
-      })
-      if (!isFreshCache(legacy, now, query.getIntervalMs(sourceId))) {
+      this.persistLegacyAsSnapshot(sourceId, legacy, query.waitUntil)
+      const legacyIsFresh = isFreshCache(legacy, now, query.getIntervalMs(sourceId))
+      if (!legacyIsFresh) {
         this.submitRefreshIntent(sourceId, now, query.waitUntil)
       }
-      responsesBySourceId.set(sourceId, toSourceResponse({
-        sourceId,
-        status: isFreshCache(legacy, now, query.getIntervalMs(sourceId)) ? "success" : "cache",
-        updatedTime: isFreshCache(legacy, now, query.getIntervalMs(sourceId)) ? now : legacy.updated,
-        items: legacy.items,
-      }))
+      responsesBySourceId.set(sourceId, this.responseFromLegacyCache(sourceId, legacy, legacyIsFresh, now))
     }
 
     return query.sourceIds
@@ -240,6 +182,76 @@ export class NewsQueryService {
     const getter = this.getters[sourceId]
     if (!getter) throw new Error(`Missing source getter: ${sourceId}`)
     return (await getter()).slice(0, 30)
+  }
+
+  private responseFromSnapshot(
+    sourceId: SourceID,
+    snapshot: NewsSnapshotRecord,
+    snapshotState: NewsSnapshotState,
+    now: number,
+  ) {
+    return toSourceResponse({
+      sourceId,
+      status: snapshotState === "fresh" ? "success" : "cache",
+      updatedTime: snapshotState === "fresh" ? now : snapshot.updatedAt ?? now,
+      items: snapshot.items,
+    })
+  }
+
+  private responseFromLegacyCache(sourceId: SourceID, legacy: CacheInfo, legacyIsFresh: boolean, now: number) {
+    return toSourceResponse({
+      sourceId,
+      status: legacyIsFresh ? "success" : "cache",
+      updatedTime: legacyIsFresh ? now : legacy.updated,
+      items: legacy.items,
+    })
+  }
+
+  private persistLegacyAsSnapshot(
+    sourceId: SourceID,
+    legacy: CacheInfo,
+    waitUntil?: (promise: Promise<unknown>) => void,
+  ) {
+    this.persistSnapshot({
+      sourceId,
+      fetchedAt: legacy.updated,
+      items: legacy.items,
+      waitUntil,
+    })
+  }
+
+  private async fallbackAfterFetchFailure(
+    sourceId: SourceID,
+    failedAt: number,
+    snapshot: NewsSnapshotRecord | undefined,
+    error: unknown,
+  ) {
+    await this.snapshots?.recordFetchFailure({
+      sourceId,
+      failedAt,
+      error: getErrorMessage(error),
+    })
+
+    if (snapshot?.items.length) {
+      return toSourceResponse({
+        sourceId,
+        status: "cache",
+        updatedTime: snapshot.updatedAt ?? failedAt,
+        items: snapshot.items,
+      })
+    }
+
+    const legacy = await this.cache?.get(sourceId)
+    if (legacy) {
+      return toSourceResponse({
+        sourceId,
+        status: "cache",
+        updatedTime: legacy.updated,
+        items: legacy.items,
+      })
+    }
+
+    throw error
   }
 
   private submitRefreshIntent(sourceId: SourceID, requestedAt: number, waitUntil?: (promise: Promise<unknown>) => void) {

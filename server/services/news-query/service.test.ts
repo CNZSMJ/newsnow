@@ -27,6 +27,7 @@ function snapshot(input: Partial<NewsSnapshotRecord> & Pick<NewsSnapshotRecord, 
 describe("newsQueryService", () => {
   it("serves fresh snapshots without calling the upstream getter", async () => {
     const getter = vi.fn(async () => [newsItem("from-getter")])
+    const submitRefreshIntent = vi.fn()
     const service = new NewsQueryService({
       snapshots: {
         readSnapshot: vi.fn(async () => snapshot({
@@ -38,7 +39,7 @@ describe("newsQueryService", () => {
         recordFetchFailure: vi.fn(),
       },
       cache: undefined,
-      refreshRuntime: undefined,
+      refreshRuntime: { submitRefreshIntent },
       getters: { "wallstreetcn-quick": getter },
       now: () => 1200,
     })
@@ -56,6 +57,7 @@ describe("newsQueryService", () => {
     })
     expect(response.items.map(item => item.id)).toEqual(["from-snapshot"])
     expect(getter).not.toHaveBeenCalled()
+    expect(submitRefreshIntent).not.toHaveBeenCalled()
   })
 
   it("serves stale snapshots and submits a neutral refresh intent without blocking on the getter", async () => {
@@ -198,6 +200,7 @@ describe("newsQueryService", () => {
       items: [newsItem("legacy")],
     }
     const upsertSnapshot = vi.fn()
+    const submitRefreshIntent = vi.fn()
     const service = new NewsQueryService({
       snapshots: {
         readSnapshot: vi.fn(async () => snapshot({
@@ -215,7 +218,7 @@ describe("newsQueryService", () => {
         get: vi.fn(async () => legacyCache),
         set: vi.fn(),
       },
-      refreshRuntime: undefined,
+      refreshRuntime: { submitRefreshIntent },
       getters: {},
       now: () => 1200,
     })
@@ -233,6 +236,58 @@ describe("newsQueryService", () => {
       fetchedAt: 1000,
       items: [newsItem("legacy")],
     })
+    expect(submitRefreshIntent).not.toHaveBeenCalled()
+  })
+
+  it("serves stale legacy cache rows and submits refresh intents during migration", async () => {
+    const legacyCache: CacheInfo = {
+      id: "wallstreetcn-quick",
+      updated: 1000,
+      items: [newsItem("legacy-stale")],
+    }
+    const upsertSnapshot = vi.fn()
+    const submitRefreshIntent = vi.fn()
+    const service = new NewsQueryService({
+      snapshots: {
+        readSnapshot: vi.fn(async () => snapshot({
+          sourceId: "wallstreetcn-quick",
+          state: "missing",
+          updatedAt: null,
+          lastSuccessfulFetchedAt: null,
+          itemCount: 0,
+          items: [],
+        })),
+        upsertSnapshot,
+        recordFetchFailure: vi.fn(),
+      },
+      cache: {
+        get: vi.fn(async () => legacyCache),
+        set: vi.fn(),
+      },
+      refreshRuntime: { submitRefreshIntent },
+      getters: {},
+      now: () => 3000,
+    })
+
+    const response = await service.getSource({
+      sourceId: "wallstreetcn-quick",
+      intervalMs: 1000,
+      forceRefresh: false,
+    })
+
+    expect(response.status).toBe("cache")
+    expect(response.updatedTime).toBe(1000)
+    expect(response.items.map(item => item.id)).toEqual(["legacy-stale"])
+    expect(upsertSnapshot).toHaveBeenCalledWith({
+      sourceId: "wallstreetcn-quick",
+      fetchedAt: 1000,
+      items: [newsItem("legacy-stale")],
+    })
+    expect(submitRefreshIntent).toHaveBeenCalledWith(expect.objectContaining({
+      sourceId: "wallstreetcn-quick",
+      priorityClass: "routine_fetch",
+      fallbackPolicy: "serve_stale",
+    }))
   })
 
   it("batch reads available snapshots and omits missing sources without calling getters", async () => {
@@ -288,6 +343,7 @@ describe("newsQueryService", () => {
 
   it("batch reads and seeds legacy cache rows during migration", async () => {
     const upsertSnapshot = vi.fn()
+    const submitRefreshIntent = vi.fn()
     const service = new NewsQueryService({
       snapshots: {
         readSnapshot: vi.fn(),
@@ -310,28 +366,40 @@ describe("newsQueryService", () => {
           id: "wallstreetcn-quick" as SourceID,
           updated: 1500,
           items: [newsItem("legacy")],
+        }, {
+          id: "cls-telegraph" as SourceID,
+          updated: 200,
+          items: [newsItem("legacy-stale")],
         }]),
         set: vi.fn(),
       },
-      refreshRuntime: undefined,
+      refreshRuntime: { submitRefreshIntent },
       getters: {},
       now: () => 1800,
     })
 
     const responses = await service.getSourcesBatch({
-      sourceIds: ["wallstreetcn-quick"],
+      sourceIds: ["wallstreetcn-quick", "cls-telegraph"],
       getIntervalMs: () => 1000,
     })
 
-    expect(responses).toHaveLength(1)
-    expect(responses[0]).toMatchObject({
-      id: "wallstreetcn-quick",
-      status: "success",
-    })
+    expect(responses.map(response => response.id)).toEqual(["wallstreetcn-quick", "cls-telegraph"])
+    expect(responses.map(response => response.status)).toEqual(["success", "cache"])
     expect(upsertSnapshot).toHaveBeenCalledWith({
       sourceId: "wallstreetcn-quick",
       fetchedAt: 1500,
       items: [newsItem("legacy")],
     })
+    expect(upsertSnapshot).toHaveBeenCalledWith({
+      sourceId: "cls-telegraph",
+      fetchedAt: 200,
+      items: [newsItem("legacy-stale")],
+    })
+    expect(submitRefreshIntent).toHaveBeenCalledTimes(1)
+    expect(submitRefreshIntent).toHaveBeenCalledWith(expect.objectContaining({
+      sourceId: "cls-telegraph",
+      priorityClass: "routine_fetch",
+      fallbackPolicy: "serve_stale",
+    }))
   })
 })

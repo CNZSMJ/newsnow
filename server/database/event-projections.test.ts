@@ -277,4 +277,59 @@ describe("eventProjectionTable", () => {
       { eventId: "evt_future_publish" },
     ])
   })
+
+  it("replaces current-event indexes while preserving inbound related edges", async () => {
+    const { table } = createProjectionTable()
+    await table.init()
+
+    await table.upsertProjection({
+      eventId: "evt_parent",
+      canonicalUpdatedAt: 1000,
+      canonicalChecksum: "checksum-parent",
+      brief: brief({
+        eventId: "evt_parent",
+        title: "父事件",
+        relatedTopics: ["semiconductor"],
+      }),
+      relatedEventIds: ["evt_child"],
+      sourceIds: ["wallstreetcn-quick"],
+    })
+    await table.upsertProjection({
+      eventId: "evt_child",
+      canonicalUpdatedAt: 1100,
+      canonicalChecksum: "checksum-child-old",
+      brief: brief({
+        eventId: "evt_child",
+        title: "子事件旧主题",
+        relatedTopics: ["steel"],
+      }),
+      relatedEventIds: ["evt_old_outbound"],
+      sourceIds: ["wallstreetcn-quick"],
+    })
+    await table.upsertProjection({
+      eventId: "evt_child",
+      canonicalUpdatedAt: 1200,
+      canonicalChecksum: "checksum-child-new",
+      brief: brief({
+        eventId: "evt_child",
+        title: "子事件新主题",
+        relatedTopics: ["medicine"],
+      }),
+      relatedEventIds: ["evt_new_outbound"],
+      sourceIds: ["wallstreetcn-quick"],
+    })
+
+    await expect(table.listIndexEntries("topic", "steel")).resolves.not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_child" }),
+    ]))
+    await expect(table.listIndexEntries("topic", "medicine")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_child" }),
+    ]))
+    await expect(table.listIndexEntries("related", "evt_parent")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_child", metadata: { relatedTo: "evt_parent" } }),
+    ]))
+    await expect(table.listIndexEntries("related", "evt_child")).resolves.toEqual([
+      expect.objectContaining({ eventId: "evt_new_outbound", metadata: { relatedTo: "evt_child" } }),
+    ])
+  })
 })
