@@ -43,6 +43,25 @@ function statusLine(content: string): string {
   return content.match(/^状态[:：](.+)$/m)?.[1]?.trim() ?? ""
 }
 
+function isImplementationState(status: string): boolean {
+  return [
+    "Ready for Implementation",
+    "In Progress",
+    "Validation",
+    "Completed",
+    "待实现",
+    "实施中",
+    "验证中",
+    "已完成",
+  ].some(value => status.includes(value))
+}
+
+function hasCompletedConsistencyCheck(content: string): boolean {
+  return content.includes("一致性检查已完成")
+    || content.includes("一致性检查：已完成")
+    || content.includes("一致性检查: 已完成")
+}
+
 function listDirectories(relativePath: string): string[] {
   const absolutePath = join(rootDir, relativePath)
   if (!existsSync(absolutePath)) {
@@ -95,10 +114,15 @@ function checkBacklogs(): void {
       requireFile(`${basePath}/${file}`)
     }
 
+    const deliveryStatusPath = `${basePath}/delivery-status.md`
+    const deliveryStatus = exists(deliveryStatusPath) ? readDoc(deliveryStatusPath) : ""
+    const currentStatus = statusLine(deliveryStatus)
+    const requiresImplementationGate = isImplementationState(currentStatus)
+
     const technicalDesignPath = `${basePath}/technical-design.md`
     if (exists(technicalDesignPath)) {
       const status = statusLine(readDoc(technicalDesignPath))
-      if (!status.includes("审批通过")) {
+      if (requiresImplementationGate && !status.includes("审批通过")) {
         fail(technicalDesignPath, "technical-design status must include 审批通过 before implementation")
       }
     }
@@ -109,16 +133,16 @@ function checkBacklogs(): void {
       if (!implementationPlan.includes("technical-design.md") || !implementationPlan.includes("一致性检查")) {
         fail(implementationPlanPath, "implementation plan must declare consistency check with technical-design.md")
       }
+      if (requiresImplementationGate && !hasCompletedConsistencyCheck(implementationPlan)) {
+        fail(implementationPlanPath, "implementation plan must declare completed consistency check before implementation")
+      }
     }
 
-    const deliveryStatusPath = `${basePath}/delivery-status.md`
     if (exists(deliveryStatusPath)) {
-      const deliveryStatus = readDoc(deliveryStatusPath)
-      const status = statusLine(deliveryStatus)
-      if (!status) {
+      if (!currentStatus) {
         fail(deliveryStatusPath, "delivery-status must include a 状态 line")
       }
-      if ((status.includes("Completed") || status.includes("已完成")) && !deliveryStatus.includes("验证记录")) {
+      if ((currentStatus.includes("Completed") || currentStatus.includes("已完成")) && !deliveryStatus.includes("验证记录")) {
         fail(deliveryStatusPath, "completed backlog must include validation records")
       }
     }

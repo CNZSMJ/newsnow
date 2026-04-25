@@ -142,8 +142,9 @@ pnpm docs:check
 该检查至少覆盖：
 
 - backlog 六件套是否完整
-- `technical-design.md` 是否已审批通过
-- `implementation-plan.md` 是否声明与技术方案一致性检查
+- 非 Draft backlog 进入实现态前，`technical-design.md` 是否已审批通过
+- 非 Draft backlog 进入实现态前，`implementation-plan.md` 是否声明与技术方案一致性检查已完成
+- Draft backlog 可以记录未审批方案和未完成一致性检查，但不得进入实现
 - hotfix 五段式是否完整
 - hotfix“实施计划”是否声明与“修复方案”一致性检查
 - review 文档是否声明已闭环或无开放问题
