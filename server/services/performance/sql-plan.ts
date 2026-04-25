@@ -34,48 +34,57 @@ export function buildSurfaceQueryPlanStatements(): SurfaceQueryPlanStatement[] {
       name: "investment_latest_events",
       surface: "investment_user",
       owner: "investment-event",
-      tables: ["events"],
-      decisionRefs: ["PD-4", "TD-3"],
+      tables: ["event_projection", "event_query_indexes"],
+      decisionRefs: ["PD-4", "TD-3", "TD-10", "TD-11"],
       sql: `
-        SELECT event_id
-        FROM events
-        WHERE status = 'active'
-        ORDER BY COALESCE(published_at, ingested_at) DESC, ingested_at DESC
+        SELECT p.event_id
+        FROM event_projection p
+        INNER JOIN event_query_indexes i
+          ON i.event_id = p.event_id
+         AND i.index_name = ?
+         AND i.index_value = ?
+        WHERE p.repair_status = 'ok'
+        ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
+                 COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
         LIMIT ?
       `,
-      params: [20],
+      params: ["latest", "all", 20],
     },
     {
       name: "investment_search_events",
       surface: "investment_user",
       owner: "investment-event",
-      tables: ["events"],
-      decisionRefs: ["PD-4", "TD-3"],
+      tables: ["event_projection"],
+      decisionRefs: ["PD-4", "TD-3", "TD-10", "TD-11"],
       sql: `
-        SELECT event_id
-        FROM events
-        WHERE status = 'active'
-          AND (title LIKE ? OR summary LIKE ?)
-        ORDER BY COALESCE(published_at, ingested_at) DESC, ingested_at DESC
+        SELECT p.event_id
+        FROM event_projection p
+        WHERE p.repair_status = 'ok'
+          AND p.search_text LIKE ?
+        ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
+                 COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
         LIMIT ?
       `,
-      params: ["%政策%", "%政策%", 20],
+      params: ["%政策%", 20],
     },
     {
       name: "investment_entity_lookup",
       surface: "investment_user",
       owner: "investment-event",
-      tables: ["entity_links"],
-      decisionRefs: ["PD-4", "TD-3"],
+      tables: ["event_projection", "event_query_indexes"],
+      decisionRefs: ["PD-4", "TD-3", "TD-10", "TD-11"],
       sql: `
-        SELECT event_id
-        FROM entity_links
-        WHERE entity_name = ?
-           OR code = ?
-           OR full_code = ?
+        SELECT p.event_id
+        FROM event_query_indexes i
+        INNER JOIN event_projection p
+          ON p.event_id = i.event_id
+        WHERE i.index_name = ?
+          AND i.index_value = ?
+          AND p.repair_status = 'ok'
+        ORDER BY i.sort_time DESC, i.rank_score DESC
         LIMIT ?
       `,
-      params: ["贵州茅台", "600519", "sh600519", 20],
+      params: ["entity", "贵州茅台", 20],
     },
     {
       name: "shared_source_fetch_runs_latest",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { assertSqlAccessDeclarations } from "#/database/sql-ownership"
 import { buildSurfaceQueryPlanStatements } from "./sql-plan"
+import { assertSqlAccessDeclarations } from "#/database/sql-ownership"
 
 describe("surface query plan statements", () => {
   it("declares owner and decision refs for every plan", () => {
@@ -37,5 +37,10 @@ describe("surface query plan statements", () => {
       "investment_entity_lookup",
       "shared_source_fetch_runs_latest",
     ]))
+    for (const plan of plans.filter(plan => plan.name.startsWith("investment_"))) {
+      expect(plan.tables).not.toContain("events")
+      expect(plan.tables).not.toContain("entity_links")
+      expect(plan.tables).toEqual(expect.arrayContaining(["event_projection"]))
+    }
   })
 })

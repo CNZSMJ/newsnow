@@ -1,6 +1,6 @@
 # Delivery Status
 
-状态：执行中
+状态：Sprint 3 gate 通过，Sprint 4 待执行
 最后更新：2026-04-25
 范围：`newsnow` 双业务线系统性性能重构的实施状态、blocker、验证记录和下一步
 
@@ -15,7 +15,7 @@
 - Sprint 1 Step 1.1-1.6 已完成；Sprint 1 gate 的 benchmark、SQL plan、MCP transport、frontend request-count 和 worker active / inactive 基线入口已补齐
 - Sprint 1 gate 已通过：`pnpm test`、`pnpm typecheck`、`pnpm build` 均通过，本地服务已按规范重启
 - Sprint 2 Step 2.1-2.6 已完成；Sprint 2 code gate 已通过
-- Sprint 3 Step 3.1-3.4 已完成；准备进入 Sprint 3 gate
+- Sprint 3 Step 3.1-3.4 已完成；Sprint 3 gate 已通过
 
 ## 2. 已完成内容
 
@@ -68,10 +68,11 @@
 - Sprint 3 Step 3.3 完成 shadow validation helper：新增 projection query result 与 legacy canonical query result 的 ID drift comparator
 - Sprint 3 Step 3.4 完成 watchlist / related-events 索引策略测试：`event_query_indexes` 可通过 `watchlist` 与 `related` index 返回 projection rows
 - Sprint 3 Step 3.4 修正 related index 删除边界：projection upsert 只清理当前 event 的普通索引和 related 出边，保留其他 event 指向当前 event 的 related 入边
+- Sprint 3 gate 完成 query-plan 口径校正：investment latest/search/entity explain plan 已从 legacy `events` / `entity_links` 改为 `event_projection` / `event_query_indexes`
 
 ## 3. 进行中
 
-- Sprint 3 gate：完整 code gate、事件线质量 gate 与性能 baseline 对比
+- Sprint 4 准备：detail / watchlist / related-events / MCP read tools 收敛
 
 ## 4. Blockers / 风险
 
@@ -180,14 +181,23 @@
 - Sprint 3 Step 3.4 TDD green：补充 watchlist / related index strategy 测试并修正 related index 删除边界后，`pnpm test -- server/database/event-projections.test.ts` 通过，42 个 test files / 283 tests
 - Sprint 3 Step 3.4 类型验证：`pnpm typecheck` 通过
 - Sprint 3 Step 3.4 build 验证：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Sprint 3 gate：`pnpm test` 通过，42 个 test files / 283 tests
+- Sprint 3 gate：`pnpm typecheck` 通过
+- Sprint 3 gate：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Sprint 3 gate：`pnpm perf:mcp-smoke` 通过；`get_hotest_latest_news` 11.67ms，`event_get_latest_events` 23.62ms，均有 `structuredContent`
+- Sprint 3 gate：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`investment_user` P50 4.38ms / P95 37.89ms，`investment_agent` P50 3ms / P95 21.2ms
+- Sprint 3 gate：`pnpm perf:query-plans` 通过；investment latest/entity 命中 `event_query_indexes` + `event_projection`，search 读取 `event_projection.search_text`
+- Sprint 3 gate：`pnpm events:ops-report` 通过
+- Sprint 3 gate：`pnpm events:check-quality` 通过；release status 为 `insufficient_data`，无 blocking failures
+- Sprint 3 gate：live-data shadow comparison 通过；latest Top 20 projection vs canonical `status=match`，missing / extra 均为空
+- Sprint 3 gate：projection backfill 补跑 latest 口径，`pnpm events:backfill-projections --limit 1000 --sort latest` 扫描 1000，写入 460，跳过 540，缺失 canonical 0
+- Sprint 3 gate：live API smoke 复测 `GET /api/investment-events/latest?limit=5` 返回 5 items / totalCount 1118
 
 尚未完成：
 
-- Sprint 3 gate 的 live-data shadow comparison 汇总
 - Sprint 3 / Sprint 4 route-level 切换清单
 
 ## 6. 下一步
 
-1. 提交 Sprint 3 Step 3.4 watchlist / related index strategy，保持 `data.db` 等无关本地文件不入库
-2. Sprint 3 gate：运行完整 code gate、事件线质量 gate 与性能 baseline 对比
-3. Sprint 4：继续切换 detail / watchlist / related-events / MCP read tools
+1. 提交 Sprint 3 gate query-plan 口径校正和 gate 记录，保持 `data.db` 等无关本地文件不入库
+2. Sprint 4：继续切换 detail / watchlist / related-events / MCP read tools
