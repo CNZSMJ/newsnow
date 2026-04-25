@@ -105,6 +105,33 @@ describe("sharedSourceRuntime", () => {
     expect(runtime.getQueueDepth()).toBe(1)
   })
 
+  it("can drain one business line without consuming another line's intents", () => {
+    const runtime = new SharedSourceRuntime({ maxConcurrency: 4 })
+    runtime.submitRefreshIntent(intent({
+      businessLine: "news",
+      sourceId: "wallstreetcn-quick",
+      priorityClass: "routine_fetch",
+      reason: "news stale",
+    }))
+    runtime.submitRefreshIntent(intent({
+      businessLine: "investment-event",
+      sourceId: "sse-latest",
+      priorityClass: "force_refresh",
+      reason: "event catch-up",
+    }))
+
+    expect(runtime.takeNextBatch(2000, { businessLine: "news" }).map(item => item.sourceId)).toEqual([
+      "wallstreetcn-quick",
+    ])
+    runtime.recordFetchSuccess({
+      sourceId: "wallstreetcn-quick",
+      fetchedAt: 2500,
+      itemCount: 3,
+    })
+
+    expect(runtime.takeNextBatch(3000).map(item => item.sourceId)).toEqual(["sse-latest"])
+  })
+
   it("respects concurrency and records source fetch state", () => {
     const runtime = new SharedSourceRuntime({ maxConcurrency: 1 })
     runtime.submitRefreshIntent(intent({

@@ -1,23 +1,27 @@
 import type { NewsItem, SourceID, SourceResponse } from "@shared/types"
+import { scheduleNewsRefreshDrain } from "./refresh-worker"
 import type { CacheInfo } from "#/types"
 import type { NewsSnapshotRecord, NewsSnapshotTable } from "#/database/news-snapshots"
 import type { NeutralRefreshIntent, SharedSourceRuntime } from "#/services/source-runtime/runtime"
 
 export interface NewsCacheStore {
-  get(key: string): Promise<CacheInfo | undefined>
-  getEntire?(keys: string[]): Promise<CacheInfo[]>
-  set(key: string, value: NewsItem[]): Promise<void>
+  get: (key: string) => Promise<CacheInfo | undefined>
+  getEntire?: (keys: string[]) => Promise<CacheInfo[]>
+  set: (key: string, value: NewsItem[]) => Promise<void>
 }
 
 export interface NewsSnapshotStore {
-  readSnapshot(sourceId: string, options: { now: number, maxAgeMs: number }): Promise<NewsSnapshotRecord>
-  readSnapshots?(sourceIds: string[], options: { now: number, maxAgeMs: number }): Promise<NewsSnapshotRecord[]>
-  upsertSnapshot(input: { sourceId: string, fetchedAt: number, items: NewsItem[] }): Promise<void>
-  recordFetchFailure(input: { sourceId: string, failedAt: number, error: string }): Promise<void>
+  readSnapshot: (sourceId: string, options: { now: number, maxAgeMs: number }) => Promise<NewsSnapshotRecord>
+  readSnapshots?: (sourceIds: string[], options: { now: number, maxAgeMs: number }) => Promise<NewsSnapshotRecord[]>
+  upsertSnapshot: (input: { sourceId: string, fetchedAt: number, items: NewsItem[] }) => Promise<void>
+  recordFetchFailure: (input: { sourceId: string, failedAt: number, error: string }) => Promise<void>
 }
 
 export interface NewsRefreshRuntime {
-  submitRefreshIntent(intent: NeutralRefreshIntent): ReturnType<SharedSourceRuntime["submitRefreshIntent"]>
+  submitRefreshIntent: (intent: NeutralRefreshIntent) => ReturnType<SharedSourceRuntime["submitRefreshIntent"]>
+  takeNextBatch?: SharedSourceRuntime["takeNextBatch"]
+  recordFetchSuccess?: SharedSourceRuntime["recordFetchSuccess"]
+  recordFetchFailure?: SharedSourceRuntime["recordFetchFailure"]
 }
 
 export type NewsGetterMap = Partial<Record<SourceID, () => Promise<NewsItem[]>>>
@@ -104,7 +108,7 @@ export class NewsQueryService {
     }
 
     if (snapshot?.items.length && !query.forceRefresh) {
-      this.submitRefreshIntent(query.sourceId, now)
+      this.submitRefreshIntent(query.sourceId, now, query.waitUntil)
       return toSourceResponse({
         sourceId: query.sourceId,
         status: "cache",
@@ -123,7 +127,7 @@ export class NewsQueryService {
           waitUntil: query.waitUntil,
         })
         if (!isFreshCache(legacy, now, query.intervalMs)) {
-          this.submitRefreshIntent(query.sourceId, now)
+          this.submitRefreshIntent(query.sourceId, now, query.waitUntil)
         }
         return toSourceResponse({
           sourceId: query.sourceId,
@@ -196,7 +200,7 @@ export class NewsQueryService {
       const snapshotState = resolveSnapshotState(snapshot, now, query.getIntervalMs(sourceId))
 
       if (snapshotState !== "fresh") {
-        this.submitRefreshIntent(sourceId, now)
+        this.submitRefreshIntent(sourceId, now, query.waitUntil)
       }
 
       responsesBySourceId.set(sourceId, toSourceResponse({
@@ -217,7 +221,7 @@ export class NewsQueryService {
         waitUntil: query.waitUntil,
       })
       if (!isFreshCache(legacy, now, query.getIntervalMs(sourceId))) {
-        this.submitRefreshIntent(sourceId, now)
+        this.submitRefreshIntent(sourceId, now, query.waitUntil)
       }
       responsesBySourceId.set(sourceId, toSourceResponse({
         sourceId,
@@ -238,8 +242,8 @@ export class NewsQueryService {
     return (await getter()).slice(0, 30)
   }
 
-  private submitRefreshIntent(sourceId: SourceID, requestedAt: number) {
-    this.refreshRuntime?.submitRefreshIntent({
+  private submitRefreshIntent(sourceId: SourceID, requestedAt: number, waitUntil?: (promise: Promise<unknown>) => void) {
+    const receipt = this.refreshRuntime?.submitRefreshIntent({
       businessLine: "news",
       sourceId,
       priorityClass: "routine_fetch",
@@ -247,6 +251,16 @@ export class NewsQueryService {
       requestedAt,
       fallbackPolicy: "serve_stale",
     })
+    if (receipt?.accepted) {
+      scheduleNewsRefreshDrain({
+        refreshRuntime: this.refreshRuntime,
+        snapshots: this.snapshots,
+        cache: this.cache,
+        getters: this.getters,
+        waitUntil,
+        now: this.now,
+      })
+    }
   }
 
   private persistSnapshot(input: {

@@ -12,6 +12,7 @@
 - 阶段 0 已完成：文档、关键代码和现有验证命令已确认
 - Sprint 4 已完成：detail / watchlist / related-events / MCP read tools 收敛，Sprint 4 gate 已通过
 - Sprint 5 已完成：frontend cleanup、ops decoupling、benchmark 与回归验证工程化，最终 gate 已通过
+- Review follow-up 已完成：新闻 stale refresh 后台 drain、watchlist index-seed event-read、deferred latest ordering 和 query-plan 口径均已修复并通过回归验证
 - 已创建单一 backlog 主题
 - 已完成前期代码审查和文档边界校正
 - Sprint 1 Step 1.1-1.6 已完成；Sprint 1 gate 的 benchmark、SQL plan、MCP transport、frontend request-count 和 worker active / inactive 基线入口已补齐
@@ -60,7 +61,7 @@
 - Sprint 2 Step 2.6 完成 `source_fetch_runs` shared-source contract 第一阶段分离：新增 `SourceFetchRunsTable`，`EventTable` 仅保留 migration bridge 委托，不再内联维护该表的 DDL / DAO
 - Sprint 2 Step 2.6 完成 SQL owner declaration 工程化规则：新增 `sql-ownership` baseline / declaration / assertion，新增 `source_snapshots`、`source_items`、`source_fetch_runs` 访问声明和测试
 - Sprint 3 前置条件完成第一步：新增 `investment-view-classification`，按函数级别声明 `investment-view.ts` 当前 exported helpers 的 write-time / query-time / presentation 分类和目标 projection contract
-- Sprint 3 Step 3.1 完成 projection / index schema 第一阶段：新增 `event_projection` 与 `event_query_indexes` DAO，覆盖 latest / search / entity / watchlist / detail / related 六类目标 index name
+- Sprint 3 Step 3.1 完成 projection / index schema 第一阶段：新增 `event_projection` 与 `event_query_indexes` DAO；当前覆盖 latest / search / entity / topic / source / market / watchlist / detail / related index name
 - Sprint 3 Step 3.2 完成 canonical -> projection 写入管线：新增 `projection-pipeline`，从 canonical `EventDetail` 调用 backend-owned investment projection helper 写入 `event_projection` 与 query indexes
 - Sprint 3 Step 3.2 完成 projection consistency check：以 canonical detail 的 deterministic checksum 判定 `missing` / `stale` / `ok`
 - Sprint 3 Step 3.2 完成事件生产链路挂接：`persistResolvedEvent` 在 canonical event transaction 完成后刷新 Investment Event Projection
@@ -77,12 +78,17 @@
 - Sprint 4 完成 metadata / event-read 解耦：`server/database/watchlists.ts` 只保留 watchlist metadata lifecycle，不再读取 event table；`/api/watchlists` 和 `/api/watchlists/[id]` metadata 路径不接管 Investment Event Query Model
 - Sprint 4 删除旧 route-level related-events fan-out helper：`server/services/event-engine/related-events.ts` 已移除，避免后续 surface 绕过 projection query model
 - Sprint 4 修正 benchmark 干扰：`pnpm perf:surface-baseline` 的 detail breakdown 改为只读 projection，不再在运行态对 projection 表执行 DDL 初始化，避免与服务进程 SQLite 写入争锁
-- Sprint 4 扩展 SQL query plan 覆盖：`pnpm perf:query-plans` 现在覆盖 investment detail projection、related-events lookup 和 watchlist projection scan
+- Sprint 4 扩展 SQL query plan 覆盖：`pnpm perf:query-plans` 现在覆盖 investment detail projection、related-events lookup 和 watchlist index-seed scan
 - Sprint 5 完成 watchlist detail frontend cleanup：`/watchlists/$watchlistId` 现在通过 `/api/investment-watchlists/:id` 单次 detail 请求传入 `focus`，不再因 focus mode 额外请求 `/events`
 - Sprint 5 完成 provider watchlist detail adapter 收敛：`/api/investment-watchlists/:id` 支持 `focus` 与 `event_family` 过滤，detail 与 events adapter 共享 Investment Query Service 输出，不新增 route-level 投资语义
 - Sprint 5 完成 ops decoupling：`/api/ops/events/status` 默认只返回 lightweight worker / version / database / LLM / health 状态，只有 `mode=diagnostics`、`diagnostics=true` 或 `full=true` 才触发 heavy diagnostics
 - Sprint 5 完成 benchmark 去重型诊断依赖：`pnpm perf:surface-baseline` 的 worker state 读取改为 `/api/ops/events/status?mode=light`
 - Sprint 5 完成当前生效文档同步：`docs/api-contract.md` 与 `docs/event-operations-runbook.md` 已记录 lightweight status 默认行为与 explicit diagnostics 入口
+- Review follow-up 完成新闻 stale refresh 执行链路：`NewsQueryService` 在 stale snapshot / legacy fallback 后提交 neutral refresh intent，并由 Shared Source Runtime 的 news drain 后台执行 getter、写回 News Snapshot Model 和 legacy cache
+- Review follow-up 完成 Shared Source Runtime drain 隔离：`takeNextBatch` 支持按 `businessLine` drain，新闻后台 refresh 不消费 investment-event intent
+- Review follow-up 完成 watchlist event-read 最优修复：Investment Query Service 不再从 bounded global `latest/all` slice 过滤 watchlist，而是按 entity / topic / source / market index seed 查询、合并去重并保留最终 query filter
+- Review follow-up 完成 Investment Event Query Model 索引补齐：`event_query_indexes` 增加 `topic`、`source`、`market` index，watchlist seed query 和 query-plan 覆盖同步更新
+- Review follow-up 完成 `sort=latest` 语义修复：`event_projection` latest 排序恢复 deferred publication guard，未来发布时间不会抢占当前已观测事件
 
 ## 3. 进行中
 
@@ -214,7 +220,7 @@
 - Sprint 4 actual MCP transport smoke：`pnpm perf:mcp-smoke` 通过；`get_hotest_latest_news` 14.97ms，`event_get_latest_events` 8.76ms，均有 `structuredContent`
 - Sprint 4 surface benchmark：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`news_user` P50 3.24ms / P95 5.68ms，`news_agent` 0.97ms，`investment_user` P50 5.01ms / P95 6.99ms，`investment_agent` P50 3.1ms / P95 3.25ms
 - Sprint 4 detail projection benchmark：样本事件 `evt_ae4e82663c5651f9adc8618e1948f4f0`，HTTP detail 5.01ms，projection detail query 5.78ms，projection related-events query 9.25ms，related query count 4，scanLimit 24
-- Sprint 4 query plan：`pnpm perf:query-plans` 通过，9 个 plan；investment detail 命中 `event_projection` primary key，related lookup 命中 `idx_event_query_indexes_lookup` + `event_projection`，watchlist projection scan 命中 `event_query_indexes` + `event_projection`
+- Sprint 4 query plan：`pnpm perf:query-plans` 通过，9 个 plan；investment detail 命中 `event_projection` primary key，related lookup 命中 `idx_event_query_indexes_lookup` + `event_projection`，watchlist index-seed scan 命中 `event_query_indexes` + `event_projection`
 - Sprint 4 ops / quality：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 通过，release status `insufficient_data`，无 blocking failure
 - Sprint 5 full test：`pnpm test` 通过，41 个 test files / 281 tests
 - Sprint 5 typecheck：`pnpm typecheck` 通过
@@ -225,9 +231,18 @@
 - Sprint 5 actual MCP transport smoke：`pnpm perf:mcp-smoke` 通过；`get_hotest_latest_news` 33.6ms，`event_get_latest_events` 124.61ms，均有 `structuredContent`
 - Sprint 5 surface benchmark：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`news_user` P50 12.09ms / P95 20.97ms，`news_agent` 3.48ms，`investment_user` P50 18.49ms / P95 34.88ms，`investment_agent` P50 12.41ms / P95 22.83ms
 - Sprint 5 detail projection benchmark：样本事件 `evt_0c360a3c1972c9cf4fb76ab73dbd1489`，HTTP detail 18.49ms，projection detail query 24.59ms，projection related-events query 14.11ms，related query count 4，scanLimit 24
-- Sprint 5 query plan：`pnpm perf:query-plans` 通过，9 个 plan；investment detail 命中 `event_projection` primary key，related lookup 命中 `idx_event_query_indexes_lookup` + `event_projection`，watchlist projection scan 命中 `event_query_indexes` + `event_projection`
+- Sprint 5 query plan：`pnpm perf:query-plans` 通过，9 个 plan；investment detail 命中 `event_projection` primary key，related lookup 命中 `idx_event_query_indexes_lookup` + `event_projection`，watchlist index-seed scan 命中 `event_query_indexes` + `event_projection`
 - Sprint 5 frontend request-count 复测：`/` 本地 API 请求 2 个，`/events` 3 个，`/watchlists` 2 个，`/events/evt_0c360a3c1972c9cf4fb76ab73dbd1489` 3 个；本地当前无持久 watchlist，无法复测 `/watchlists/$watchlistId`
 - Sprint 5 ops / quality：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 通过，release status `insufficient_data`，无 blocking failure
+- Review follow-up focused regression：`pnpm test -- server/services/news-query/service.test.ts server/services/source-runtime/runtime.test.ts server/services/investment-query/service.test.ts server/database/event-projections.test.ts server/services/performance/sql-plan.test.ts` 通过，41 个 test files / 285 tests
+- Review follow-up typecheck：`pnpm typecheck` 通过
+- Review follow-up full test：`pnpm test` 通过，41 个 test files / 285 tests
+- Review follow-up build：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Review follow-up 服务验证：build 后通过 `./scripts/service.sh restart` 重启，`./scripts/service.sh status` 显示 launchd 服务运行中，pid 3454
+- Review follow-up actual MCP transport smoke：`pnpm perf:mcp-smoke` 通过；`get_hotest_latest_news` 34.55ms，`event_get_latest_events` 122.63ms，均有 `structuredContent`
+- Review follow-up surface benchmark：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`news_user` P50 6.88ms / P95 20.23ms，`news_agent` 3ms，`investment_user` P50 13.17ms / P95 26.46ms，`investment_agent` P50 5.1ms / P95 5.55ms
+- Review follow-up query plan：`pnpm perf:query-plans` 通过，9 个 plan；watchlist index-seed scan 命中 `event_query_indexes` + `event_projection`
+- Review follow-up ops / quality：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 通过，release status `insufficient_data`，无 blocking failure
 
 尚未完成：
 

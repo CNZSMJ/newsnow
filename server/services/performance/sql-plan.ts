@@ -121,7 +121,7 @@ export function buildSurfaceQueryPlanStatements(): SurfaceQueryPlanStatement[] {
       params: ["related", "evt_sample", 6],
     },
     {
-      name: "investment_watchlist_projection_scan",
+      name: "investment_watchlist_index_seed_scan",
       surface: "investment_user",
       owner: "investment-event",
       tables: ["event_projection", "event_query_indexes"],
@@ -134,11 +134,12 @@ export function buildSurfaceQueryPlanStatements(): SurfaceQueryPlanStatement[] {
          AND i.index_name = ?
          AND i.index_value = ?
         WHERE p.repair_status = 'ok'
+          AND p.topic_tags_json LIKE ?
         ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
                  COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
         LIMIT ?
       `,
-      params: ["latest", "all", 120],
+      params: ["entity", "贵州茅台", "%\"ai-computing\"%", 120],
     },
     {
       name: "shared_source_fetch_runs_latest",

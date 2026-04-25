@@ -98,6 +98,9 @@ describe("eventProjectionTable", () => {
       "latest",
       "search",
       "entity",
+      "topic",
+      "source",
+      "market",
       "watchlist",
       "detail",
       "related",
@@ -165,6 +168,18 @@ describe("eventProjectionTable", () => {
       expect.objectContaining({ eventId: "evt_1" }),
       expect.objectContaining({ eventId: "evt_related" }),
     ]))
+    await expect(table.listIndexEntries("topic", "ai-computing")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_1" }),
+      expect.objectContaining({ eventId: "evt_related" }),
+    ]))
+    await expect(table.listIndexEntries("source", "wallstreetcn-quick")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_1" }),
+      expect.objectContaining({ eventId: "evt_related" }),
+    ]))
+    await expect(table.listIndexEntries("market", "A")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_1" }),
+      expect.objectContaining({ eventId: "evt_related" }),
+    ]))
     await expect(table.listIndexEntries("detail", "evt_1")).resolves.toMatchObject([
       { eventId: "evt_1" },
     ])
@@ -214,5 +229,52 @@ describe("eventProjectionTable", () => {
       q: "政策",
       limit: 5,
     })).resolves.toBe(2)
+  })
+
+  it("keeps deferred future publications below currently observable latest events", async () => {
+    const { table } = createProjectionTable()
+    await table.init()
+    const now = Date.now()
+
+    await table.upsertProjection({
+      eventId: "evt_future_publish",
+      canonicalUpdatedAt: now - 10 * 60 * 1000,
+      canonicalChecksum: "checksum-future",
+      brief: brief({
+        eventId: "evt_future_publish",
+        title: "未来发布时间事件",
+        publishedAt: now + 2 * 60 * 60 * 1000,
+        latestLifecycleAt: now - 10 * 60 * 1000,
+        ingestedAt: now - 10 * 60 * 1000,
+      }),
+      eventType: "policy",
+      sourceKind: "media_fast_feed",
+      sourceIds: ["wallstreetcn-quick"],
+    })
+    await table.upsertProjection({
+      eventId: "evt_current",
+      canonicalUpdatedAt: now - 5 * 60 * 1000,
+      canonicalChecksum: "checksum-current",
+      brief: brief({
+        eventId: "evt_current",
+        title: "当前已发布事件",
+        publishedAt: now - 5 * 60 * 1000,
+        latestLifecycleAt: now - 5 * 60 * 1000,
+        ingestedAt: now - 5 * 60 * 1000,
+      }),
+      eventType: "policy",
+      sourceKind: "media_fast_feed",
+      sourceIds: ["wallstreetcn-quick"],
+    })
+
+    await expect(table.listProjections({
+      indexName: "latest",
+      indexValue: "all",
+      sortBy: "latest",
+      limit: 2,
+    })).resolves.toMatchObject([
+      { eventId: "evt_current" },
+      { eventId: "evt_future_publish" },
+    ])
   })
 })

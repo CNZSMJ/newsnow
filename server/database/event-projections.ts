@@ -1,6 +1,7 @@
 import process from "node:process"
 import type { Database } from "db0"
 import type { AffectedMarket, DirectionalView, EventSourceKind } from "@shared/event-profile"
+import { DEFERRED_PUBLISH_GAP_MS } from "@shared/investment-event-time"
 import type { EventSubType, EventType, InvestmentEventBrief, InvestmentEventDetail, InvestmentEventFamily, SourceID } from "@shared/types"
 import { declareSqlAccess } from "#/database/sql-ownership"
 
@@ -8,6 +9,9 @@ export const REQUIRED_EVENT_QUERY_INDEX_NAMES = [
   "latest",
   "search",
   "entity",
+  "topic",
+  "source",
+  "market",
   "watchlist",
   "detail",
   "related",
@@ -260,23 +264,38 @@ function buildProjectionQueryParts(options: EventProjectionQueryOptions) {
 
 function buildProjectionOrderBy(sortBy: EventProjectionQueryOptions["sortBy"]) {
   if (sortBy === "changed") {
-    return `
-      ORDER BY COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC,
-               COALESCE(p.published_at, p.ingested_at, 0) DESC,
-               p.ingested_at DESC
-    `
+    return {
+      sql: `
+        ORDER BY COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC,
+                 COALESCE(p.published_at, p.ingested_at, 0) DESC,
+                 p.ingested_at DESC
+      `,
+      params: [] as Array<string | number>,
+    }
   }
   if (sortBy === "latest") {
-    return `
-      ORDER BY COALESCE(p.published_at, p.latest_lifecycle_at, p.ingested_at, 0) DESC,
-               COALESCE(p.latest_lifecycle_at, p.ingested_at, 0) DESC,
-               p.ingested_at DESC
-    `
+    return {
+      sql: `
+        ORDER BY CASE
+          WHEN p.published_at IS NOT NULL
+            AND p.published_at > ?
+            AND p.published_at - COALESCE(p.latest_lifecycle_at, p.ingested_at) >= ?
+          THEN COALESCE(p.latest_lifecycle_at, p.ingested_at)
+          ELSE COALESCE(p.published_at, p.latest_lifecycle_at, p.ingested_at, 0)
+        END DESC,
+        COALESCE(p.latest_lifecycle_at, p.ingested_at, 0) DESC,
+        p.ingested_at DESC
+      `,
+      params: [Date.now(), DEFERRED_PUBLISH_GAP_MS] as Array<string | number>,
+    }
   }
-  return `
-    ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
-             COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
-  `
+  return {
+    sql: `
+      ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
+               COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
+    `,
+    params: [] as Array<string | number>,
+  }
 }
 
 function toRecord(row: EventProjectionRow): EventProjectionRecord {
@@ -512,14 +531,15 @@ export class EventProjectionTable {
 
   async listProjections(options: EventProjectionQueryOptions): Promise<EventProjectionRecord[]> {
     const query = buildProjectionQueryParts(options)
+    const order = buildProjectionOrderBy(options.sortBy)
     const rows = unwrapRows(await this.db.prepare(`
       SELECT p.*
       FROM event_projection p
       ${query.joins}
       ${query.where}
-      ${buildProjectionOrderBy(options.sortBy)}
+      ${order.sql}
       LIMIT ?
-    `).all(...query.params, options.limit ?? 20) as EventProjectionRow[] | { results?: EventProjectionRow[] })
+    `).all(...query.params, ...order.params, options.limit ?? 20) as EventProjectionRow[] | { results?: EventProjectionRow[] })
     return rows.map(toRecord)
   }
 
@@ -553,6 +573,9 @@ export class EventProjectionTable {
         ...input.brief.affectedEntities.flatMap(entity => [entity.entityId, entity.label, entity.code]),
         ...input.indexedEntities ?? [],
       ])).map(value => ({ indexName: "entity" as const, indexValue: value, eventId: input.eventId })),
+      ...uniqueValues(input.brief.relatedTopics).map(value => ({ indexName: "topic" as const, indexValue: value, eventId: input.eventId })),
+      ...uniqueValues(input.sourceIds ?? [input.brief.sourceSummary.primarySourceId].filter(Boolean)).map(value => ({ indexName: "source" as const, indexValue: value, eventId: input.eventId })),
+      ...uniqueValues(input.brief.affectedMarkets).map(value => ({ indexName: "market" as const, indexValue: value, eventId: input.eventId })),
       ...uniqueValues(input.watchlistKeys ?? []).map(value => ({ indexName: "watchlist" as const, indexValue: value, eventId: input.eventId })),
       ...uniqueValues(input.relatedEventIds ?? []).map(value => ({
         indexName: "related" as const,

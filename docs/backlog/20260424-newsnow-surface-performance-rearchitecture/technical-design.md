@@ -342,7 +342,7 @@ Sprint 1 schema ownership baseline 校正版（2026-04-25）：
 | `watchlists` | `server/database/watchlists.ts` | `investment-event` | active DB confirmed；investment watchlist state；compatibility routes 不能拥有独立 query logic |
 | `user` | `server/database/user.ts` | `ops` | code-defined but absent in active event DB snapshot；runtime/auth supporting table，不属于 news 或 investment event business query model |
 | future `event_projection` | Sprint 3 新增或明确 | `investment-event` | Investment Event Query Model 的 online projection；只能投影 canonical event truth，不能成为第二套语义源 |
-| future `event_query_indexes` | Sprint 3 新增或明确 | `investment-event` | 支撑 latest / search / entity / topic / market / lifecycle / family 的查询索引 |
+| future `event_query_indexes` | Sprint 3 新增或明确 | `investment-event` | 支撑 latest / search / entity / topic / source / market / lifecycle / family 的查询索引 |
 | future `watchlist_match_model` | Sprint 3 设计、Sprint 4 切换 | `investment-event` | 支撑 watchlist event matching；不能拥有 watchlist metadata lifecycle |
 | future `related_events_query_model` | Sprint 3 设计、Sprint 4 切换 | `investment-event` | 支撑 event detail related-events 查询，替代 route-level fan-out |
 | future `event_projection_consistency` | Sprint 3 新增或明确 | `investment-event` | 记录 canonical truth 与 online projection 的 anchor / checksum / repair 状态 |
@@ -518,13 +518,13 @@ sequenceDiagram
   Snapshot-->>Query: items, updatedAt, freshness
   Query-->>API: SourceResponse-compatible payload
   API-->>User: renderable source data
-  Query-->>Runtime: enqueue refresh when stale
+  Query-->>Runtime: enqueue and drain news refresh intent when stale
 ```
 
 消费要求：
 
 - 常规读取优先命中 snapshot。
-- stale 时可以触发后台 refresh，但不让用户请求同步承担慢源成本。
+- stale 时通过 Shared Source Runtime 提交并后台执行 news refresh intent，但不让用户请求同步承担慢源成本。
 - force refresh 必须走受控路径，带权限、并发和 fallback 语义。
 
 #### 4.2.2 News agent-facing consumption
@@ -933,7 +933,7 @@ neutral refresh intent interface：
 迁移路径：
 
 1. Sprint 1：in-process `SharedSourceRuntime` 作为可测试 foundation。
-2. Sprint 2：`/api/s` / News Query Service 只提交 neutral refresh intent，不直接调用 getter 作为常规读路径。
+2. Sprint 2：`/api/s` / News Query Service 只在 stale / migration fallback 场景提交 neutral refresh intent，并由 Shared Source Runtime 的 news drain 后台执行；常规读路径不直接调用 getter。
 3. Sprint 2：`source_fetch_runs` DDL / DAO 从 event database module 分离为 shared-source contract。
 4. Sprint 5 或后续：如需要跨进程或长 backfill，将同一 interface 映射到 persistent queue table 或 worker queue。
 
@@ -1001,7 +1001,7 @@ Sprint 5：frontend cleanup、ops decoupling、benchmark 与回归验证
 | 单元 / 集成测试 | `pnpm test` | 已有 |
 | TypeScript | `pnpm typecheck` | 已有 |
 | Production build | `pnpm build` | 已有 |
-| SQL query plan | `pnpm perf:query-plans` | 已补入口；覆盖 news cache、investment latest/search/entity、shared-source `source_fetch_runs` |
+| SQL query plan | `pnpm perf:query-plans` | 已补入口；覆盖 news cache、investment latest/search/entity/detail/related/watchlist index-seed、shared-source `source_fetch_runs` |
 | news endpoint benchmark | `pnpm perf:surface-baseline -- --iterations 1` | 已补入口；覆盖 `/api/s` 和 `/api/s/entire` |
 | news MCP benchmark | `pnpm perf:surface-baseline -- --iterations 1` | 已补 current MCP hot path probe；当前 `get_hotest_latest_news` 复用 `/api/s` |
 | actual MCP transport smoke | `pnpm perf:mcp-smoke` | 已补真实 MCP HTTP transport 入口；覆盖 `get_hotest_latest_news` 与 `event_get_latest_events` |

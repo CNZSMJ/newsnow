@@ -37,7 +37,7 @@ describe("surface query plan statements", () => {
       "investment_entity_lookup",
       "investment_event_detail_projection",
       "investment_related_events_lookup",
-      "investment_watchlist_projection_scan",
+      "investment_watchlist_index_seed_scan",
       "shared_source_fetch_runs_latest",
     ]))
     for (const plan of plans.filter(plan => plan.name.startsWith("investment_"))) {

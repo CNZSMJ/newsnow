@@ -1,4 +1,5 @@
 import type { AffectedMarket, DirectionalView } from "@shared/event-profile"
+import { getPrimaryEventTimestamp } from "@shared/investment-event-time"
 import type {
   EventSubType,
   EventType,
@@ -12,7 +13,7 @@ import type {
   WatchlistQuery,
   WatchlistRecord,
 } from "@shared/types"
-import type { EventProjectionQueryOptions, EventProjectionRecord } from "#/database/event-projections"
+import type { EventProjectionQueryOptions, EventProjectionRecord, EventQueryIndexName } from "#/database/event-projections"
 import {
   getInvestmentEventFamilyLabel,
   getInvestmentRelatedSectionDisplayLabel,
@@ -86,6 +87,10 @@ function normalizeTextList(values?: string[]) {
   return values?.map(value => normalizeText(value)).filter(Boolean) ?? []
 }
 
+function uniqueValues<T extends string>(values: T[]) {
+  return Array.from(new Set(values))
+}
+
 function hasAnyMatch(candidates: string[], expected?: string[]) {
   const normalizedExpected = normalizeTextList(expected)
   if (!normalizedExpected.length) return true
@@ -131,6 +136,70 @@ function toResult(records: EventProjectionRecord[], totalCount: number): Investm
     updatedAt: Date.now(),
     items: records.map(record => record.brief),
     totalCount,
+  }
+}
+
+function getInvestmentRankScore(brief: InvestmentEventBrief) {
+  return (brief.materialityScore * 0.4) + (brief.tradabilityScore * 0.35) + (brief.authorityScore * 0.25)
+}
+
+function getLatestSortTime(record: EventProjectionRecord) {
+  return getPrimaryEventTimestamp({
+    eventType: record.eventType,
+    sourceKind: record.sourceKind,
+    publishedAt: record.brief.publishedAt,
+    latestLifecycleAt: record.brief.latestLifecycleAt,
+    ingestedAt: record.brief.ingestedAt,
+  })
+}
+
+function sortProjectionRecords(records: EventProjectionRecord[], sortBy: InvestmentBaseQueryOptions["sortBy"]) {
+  const mode = sortBy ?? "investment"
+  return [...records].sort((a, b) => {
+    if (mode === "latest") {
+      const latestDiff = getLatestSortTime(b) - getLatestSortTime(a)
+      if (latestDiff !== 0) return latestDiff
+      return (b.brief.latestLifecycleAt ?? b.brief.ingestedAt ?? 0) - (a.brief.latestLifecycleAt ?? a.brief.ingestedAt ?? 0)
+    }
+    if (mode === "changed") {
+      const changedDiff = (b.brief.latestLifecycleAt ?? b.brief.publishedAt ?? b.brief.ingestedAt ?? 0)
+        - (a.brief.latestLifecycleAt ?? a.brief.publishedAt ?? a.brief.ingestedAt ?? 0)
+      if (changedDiff !== 0) return changedDiff
+      return (b.brief.publishedAt ?? b.brief.ingestedAt ?? 0) - (a.brief.publishedAt ?? a.brief.ingestedAt ?? 0)
+    }
+    const scoreDiff = getInvestmentRankScore(b.brief) - getInvestmentRankScore(a.brief)
+    if (scoreDiff !== 0) return scoreDiff
+    return (b.brief.latestLifecycleAt ?? b.brief.publishedAt ?? b.brief.ingestedAt ?? 0)
+      - (a.brief.latestLifecycleAt ?? a.brief.publishedAt ?? a.brief.ingestedAt ?? 0)
+  })
+}
+
+function buildWatchlistIndexSeeds(query: WatchlistQuery) {
+  const seeds: Array<{ indexName: EventQueryIndexName, indexValue: string }> = [
+    ...normalizeTextList(query.entities).map(indexValue => ({ indexName: "entity" as const, indexValue })),
+    ...uniqueValues(query.topics?.map(value => value.trim()).filter(Boolean) ?? []).map(indexValue => ({ indexName: "topic" as const, indexValue })),
+    ...uniqueValues(query.sourceIds?.map(value => value.trim()).filter(Boolean) ?? []).map(indexValue => ({ indexName: "source" as const, indexValue })),
+    ...uniqueValues(query.markets ?? []).map(indexValue => ({ indexName: "market" as const, indexValue })),
+  ]
+  const seen = new Set<string>()
+  return seeds.filter((seed) => {
+    const key = `${seed.indexName}:${seed.indexValue}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function buildWatchlistProjectionFilters(query: WatchlistQuery): Partial<EventProjectionQueryOptions> {
+  return {
+    eventType: query.eventTypes?.length === 1 ? query.eventTypes[0] : undefined,
+    eventSubType: query.eventSubTypes?.length === 1 ? query.eventSubTypes[0] : undefined,
+    sourceIds: query.sourceIds?.length ? query.sourceIds : undefined,
+    topic: query.topics?.length === 1 ? query.topics[0] : undefined,
+    market: query.markets?.length === 1 ? query.markets[0] : undefined,
+    directionalView: query.directionalViews?.length === 1 ? query.directionalViews[0] : undefined,
+    minMaterialityScore: query.minMaterialityScore,
+    minAuthorityScore: query.minAuthorityScore,
   }
 }
 
@@ -183,15 +252,30 @@ export class InvestmentQueryService {
 
   async getWatchlistEvents(query: WatchlistQuery, options: InvestmentBaseQueryOptions = {}): Promise<InvestmentQueryResult> {
     const limit = normalizeLimit(options.limit)
-    const records = await this.store.listProjections({
-      ...options,
-      indexName: "latest",
-      indexValue: "all",
-      limit: normalizeScanLimit(options.scanLimit, limit),
-      sortBy: options.sortBy ?? "investment",
-    })
-    const matched = records
-      .filter(record => matchesWatchlistQuery(record, query))
+    const scanLimit = normalizeScanLimit(options.scanLimit, limit)
+    const seeds = buildWatchlistIndexSeeds(query)
+    const projectionFilters = buildWatchlistProjectionFilters(query)
+    const seedQueries = seeds.length
+      ? seeds
+      : [{ indexName: "latest" as const, indexValue: "all" }]
+    const recordsByEventId = new Map<string, EventProjectionRecord>()
+
+    for (const seed of seedQueries) {
+      const records = await this.store.listProjections({
+        ...options,
+        ...projectionFilters,
+        ...seed,
+        limit: scanLimit,
+        sortBy: options.sortBy ?? "investment",
+      })
+      for (const record of records) {
+        if (matchesWatchlistQuery(record, query)) {
+          recordsByEventId.set(record.eventId, record)
+        }
+      }
+    }
+
+    const matched = sortProjectionRecords([...recordsByEventId.values()], options.sortBy)
       .slice(0, limit)
 
     return toResult(matched, matched.length)

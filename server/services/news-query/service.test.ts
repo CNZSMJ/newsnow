@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
+import type { NewsItem, SourceID } from "@shared/types"
 import { NewsQueryService } from "./service"
+import { SharedSourceRuntime } from "#/services/source-runtime/runtime"
 import type { CacheInfo } from "#/types"
 import type { NewsSnapshotRecord } from "#/database/news-snapshots"
-import type { NewsItem, SourceID } from "@shared/types"
 
 function newsItem(id: string): NewsItem {
   return {
@@ -23,7 +24,7 @@ function snapshot(input: Partial<NewsSnapshotRecord> & Pick<NewsSnapshotRecord, 
   }
 }
 
-describe("NewsQueryService", () => {
+describe("newsQueryService", () => {
   it("serves fresh snapshots without calling the upstream getter", async () => {
     const getter = vi.fn(async () => [newsItem("from-getter")])
     const service = new NewsQueryService({
@@ -92,6 +93,63 @@ describe("NewsQueryService", () => {
       priorityClass: "routine_fetch",
       fallbackPolicy: "serve_stale",
     }))
+  })
+
+  it("drains accepted stale-snapshot refresh intents in the background", async () => {
+    let resolveGetter: (items: NewsItem[]) => void = () => {}
+    const getterPromise = new Promise<NewsItem[]>((resolve) => {
+      resolveGetter = resolve
+    })
+    const getter = vi.fn(() => getterPromise)
+    const upsertSnapshot = vi.fn()
+    const cacheSet = vi.fn()
+    const waitUntilPromises: Promise<unknown>[] = []
+    const runtime = new SharedSourceRuntime()
+    const service = new NewsQueryService({
+      snapshots: {
+        readSnapshot: vi.fn(async () => snapshot({
+          sourceId: "wallstreetcn-quick",
+          state: "stale",
+          items: [newsItem("stale")],
+        })),
+        upsertSnapshot,
+        recordFetchFailure: vi.fn(),
+      },
+      cache: {
+        get: vi.fn(),
+        set: cacheSet,
+      },
+      refreshRuntime: runtime,
+      getters: { "wallstreetcn-quick": getter },
+      now: () => 2500,
+    })
+
+    const response = await service.getSource({
+      sourceId: "wallstreetcn-quick",
+      intervalMs: 1000,
+      forceRefresh: false,
+      waitUntil: promise => waitUntilPromises.push(promise),
+    })
+
+    expect(response.status).toBe("cache")
+    expect(response.items.map(item => item.id)).toEqual(["stale"])
+    expect(waitUntilPromises).toHaveLength(1)
+    expect(upsertSnapshot).not.toHaveBeenCalled()
+
+    resolveGetter([newsItem("fresh")])
+    await waitUntilPromises[0]
+
+    expect(getter).toHaveBeenCalledTimes(1)
+    expect(upsertSnapshot).toHaveBeenCalledWith({
+      sourceId: "wallstreetcn-quick",
+      fetchedAt: 2500,
+      items: [newsItem("fresh")],
+    })
+    expect(cacheSet).toHaveBeenCalledWith("wallstreetcn-quick", [newsItem("fresh")])
+    expect(runtime.getSourceFetchState("wallstreetcn-quick")).toMatchObject({
+      status: "fresh",
+      itemCount: 1,
+    })
   })
 
   it("uses force refresh as the controlled path that calls the getter and updates snapshot plus legacy cache", async () => {

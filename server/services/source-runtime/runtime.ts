@@ -152,12 +152,15 @@ export class SharedSourceRuntime {
     }
   }
 
-  takeNextBatch(now = nowMs()) {
+  takeNextBatch(now = nowMs(), options: { businessLine?: SourceBusinessLine } = {}) {
     this.dropExpiredIntents(now)
     const availableSlots = this.maxConcurrency - this.runningByDedupeKey.size
     if (availableSlots <= 0) return []
 
-    const sorted = [...this.queue].sort((a, b) => {
+    const eligibleQueue = options.businessLine
+      ? this.queue.filter(intent => intent.businessLine === options.businessLine)
+      : this.queue
+    const sorted = [...eligibleQueue].sort((a, b) => {
       const priorityDiff = PRIORITY_RANK[a.priorityClass] - PRIORITY_RANK[b.priorityClass]
       if (priorityDiff !== 0) return priorityDiff
       const profileDiff = getProfileRank(a.sourceProfile) - getProfileRank(b.sourceProfile)

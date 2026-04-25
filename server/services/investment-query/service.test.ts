@@ -22,12 +22,28 @@ class MemoryProjectionQueryStore {
         ].filter(Boolean).map(value => String(value).toLowerCase())
         if (!values.includes(options.indexValue.toLowerCase())) return false
       }
+      if (options.indexName === "topic" && options.indexValue) {
+        if (!(record.brief.relatedTopics as readonly string[]).includes(options.indexValue)) return false
+      }
+      if (options.indexName === "source" && options.indexValue) {
+        if (!(record.sourceIds as readonly string[]).includes(options.indexValue)) return false
+      }
+      if (options.indexName === "market" && options.indexValue) {
+        if (!(record.brief.affectedMarkets as readonly string[]).includes(options.indexValue)) return false
+      }
       if (options.indexName === "related" && options.indexValue) {
         if (record.eventId !== "evt_related") return false
       }
       if (options.topic && !(record.brief.relatedTopics as readonly string[]).includes(options.topic)) return false
       if (options.market && !record.brief.affectedMarkets.includes(options.market)) return false
+      if (options.sourceId && !record.sourceIds.includes(options.sourceId)) return false
+      if (options.sourceIds?.length && !options.sourceIds.some(sourceId => record.sourceIds.includes(sourceId))) return false
+      if (options.eventType && record.eventType !== options.eventType) return false
+      if (options.eventSubType && record.eventSubType !== options.eventSubType) return false
       if (options.eventFamily && record.brief.eventFamily !== options.eventFamily) return false
+      if (options.directionalView && record.brief.signalDirection !== options.directionalView) return false
+      if (options.minMaterialityScore !== undefined && record.brief.materialityScore < options.minMaterialityScore) return false
+      if (options.minAuthorityScore !== undefined && record.brief.authorityScore < options.minAuthorityScore) return false
       return true
     })
     return rows.slice(0, options.limit)
@@ -265,10 +281,76 @@ describe("investmentQueryService", () => {
       items: [expect.objectContaining({ eventId: "evt_1" })],
       totalCount: 1,
     })
-    expect(store.listCalls.at(-1)).toMatchObject({
-      indexName: "latest",
-      indexValue: "all",
-      sortBy: "investment",
+    expect(store.listCalls).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexName: "entity", indexValue: "寒武纪", sortBy: "investment" }),
+      expect.objectContaining({ indexName: "topic", indexValue: "ai-computing", sortBy: "investment" }),
+      expect.objectContaining({ indexName: "source", indexValue: "wallstreetcn-quick", sortBy: "investment" }),
+      expect.objectContaining({ indexName: "market", indexValue: "A", sortBy: "investment" }),
+    ]))
+    expect(store.listCalls).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexName: "latest", indexValue: "all" }),
+    ]))
+  })
+
+  it("queries indexed watchlist seeds instead of bounded global latest slices", async () => {
+    const store = new MemoryProjectionQueryStore([
+      projection(brief({
+        eventId: "evt_hot",
+        title: "热门但无关事件",
+        affectedEntities: [{
+          entityId: "hot",
+          label: "热门公司",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+        }],
+        primarySubject: {
+          entityId: "hot",
+          label: "热门公司",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+        },
+        subjectSummary: "热门公司",
+        relatedTopics: ["steel"],
+        latestLifecycleAt: 1700000030000,
+      })),
+      projection(brief({
+        eventId: "evt_cold",
+        title: "冷门公司事件",
+        affectedEntities: [{
+          entityId: "cold",
+          label: "冷门公司",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+        }],
+        primarySubject: {
+          entityId: "cold",
+          label: "冷门公司",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+        },
+        subjectSummary: "冷门公司",
+        latestLifecycleAt: 1700000001000,
+      })),
+    ])
+    const service = new InvestmentQueryService(store)
+
+    await expect(service.getWatchlistEvents({
+      entities: ["冷门公司"],
+    }, {
+      limit: 1,
+      scanLimit: 1,
+      sortBy: "latest",
+    })).resolves.toMatchObject({
+      items: [expect.objectContaining({ eventId: "evt_cold" })],
+      totalCount: 1,
     })
+    expect(store.listCalls).toEqual([
+      expect.objectContaining({
+        indexName: "entity",
+        indexValue: "冷门公司",
+        limit: 1,
+        sortBy: "latest",
+      }),
+    ])
   })
 })
