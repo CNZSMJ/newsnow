@@ -158,9 +158,10 @@ docs/backlog/20260420-subject-resolution-hardening/
 
 ```text
 激活提示词 docs/prompt/agent-start-prompt.md，实施 docs/backlog/<YYYYMMDD-slug>
+激活提示词 docs/prompt/agent-start-prompt.md，修复 docs/hotfix/<YYYYMMDD-fix-slug>.md
 ```
 
-固定提示词只定义执行协议，不承载具体需求。具体需求、设计、计划和进度必须来自用户指定的 backlog 目录。
+固定提示词只定义执行协议，不承载具体需求。具体需求、设计、计划、修复方案和进度必须来自用户指定的 backlog 目录或 hotfix 文档。
 
 ## 5. Hotfix 使用规范
 
@@ -209,6 +210,23 @@ docs/backlog/20260420-subject-resolution-hardening/
 ## 4. 实施状态
 ```
 
+### 5.4 Hotfix 固定启动方式
+
+hotfix 也使用仓库级固定启动提示词：
+
+```text
+激活提示词 docs/prompt/agent-start-prompt.md，修复 docs/hotfix/<YYYYMMDD-fix-slug>.md
+```
+
+执行规则：
+
+- 以 hotfix 文档的“实施状态”恢复当前进度
+- 以“问题现象描述”和“问题的根因分析”限定修复边界
+- 以“修复方案”作为执行来源
+- 必须按 TDD red regression test / reproducible failing check -> green fix -> refactor -> validation 推进
+- 每完成一个 step，更新 hotfix 文档的“实施状态”
+- 如果修复范围超出单个 bug，停止扩大实现，并把后续工作转入 backlog
+
 ## 6. 文档使用顺序
 
 遇到文档任务时，默认按下面顺序阅读：
@@ -222,4 +240,4 @@ docs/backlog/20260420-subject-resolution-hardening/
    - [event-operations-runbook.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/event-operations-runbook.md)
 3. 如果是具体功能/重构主题，再进入对应 `backlog/`
 4. 如果是从 backlog 进入实现，读取该 backlog 的 `delivery-status.md` 和 `implementation-plan.md`
-5. 如果是修 bug，再进入对应 `hotfix/`
+5. 如果是修 bug，再进入对应 `hotfix/`；进入实现时读取该 hotfix 文档的“实施状态”

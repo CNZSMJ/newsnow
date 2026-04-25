@@ -90,7 +90,7 @@
 - Review follow-up 完成 Investment Event Query Model 索引补齐：`event_query_indexes` 增加 `topic`、`source`、`market` index，watchlist seed query 和 query-plan 覆盖同步更新
 - Review follow-up 完成 `sort=latest` 语义修复：`event_projection` latest 排序恢复 deferred publication guard，未来发布时间不会抢占当前已观测事件
 - 规范补充完成：新增 `implementation-plan.md`，将本 backlog 的 Sprint-by-Sprint / TDD 执行计划归档为后续 agent 恢复入口
-- 规范补充完成：新增仓库级固定启动提示词 `docs/prompt/agent-start-prompt.md`，支持“激活提示词 ...，实施 <BACKLOG_DIR>”的短指令使用方式
+- 规范补充完成：新增仓库级固定启动提示词 `docs/prompt/agent-start-prompt.md`，支持“激活提示词 ...，实施 <BACKLOG_DIR>”和“激活提示词 ...，修复 <HOTFIX_DOC>”的短指令使用方式
 
 ## 3. 进行中
 
