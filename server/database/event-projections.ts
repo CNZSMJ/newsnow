@@ -463,7 +463,11 @@ export class EventProjectionTable {
       input.detail ? JSON.stringify(input.detail) : null,
     )
 
-    await this.db.prepare("DELETE FROM event_query_indexes WHERE event_id = ?").run(input.eventId)
+    await this.db.prepare(`
+      DELETE FROM event_query_indexes
+      WHERE (event_id = ? AND index_name != 'related')
+         OR (index_name = 'related' AND index_value = ?)
+    `).run(input.eventId, input.eventId)
     await this.insertIndexEntries(input, sortTime, rankScore)
   }
 

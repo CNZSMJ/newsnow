@@ -124,6 +124,26 @@ describe("eventProjectionTable", () => {
       relatedEventIds: ["evt_related"],
       watchlistKeys: ["wl_ai"],
     })
+    await table.upsertProjection({
+      eventId: "evt_related",
+      canonicalUpdatedAt: 1500,
+      canonicalChecksum: "checksum-related",
+      brief: brief({
+        eventId: "evt_related",
+        title: "相关政策跟踪",
+        latestLifecycleAt: 1500,
+      }),
+      detail: detail(brief({
+        eventId: "evt_related",
+        title: "相关政策跟踪",
+        latestLifecycleAt: 1500,
+      })),
+      eventType: "policy",
+      eventSubType: "industrial_policy",
+      sourceKind: "media_fast_feed",
+      sourceIds: ["wallstreetcn-quick"],
+      indexedEntities: ["人工智能"],
+    })
 
     await expect(table.getProjection("evt_1")).resolves.toMatchObject({
       eventId: "evt_1",
@@ -137,14 +157,22 @@ describe("eventProjectionTable", () => {
         thesis: "先观察政策落地",
       }),
     })
-    await expect(table.listIndexEntries("latest", "all")).resolves.toMatchObject([
-      { eventId: "evt_1" },
-    ])
-    await expect(table.listIndexEntries("entity", "人工智能")).resolves.toMatchObject([
-      { eventId: "evt_1" },
-    ])
+    await expect(table.listIndexEntries("latest", "all")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_1" }),
+      expect.objectContaining({ eventId: "evt_related" }),
+    ]))
+    await expect(table.listIndexEntries("entity", "人工智能")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_1" }),
+      expect.objectContaining({ eventId: "evt_related" }),
+    ]))
     await expect(table.listIndexEntries("detail", "evt_1")).resolves.toMatchObject([
       { eventId: "evt_1" },
+    ])
+    await expect(table.listIndexEntries("watchlist", "wl_ai")).resolves.toMatchObject([
+      { eventId: "evt_1" },
+    ])
+    await expect(table.listIndexEntries("related", "evt_1")).resolves.toMatchObject([
+      { eventId: "evt_related", metadata: { relatedTo: "evt_1" } },
     ])
     await expect(table.listProjections({
       indexName: "latest",
@@ -164,12 +192,27 @@ describe("eventProjectionTable", () => {
       indexName: "entity",
       indexValue: "人工智能",
       limit: 5,
+    })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "evt_1" }),
+      expect.objectContaining({ eventId: "evt_related" }),
+    ]))
+    await expect(table.listProjections({
+      indexName: "watchlist",
+      indexValue: "wl_ai",
+      limit: 5,
     })).resolves.toMatchObject([
       { eventId: "evt_1" },
+    ])
+    await expect(table.listProjections({
+      indexName: "related",
+      indexValue: "evt_1",
+      limit: 5,
+    })).resolves.toMatchObject([
+      { eventId: "evt_related" },
     ])
     await expect(table.countProjections({
       q: "政策",
       limit: 5,
-    })).resolves.toBe(1)
+    })).resolves.toBe(2)
   })
 })

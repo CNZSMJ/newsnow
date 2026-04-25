@@ -15,7 +15,7 @@
 - Sprint 1 Step 1.1-1.6 已完成；Sprint 1 gate 的 benchmark、SQL plan、MCP transport、frontend request-count 和 worker active / inactive 基线入口已补齐
 - Sprint 1 gate 已通过：`pnpm test`、`pnpm typecheck`、`pnpm build` 均通过，本地服务已按规范重启
 - Sprint 2 Step 2.1-2.6 已完成；Sprint 2 code gate 已通过
-- Sprint 3 Step 3.1-3.3 已完成；Step 3.4 准备补 watchlist / related-events 索引策略
+- Sprint 3 Step 3.1-3.4 已完成；准备进入 Sprint 3 gate
 
 ## 2. 已完成内容
 
@@ -66,10 +66,12 @@
 - Sprint 3 Step 3.3 完成 provider 主查询切换：`/api/investment-events/latest`、`/api/investment-events/search`、`/api/investment-events/entity` 已改为消费 Investment Query Service
 - Sprint 3 Step 3.3 完成 projection migration backfill 入口：新增 `pnpm events:backfill-projections`，用于把已有 canonical events 补齐到 `event_projection`
 - Sprint 3 Step 3.3 完成 shadow validation helper：新增 projection query result 与 legacy canonical query result 的 ID drift comparator
+- Sprint 3 Step 3.4 完成 watchlist / related-events 索引策略测试：`event_query_indexes` 可通过 `watchlist` 与 `related` index 返回 projection rows
+- Sprint 3 Step 3.4 修正 related index 删除边界：projection upsert 只清理当前 event 的普通索引和 related 出边，保留其他 event 指向当前 event 的 related 入边
 
 ## 3. 进行中
 
-- Sprint 3 Step 3.4：Watchlist / related-events 索引策略
+- Sprint 3 gate：完整 code gate、事件线质量 gate 与性能 baseline 对比
 
 ## 4. Blockers / 风险
 
@@ -175,6 +177,9 @@
 - Sprint 3 Step 3.3 live API smoke：`GET /api/investment-events/latest?limit=5` 返回 5 items / totalCount 446；`GET /api/investment-events/search?q=AI&limit=3` 返回 3 items / totalCount 43；`GET /api/investment-events/entity?entity=贵州茅台&limit=3` 返回 1 item / totalCount 1
 - Sprint 3 Step 3.3 shadow helper 验证：`pnpm test -- server/services/investment-query/service.test.ts server/services/investment-query/shadow.test.ts server/database/event-projections.test.ts server/services/event-engine/projection-pipeline.test.ts` 通过，42 个 test files / 283 tests
 - Sprint 3 Step 3.3 shadow helper 类型验证：`pnpm typecheck` 通过
+- Sprint 3 Step 3.4 TDD green：补充 watchlist / related index strategy 测试并修正 related index 删除边界后，`pnpm test -- server/database/event-projections.test.ts` 通过，42 个 test files / 283 tests
+- Sprint 3 Step 3.4 类型验证：`pnpm typecheck` 通过
+- Sprint 3 Step 3.4 build 验证：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
 
 尚未完成：
 
@@ -183,7 +188,6 @@
 
 ## 6. 下一步
 
-1. 提交 Sprint 3 Step 3.3 Investment Query Service 与 route 切换，保持 `data.db` 等无关本地文件不入库
-2. Sprint 3 Step 3.4：补 watchlist / related-events 索引策略测试
-3. Sprint 3 gate：运行完整 code gate、事件线质量 gate 与性能 baseline 对比
-4. Sprint 4：继续切换 detail / watchlist / related-events / MCP read tools
+1. 提交 Sprint 3 Step 3.4 watchlist / related index strategy，保持 `data.db` 等无关本地文件不入库
+2. Sprint 3 gate：运行完整 code gate、事件线质量 gate 与性能 baseline 对比
+3. Sprint 4：继续切换 detail / watchlist / related-events / MCP read tools
