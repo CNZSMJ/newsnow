@@ -7,12 +7,14 @@ import sources from "@shared/sources"
 import { hydrateClsRawItem } from "#/sources/cls"
 import { getters } from "#/getters"
 import { getEventTable } from "#/database/events"
+import { getEventProjectionTable } from "#/database/event-projections"
 import type { EventRow, RawItemRow } from "#/types"
 import { normalizeEntityLinks, normalizeFactEntityIds, normalizePrimaryEntityName } from "#/services/event-engine/entity-normalization"
 import { extractEventFacts } from "#/services/event-engine/extractors"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
 import { buildEventIdentity, buildEventIdentityHints, derivePeriodicSeriesMetadata } from "#/services/event-engine/merger"
 import { EVENT_ENGINE_METRICS, incrementEventEngineMetric, toMetricLabels } from "#/services/event-engine/metrics"
+import { refreshInvestmentProjectionForEvent } from "#/services/event-engine/projection-pipeline"
 import { getSourceEventProfile, validateSourceEventProfile } from "#/services/event-engine/profiles"
 import { resolveRequestedSourceSeedIds } from "#/services/event-engine/request-scope"
 import { type ResolvedEventClassification, resolveEventClassification } from "#/services/event-engine/resolver"
@@ -302,7 +304,7 @@ async function persistResolvedEvent(input: {
   )
   eventRow.watch_target_candidates_json = JSON.stringify(watchTargetCandidates)
 
-  return input.eventTable.withTransaction(async () => {
+  const result = await input.eventTable.withTransaction(async () => {
     const previousEvent = await input.eventTable.getEventById(eventRow.event_id)
     const eventMetric = previousEvent ? EVENT_ENGINE_METRICS.eventUpdates : EVENT_ENGINE_METRICS.eventCreates
     const eventMetricLabels = toMetricLabels({
@@ -359,6 +361,13 @@ async function persistResolvedEvent(input: {
       facts: normalizedFacts,
     }
   })
+
+  const projectionTable = await getEventProjectionTable()
+  if (projectionTable) {
+    await refreshInvestmentProjectionForEvent(result.eventRow.event_id, input.eventTable, projectionTable)
+  }
+
+  return result
 }
 
 async function yieldIngestionTurn() {

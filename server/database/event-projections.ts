@@ -1,3 +1,4 @@
+import process from "node:process"
 import type { Database } from "db0"
 import type { InvestmentEventBrief, InvestmentEventDetail } from "@shared/types"
 import { declareSqlAccess } from "#/database/sql-ownership"
@@ -355,4 +356,32 @@ export class EventProjectionTable {
       )
     }
   }
+}
+
+let sharedEventProjectionTable: EventProjectionTable | undefined
+let sharedEventProjectionTablePromise: Promise<EventProjectionTable | undefined> | undefined
+
+export async function getEventProjectionTable() {
+  if (process.env.ENABLE_CACHE === "false") return
+  if (sharedEventProjectionTable) return sharedEventProjectionTable
+  if (sharedEventProjectionTablePromise) return sharedEventProjectionTablePromise
+
+  sharedEventProjectionTablePromise = (async () => {
+    try {
+      const db = useDatabase()
+      const table = new EventProjectionTable(db)
+      if (process.env.INIT_TABLE !== "false") await table.init()
+      sharedEventProjectionTable = table
+      return table
+    } catch (error) {
+      logger.error("failed to init event projection database ", error)
+      return undefined
+    }
+  })()
+
+  const table = await sharedEventProjectionTablePromise
+  if (!table) {
+    sharedEventProjectionTablePromise = undefined
+  }
+  return table
 }

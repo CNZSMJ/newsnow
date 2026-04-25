@@ -15,6 +15,7 @@
 - Sprint 1 Step 1.1-1.6 已完成；Sprint 1 gate 的 benchmark、SQL plan、MCP transport、frontend request-count 和 worker active / inactive 基线入口已补齐
 - Sprint 1 gate 已通过：`pnpm test`、`pnpm typecheck`、`pnpm build` 均通过，本地服务已按规范重启
 - Sprint 2 Step 2.1-2.6 已完成；Sprint 2 code gate 已通过
+- Sprint 3 Step 3.1-3.2 已完成；Step 3.3 准备进入 Investment Query Service 与主查询切换
 
 ## 2. 已完成内容
 
@@ -58,10 +59,13 @@
 - Sprint 2 Step 2.6 完成 SQL owner declaration 工程化规则：新增 `sql-ownership` baseline / declaration / assertion，新增 `source_snapshots`、`source_items`、`source_fetch_runs` 访问声明和测试
 - Sprint 3 前置条件完成第一步：新增 `investment-view-classification`，按函数级别声明 `investment-view.ts` 当前 exported helpers 的 write-time / query-time / presentation 分类和目标 projection contract
 - Sprint 3 Step 3.1 完成 projection / index schema 第一阶段：新增 `event_projection` 与 `event_query_indexes` DAO，覆盖 latest / search / entity / watchlist / detail / related 六类目标 index name
+- Sprint 3 Step 3.2 完成 canonical -> projection 写入管线：新增 `projection-pipeline`，从 canonical `EventDetail` 调用 backend-owned investment projection helper 写入 `event_projection` 与 query indexes
+- Sprint 3 Step 3.2 完成 projection consistency check：以 canonical detail 的 deterministic checksum 判定 `missing` / `stale` / `ok`
+- Sprint 3 Step 3.2 完成事件生产链路挂接：`persistResolvedEvent` 在 canonical event transaction 完成后刷新 Investment Event Projection
 
 ## 3. 进行中
 
-- Sprint 3 Step 3.2：canonical -> projection 写入管线与 projection consistency check
+- Sprint 3 Step 3.3：Investment Query Service 与 latest / search / entity 主查询切换
 
 ## 4. Blockers / 风险
 
@@ -69,9 +73,7 @@
 - docs 当前生效文档偏 investment event 线，后续如果要更新顶层事实，需要单独达成共识
 - 后续实现必须持续检查跨业务线 import、跨业务线 SQL join、跨业务线 fallback，避免短期共享基础设施演变成长期业务耦合
 - 后续 sprint 设计必须写明它推进的最终目标模块、临时兼容路径退出条件和 backlog-level definition of done 影响
-- `investment-view.ts` 函数级 write-time vs query-time 分类尚未完成，必须作为 Sprint 3 前置条件
 - SQL owner declaration 已对 Sprint 2 新增 news / shared-source SQL 落地；Sprint 3 起必须扩展到 event projection / query indexes / watchlist match / related-events query model
-- projection consistency check 尚未设计
 - Sprint 3 / Sprint 4 的 route-level 切换顺序尚未在具体 sprint 设计中细化
 - 额外运行 `pnpm events:check-quality` 当前失败，blocker 是既有 Tier A 初始 canonical 延迟 P95 24,023,959ms > 300,000ms；这不是 Sprint 2 code gate 项，但必须在后续事件线性能 sprint 中处理
 
@@ -155,16 +157,20 @@
 - Sprint 3 Step 3.1 TDD red：新增 `server/database/event-projections.test.ts` 后缺失 `#/database/event-projections` 模块
 - Sprint 3 Step 3.1 TDD green：实现 `EventProjectionTable`、`event_projection` / `event_query_indexes` schema、SQL owner declarations 和 index read/write 后，`pnpm test -- server/database/event-projections.test.ts` 通过，39 个 test files / 274 tests
 - Sprint 3 Step 3.1 类型验证：`pnpm typecheck` 通过
+- Sprint 3 Step 3.2 TDD red：新增 `server/services/event-engine/projection-pipeline.test.ts` 后缺失 `#/services/event-engine/projection-pipeline` 模块
+- Sprint 3 Step 3.2 TDD green：实现 `projection-pipeline` 后，`pnpm test -- server/services/event-engine/projection-pipeline.test.ts` 通过，40 个 test files / 277 tests
+- Sprint 3 Step 3.2 集成验证：`pnpm test -- server/services/event-engine/projection-pipeline.test.ts server/database/event-projections.test.ts server/services/event-engine/replay.test.ts` 通过，40 个 test files / 277 tests
+- Sprint 3 Step 3.2 类型验证：`pnpm typecheck` 通过
+- Sprint 3 Step 3.2 build 验证：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
 
 尚未完成：
 
 - query model shadow validation
-- projection consistency check
 - Sprint 3 / Sprint 4 route-level 切换清单
 
 ## 6. 下一步
 
-1. 提交 Sprint 3 前置分类基线，保持 `data.db` 等无关本地文件不入库
-2. Sprint 3 Step 3.2：实现 canonical -> projection 写入管线和 consistency check
-3. Sprint 3 Step 3.3：实现 Investment Query Service 并切换 latest/search/entity
-4. Sprint 3 Step 3.4：补 watchlist / related-events 索引策略测试
+1. 提交 Sprint 3 Step 3.2 projection 写入管线，保持 `data.db` 等无关本地文件不入库
+2. Sprint 3 Step 3.3：实现 Investment Query Service 并切换 latest/search/entity
+3. Sprint 3 Step 3.4：补 watchlist / related-events 索引策略测试
+4. Sprint 3 gate：运行完整 code gate、事件线质量 gate 与性能 baseline 对比
