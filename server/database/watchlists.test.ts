@@ -1,75 +1,66 @@
-import { describe, expect, it } from "vitest"
-import type { EventRecord } from "@shared/types"
-import { sortWatchlistEvents } from "#/database/watchlists"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, describe, expect, it } from "vitest"
+import { createDatabase } from "db0"
+import sqliteConnector from "db0/connectors/better-sqlite3"
+import { WatchlistTable } from "#/database/watchlists"
 
-function makeEvent(overrides: Partial<EventRecord>): EventRecord {
-  return {
-    eventId: overrides.eventId ?? "evt_default",
-    title: overrides.title ?? "default",
-    eventType: overrides.eventType ?? "news",
-    eventSubType: overrides.eventSubType ?? "other",
-    ingestedAt: overrides.ingestedAt ?? 1000,
-    importance: overrides.importance ?? "medium",
-    affectedMarkets: overrides.affectedMarkets ?? [],
-    topicTags: overrides.topicTags ?? [],
-    evidenceCount: overrides.evidenceCount ?? 1,
-    sourceIds: overrides.sourceIds ?? ["cls-telegraph"],
-    ...overrides,
+const cleanupPaths: string[] = []
+
+afterEach(() => {
+  while (cleanupPaths.length) {
+    const path = cleanupPaths.pop()
+    if (!path) continue
+    rmSync(path, { recursive: true, force: true })
   }
+})
+
+function createWatchlistTable() {
+  const cwd = mkdtempSync(join(tmpdir(), "newsnow-watchlist-db-"))
+  cleanupPaths.push(cwd)
+  const db = createDatabase(sqliteConnector({
+    cwd,
+    name: "watchlists-test",
+  }))
+  return new WatchlistTable(db)
 }
 
-describe("sortWatchlistEvents", () => {
-  it("prefers investment score by default", () => {
-    const lowFreshButHighSignal = makeEvent({
-      eventId: "evt_signal",
-      title: "signal",
-      latestLifecycleState: "confirmed",
-      latestLifecycleAt: 2_000,
-      materialityScore: 88,
-      tradabilityScore: 80,
-      authorityScore: 90,
-      freshnessScore: 20,
-      directionalView: "positive",
-      directionalConfidence: 80,
-    })
-    const veryFreshButWeakSignal = makeEvent({
-      eventId: "evt_fresh",
-      title: "fresh",
-      latestLifecycleState: "detected",
-      latestLifecycleAt: 5_000,
-      materialityScore: 30,
-      tradabilityScore: 20,
-      authorityScore: 40,
-      freshnessScore: 90,
-      directionalView: "unknown",
-      directionalConfidence: 0,
+describe("watchlistTable", () => {
+  it("owns watchlist metadata without reading event rows", async () => {
+    const table = createWatchlistTable()
+    await table.init()
+
+    await table.upsert({
+      watchlist_id: "wl_ai",
+      name: "AI 产业",
+      description: "跟踪 AI 产业事件",
+      query_json: JSON.stringify({
+        entities: ["寒武纪"],
+        topics: ["ai-computing"],
+      }),
+      created_at: 1700000000000,
+      updated_at: 1700000000000,
+      last_checked_at: null,
     })
 
-    const sorted = sortWatchlistEvents([veryFreshButWeakSignal, lowFreshButHighSignal], "investment")
-    expect(sorted[0]?.eventId).toBe("evt_signal")
-  })
-
-  it("prefers recency when sortBy is latest", () => {
-    const olderHigherSignal = makeEvent({
-      eventId: "evt_old",
-      title: "old",
-      latestLifecycleState: "confirmed",
-      latestLifecycleAt: 1_000,
-      materialityScore: 95,
-      tradabilityScore: 90,
-      authorityScore: 95,
+    await expect(table.get("wl_ai")).resolves.toMatchObject({
+      watchlistId: "wl_ai",
+      name: "AI 产业",
+      query: {
+        entities: ["寒武纪"],
+        topics: ["ai-computing"],
+      },
     })
-    const newerLowerSignal = makeEvent({
-      eventId: "evt_new",
-      title: "new",
-      latestLifecycleState: "detected",
-      latestLifecycleAt: 10_000,
-      materialityScore: 20,
-      tradabilityScore: 15,
-      authorityScore: 30,
-    })
+    await expect(table.list()).resolves.toMatchObject([
+      {
+        watchlistId: "wl_ai",
+      },
+    ])
 
-    const sorted = sortWatchlistEvents([olderHigherSignal, newerLowerSignal], "latest")
-    expect(sorted[0]?.eventId).toBe("evt_new")
+    await table.touchCheckedAt("wl_ai", 1700000005000)
+    await expect(table.get("wl_ai")).resolves.toMatchObject({
+      lastCheckedAt: 1700000005000,
+    })
   })
 })

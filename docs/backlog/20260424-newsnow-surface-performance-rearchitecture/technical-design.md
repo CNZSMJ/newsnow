@@ -725,7 +725,8 @@ Sprint 3 gate：
 - `server/database/events.ts`
 - `server/services/event-engine/query.ts`
 - `server/services/event-engine/investment-view.ts`
-- `server/services/event-engine/related-events.ts`
+- `server/services/investment-query/service.ts`
+- `server/database/event-projections.ts`
 - `server/database/watchlists.ts`
 - `server/api/investment-events/*`
 - `server/api/investment-watchlists/*`

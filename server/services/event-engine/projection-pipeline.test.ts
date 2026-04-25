@@ -22,6 +22,13 @@ class MemoryProjectionStore {
       canonicalUpdatedAt: input.canonicalUpdatedAt,
       canonicalChecksum: input.canonicalChecksum,
       repairStatus: "ok",
+      eventType: input.eventType,
+      eventSubType: input.eventSubType,
+      sourceKind: input.sourceKind,
+      eventFamily: input.brief.eventFamily,
+      sourceIds: input.sourceIds ?? [],
+      seriesKey: input.seriesKey,
+      periodKey: input.periodKey,
       brief: input.brief,
       detail: input.detail,
     })

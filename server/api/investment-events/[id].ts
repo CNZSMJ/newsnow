@@ -1,8 +1,6 @@
 import type { InvestmentProviderEventDetailResponse } from "@shared/types"
-import { getEventDetailById } from "#/services/event-bus"
-import { projectInvestmentEventDetail } from "#/services/event-engine/investment-view"
-import { buildInvestmentRelatedEvents } from "#/services/event-engine/related-events"
 import { buildInvestmentProviderMeta } from "#/services/event-engine/provider"
+import { getInvestmentQueryService } from "#/services/investment-query/factory"
 
 export default defineEventHandler(async (event): Promise<InvestmentProviderEventDetailResponse> => {
   const id = getRouterParam(event, "id")
@@ -13,7 +11,8 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
     })
   }
 
-  const detail = await getEventDetailById(id)
+  const investmentQueryService = await getInvestmentQueryService()
+  const detail = await investmentQueryService?.getEventDetail(id)
   if (!detail) {
     throw createError({
       statusCode: 404,
@@ -24,9 +23,6 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
   return {
     status: "success",
     contract: buildInvestmentProviderMeta("event_detail"),
-    item: {
-      ...projectInvestmentEventDetail(detail),
-      relatedEvents: await buildInvestmentRelatedEvents(detail),
-    },
+    item: detail,
   }
 })

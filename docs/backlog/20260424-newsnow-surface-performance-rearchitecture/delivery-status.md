@@ -1,6 +1,6 @@
 # Delivery Status
 
-状态：Sprint 3 gate 通过，Sprint 4 待执行
+状态：Sprint 4 gate 通过，Sprint 5 待执行
 最后更新：2026-04-25
 范围：`newsnow` 双业务线系统性性能重构的实施状态、blocker、验证记录和下一步
 
@@ -8,7 +8,7 @@
 
 - Sprint 1 已完成：Baseline 与 Shared Source Runtime 设计落地
 - Sprint 2 已完成：News Snapshot Model 与新闻 Surface 收敛
-- Sprint 3 执行中：Investment Event Query Model 主查询收敛
+- Sprint 3 已完成：Investment Event Query Model 主查询收敛
 - 阶段 0 已完成：文档、关键代码和现有验证命令已确认
 - 已创建单一 backlog 主题
 - 已完成前期代码审查和文档边界校正
@@ -16,6 +16,7 @@
 - Sprint 1 gate 已通过：`pnpm test`、`pnpm typecheck`、`pnpm build` 均通过，本地服务已按规范重启
 - Sprint 2 Step 2.1-2.6 已完成；Sprint 2 code gate 已通过
 - Sprint 3 Step 3.1-3.4 已完成；Sprint 3 gate 已通过
+- Sprint 4 已完成：detail / watchlist / related-events / MCP read tools 收敛，Sprint 4 gate 已通过
 
 ## 2. 已完成内容
 
@@ -69,10 +70,17 @@
 - Sprint 3 Step 3.4 完成 watchlist / related-events 索引策略测试：`event_query_indexes` 可通过 `watchlist` 与 `related` index 返回 projection rows
 - Sprint 3 Step 3.4 修正 related index 删除边界：projection upsert 只清理当前 event 的普通索引和 related 出边，保留其他 event 指向当前 event 的 related 入边
 - Sprint 3 gate 完成 query-plan 口径校正：investment latest/search/entity explain plan 已从 legacy `events` / `entity_links` 改为 `event_projection` / `event_query_indexes`
+- Sprint 4 完成 Investment Query Service 扩展：detail 读取 `event_projection.detail_json`，related-events 由 query service 通过 projection index / projection filter 生成，watchlist event-read 通过 projection rows 匹配
+- Sprint 4 完成 provider detail 切换：`/api/investment-events/[id]` 不再读取 canonical detail 并在 route 层调用 related-events fan-out
+- Sprint 4 完成 watchlist event-read 切换：`/api/investment-watchlists/[id]`、`/api/investment-watchlists/[id]/events`、`/api/watchlists/[id]?detail=true`、`/api/watchlists/[id]/events` 均通过 Investment Query Service 读取事件
+- Sprint 4 完成 metadata / event-read 解耦：`server/database/watchlists.ts` 只保留 watchlist metadata lifecycle，不再读取 event table；`/api/watchlists` 和 `/api/watchlists/[id]` metadata 路径不接管 Investment Event Query Model
+- Sprint 4 删除旧 route-level related-events fan-out helper：`server/services/event-engine/related-events.ts` 已移除，避免后续 surface 绕过 projection query model
+- Sprint 4 修正 benchmark 干扰：`pnpm perf:surface-baseline` 的 detail breakdown 改为只读 projection，不再在运行态对 projection 表执行 DDL 初始化，避免与服务进程 SQLite 写入争锁
+- Sprint 4 扩展 SQL query plan 覆盖：`pnpm perf:query-plans` 现在覆盖 investment detail projection、related-events lookup 和 watchlist projection scan
 
 ## 3. 进行中
 
-- Sprint 4 准备：detail / watchlist / related-events / MCP read tools 收敛
+- Sprint 5 待执行：frontend cleanup、ops decoupling、benchmark 与回归验证工程化
 
 ## 4. Blockers / 风险
 
@@ -81,8 +89,8 @@
 - 后续实现必须持续检查跨业务线 import、跨业务线 SQL join、跨业务线 fallback，避免短期共享基础设施演变成长期业务耦合
 - 后续 sprint 设计必须写明它推进的最终目标模块、临时兼容路径退出条件和 backlog-level definition of done 影响
 - SQL owner declaration 已对 Sprint 2 新增 news / shared-source SQL 落地；Sprint 3 起必须扩展到 event projection / query indexes / watchlist match / related-events query model
-- Sprint 4 的 detail / watchlist / related-events route-level 切换顺序仍需在具体 sprint 实施中细化
-- 额外运行 `pnpm events:check-quality` 当前失败，blocker 是既有 Tier A 初始 canonical 延迟 P95 24,023,959ms > 300,000ms；这不是 Sprint 2 code gate 项，但必须在后续事件线性能 sprint 中处理
+- 本地当前没有持久 watchlist 样本，因此 Sprint 4 live surface benchmark 的 `watchlistId` 为 `null`；watchlist event-read 已由 unit tests、route code 和 query-plan 覆盖，但尚未记录持久样本的 HTTP latency
+- Sprint 5 仍需验证 frontend navigation request-count、事件页 / watchlist 页重复派生计算、listener / timer cleanup 和 ops lightweight status / diagnostics snapshot 边界
 
 ## 5. 验证记录
 
@@ -192,12 +200,24 @@
 - Sprint 3 gate：live-data shadow comparison 通过；latest Top 20 projection vs canonical `status=match`，missing / extra 均为空
 - Sprint 3 gate：projection backfill 补跑 latest 口径，`pnpm events:backfill-projections --limit 1000 --sort latest` 扫描 1000，写入 460，跳过 540，缺失 canonical 0
 - Sprint 3 gate：live API smoke 复测 `GET /api/investment-events/latest?limit=5` 返回 5 items / totalCount 1118
+- Sprint 4 TDD / regression：`pnpm test -- server/services/investment-query/service.test.ts server/database/watchlists.test.ts server/database/event-projections.test.ts` 通过，覆盖 projection detail、related sections、watchlist projection matching 和 watchlist metadata-only storage
+- Sprint 4 full test：`pnpm test` 通过，41 个 test files / 281 tests
+- Sprint 4 typecheck：`pnpm typecheck` 通过
+- Sprint 4 build：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Sprint 4 服务验证：build 后通过 `./scripts/service.sh restart` 重启，`./scripts/service.sh status` 显示 launchd 服务运行中，live smoke `GET /api/investment-events/latest?limit=1&sort=latest` 返回 200，耗时约 51.86ms
+- Sprint 4 actual MCP transport smoke：`pnpm perf:mcp-smoke` 通过；`get_hotest_latest_news` 14.97ms，`event_get_latest_events` 8.76ms，均有 `structuredContent`
+- Sprint 4 surface benchmark：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`news_user` P50 3.24ms / P95 5.68ms，`news_agent` 0.97ms，`investment_user` P50 5.01ms / P95 6.99ms，`investment_agent` P50 3.1ms / P95 3.25ms
+- Sprint 4 detail projection benchmark：样本事件 `evt_ae4e82663c5651f9adc8618e1948f4f0`，HTTP detail 5.01ms，projection detail query 5.78ms，projection related-events query 9.25ms，related query count 4，scanLimit 24
+- Sprint 4 query plan：`pnpm perf:query-plans` 通过，9 个 plan；investment detail 命中 `event_projection` primary key，related lookup 命中 `idx_event_query_indexes_lookup` + `event_projection`，watchlist projection scan 命中 `event_query_indexes` + `event_projection`
+- Sprint 4 ops / quality：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 通过，release status `insufficient_data`，无 blocking failure
 
 尚未完成：
 
-- Sprint 3 / Sprint 4 route-level 切换清单
+- Sprint 5 frontend cleanup、ops decoupling、benchmark 与回归验证工程化
+- backlog-level definition of done 的最终关闭验收
 
 ## 6. 下一步
 
-1. 提交 Sprint 3 gate query-plan 口径校正和 gate 记录，保持 `data.db` 等无关本地文件不入库
-2. Sprint 4：继续切换 detail / watchlist / related-events / MCP read tools
+1. Sprint 5：复测并收敛 frontend navigation request-count、事件页 / watchlist 页重复派生计算和 listener / timer cleanup
+2. Sprint 5：拆分 lightweight ops status 与 heavy diagnostics，避免 ops 入口拖慢在线 surface
+3. backlog close：用最终目标验收清单复核所有已发现性能问题、临时路径、owner declaration 和回滚边界

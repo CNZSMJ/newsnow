@@ -1,8 +1,8 @@
-import type { InvestmentWatchlistDetail, WatchlistDetail, WatchlistRecord } from "@shared/types"
-import { getWatchlist, getWatchlistDetail } from "#/services/watchlists"
-import { projectInvestmentEventBrief } from "#/services/event-engine/investment-view"
+import type { InvestmentWatchlistDetail, WatchlistRecord } from "@shared/types"
+import { getInvestmentQueryService } from "#/services/investment-query/factory"
+import { getWatchlist, touchWatchlistCheckedAt } from "#/services/watchlists"
 
-export default defineEventHandler(async (event): Promise<WatchlistRecord | WatchlistDetail | InvestmentWatchlistDetail> => {
+export default defineEventHandler(async (event): Promise<WatchlistRecord | InvestmentWatchlistDetail> => {
   const id = getRouterParam(event, "id")
   if (!id) {
     throw createError({
@@ -15,24 +15,24 @@ export default defineEventHandler(async (event): Promise<WatchlistRecord | Watch
   const sortBy = query.sort === "latest" ? "latest" : "investment"
   if (query.detail === "true") {
     const limit = Number(query.limit ?? 20)
-    const detail = await getWatchlistDetail(id, {
-      limit: Number.isNaN(limit) ? 20 : Math.min(Math.max(limit, 1), 100),
-      latest: query.latest !== "false",
-      sortBy,
-    })
-    if (!detail) {
+    const item = await getWatchlist(id)
+    if (!item) {
       throw createError({
         statusCode: 404,
         message: "Watchlist not found",
       })
     }
-    if (query.projection === "investment") {
-      return {
-        ...detail,
-        recentEvents: detail.recentEvents.map(item => projectInvestmentEventBrief(item)),
-      }
+    const investmentQueryService = await getInvestmentQueryService()
+    const checkedAt = await touchWatchlistCheckedAt(id) ?? Date.now()
+    if (!investmentQueryService) return { ...item, recentEvents: [], lastCheckedAt: checkedAt }
+    const detail = await investmentQueryService.getWatchlistDetail(item, {
+      limit: Number.isNaN(limit) ? 20 : Math.min(Math.max(limit, 1), 100),
+      sortBy,
+    })
+    return {
+      ...detail,
+      lastCheckedAt: checkedAt,
     }
-    return detail
   }
 
   const item = await getWatchlist(id)

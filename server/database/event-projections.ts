@@ -1,7 +1,7 @@
 import process from "node:process"
 import type { Database } from "db0"
 import type { AffectedMarket, DirectionalView, EventSourceKind } from "@shared/event-profile"
-import type { EventSubType, EventType, InvestmentEventBrief, InvestmentEventDetail, SourceID } from "@shared/types"
+import type { EventSubType, EventType, InvestmentEventBrief, InvestmentEventDetail, InvestmentEventFamily, SourceID } from "@shared/types"
 import { declareSqlAccess } from "#/database/sql-ownership"
 
 export const REQUIRED_EVENT_QUERY_INDEX_NAMES = [
@@ -99,6 +99,13 @@ export interface EventProjectionRecord {
   canonicalUpdatedAt: number
   canonicalChecksum: string
   repairStatus: EventProjectionRow["repair_status"]
+  eventType?: EventType
+  eventSubType?: EventSubType
+  sourceKind?: EventSourceKind
+  eventFamily: InvestmentEventFamily
+  sourceIds: SourceID[]
+  seriesKey?: string
+  periodKey?: string
   brief: InvestmentEventBrief
   detail?: InvestmentEventDetail
 }
@@ -117,6 +124,7 @@ export interface EventProjectionQueryOptions {
   indexName?: EventQueryIndexName
   indexValue?: string
   q?: string
+  eventFamily?: InvestmentEventFamily
   eventType?: EventType
   eventSubType?: EventSubType
   sourceId?: SourceID
@@ -189,6 +197,10 @@ function buildProjectionQueryParts(options: EventProjectionQueryOptions) {
   if (options.q) {
     clauses.push("p.search_text LIKE ?")
     params.push(`%${options.q.toLowerCase()}%`)
+  }
+  if (options.eventFamily) {
+    clauses.push("p.event_family = ?")
+    params.push(options.eventFamily)
   }
   if (options.eventType) {
     clauses.push("p.event_type = ?")
@@ -275,6 +287,13 @@ function toRecord(row: EventProjectionRow): EventProjectionRecord {
     canonicalUpdatedAt: row.canonical_updated_at,
     canonicalChecksum: row.canonical_checksum,
     repairStatus: row.repair_status,
+    eventType: row.event_type ?? undefined,
+    eventSubType: row.event_subtype ?? undefined,
+    sourceKind: row.source_kind ?? undefined,
+    eventFamily: row.event_family as InvestmentEventFamily,
+    sourceIds: JSON.parse(row.source_ids_json || "[]") as SourceID[],
+    seriesKey: row.series_key ?? undefined,
+    periodKey: row.period_key ?? undefined,
     brief: JSON.parse(row.brief_json) as InvestmentEventBrief,
     detail: row.detail_json ? JSON.parse(row.detail_json) as InvestmentEventDetail : undefined,
   }

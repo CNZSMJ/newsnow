@@ -87,6 +87,60 @@ export function buildSurfaceQueryPlanStatements(): SurfaceQueryPlanStatement[] {
       params: ["entity", "贵州茅台", 20],
     },
     {
+      name: "investment_event_detail_projection",
+      surface: "investment_user",
+      owner: "investment-event",
+      tables: ["event_projection"],
+      decisionRefs: ["PD-4", "TD-3", "TD-9", "TD-11"],
+      sql: `
+        SELECT p.event_id, p.detail_json
+        FROM event_projection p
+        WHERE p.event_id = ?
+          AND p.repair_status = 'ok'
+        LIMIT ?
+      `,
+      params: ["evt_sample", 1],
+    },
+    {
+      name: "investment_related_events_lookup",
+      surface: "investment_user",
+      owner: "investment-event",
+      tables: ["event_projection", "event_query_indexes"],
+      decisionRefs: ["PD-4", "TD-3", "TD-9", "TD-11"],
+      sql: `
+        SELECT p.event_id
+        FROM event_query_indexes i
+        INNER JOIN event_projection p
+          ON p.event_id = i.event_id
+        WHERE i.index_name = ?
+          AND i.index_value = ?
+          AND p.repair_status = 'ok'
+        ORDER BY i.sort_time DESC, i.rank_score DESC
+        LIMIT ?
+      `,
+      params: ["related", "evt_sample", 6],
+    },
+    {
+      name: "investment_watchlist_projection_scan",
+      surface: "investment_user",
+      owner: "investment-event",
+      tables: ["event_projection", "event_query_indexes"],
+      decisionRefs: ["PD-4", "TD-3", "TD-9", "TD-11"],
+      sql: `
+        SELECT p.event_id, p.brief_json, p.event_type, p.event_subtype, p.source_ids_json
+        FROM event_projection p
+        INNER JOIN event_query_indexes i
+          ON i.event_id = p.event_id
+         AND i.index_name = ?
+         AND i.index_value = ?
+        WHERE p.repair_status = 'ok'
+        ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
+                 COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
+        LIMIT ?
+      `,
+      params: ["latest", "all", 120],
+    },
+    {
       name: "shared_source_fetch_runs_latest",
       surface: "ops",
       owner: "shared-source",

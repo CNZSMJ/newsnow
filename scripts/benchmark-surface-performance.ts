@@ -5,10 +5,10 @@ import { config as loadEnv } from "dotenv"
 import { consola } from "consola"
 import { createDatabase } from "db0"
 import sqliteConnector from "db0/connectors/better-sqlite3"
-import type { EventDetail, InvestmentProviderEventListResponse, SourceID, WatchlistRecord } from "../shared/types"
+import type { InvestmentEventDetail, InvestmentProviderEventListResponse, SourceID, WatchlistRecord } from "../shared/types"
 import { projectDir } from "../shared/dir"
-import { EventTable } from "../server/database/events"
-import { buildInvestmentRelatedEvents } from "../server/services/event-engine/related-events"
+import { EventProjectionTable } from "../server/database/event-projections"
+import { InvestmentQueryService } from "../server/services/investment-query/service"
 import {
   type SurfaceBenchmarkSample,
   type SurfaceKind,
@@ -189,15 +189,16 @@ async function measureProbe(baseUrl: string, probe: HttpProbe, workerState: Work
   }
 }
 
-function getRelatedEventsQueryShape(detail: EventDetail) {
-  const primaryEntity = detail.entities.find(entity => entity.entityType === "stock" || entity.entityType === "company")
-  const hasTopic = Boolean(detail.topicTags[0])
+function getRelatedEventsQueryShape(detail: InvestmentEventDetail) {
+  const primaryEntity = detail.primarySubject ?? detail.affectedEntities[0]
+  const hasTopic = Boolean(detail.relatedTopics[0])
   const hasMarket = Boolean(detail.affectedMarkets[0])
-  const hasFamily = detail.eventSubType !== "other" || detail.eventType !== "news"
+  const hasFamily = Boolean(detail.eventFamily)
+  const hasRelatedIndex = true
 
   return {
-    queryCount: [primaryEntity, hasTopic, hasMarket, hasFamily].filter(Boolean).length,
-    scanLimit: (primaryEntity ? 24 : 0) + (hasTopic ? 48 : 0) + (hasMarket ? 24 : 0) + (hasFamily ? 24 : 0),
+    queryCount: [hasRelatedIndex, primaryEntity, hasTopic, hasMarket, hasFamily].filter(Boolean).length,
+    scanLimit: [hasRelatedIndex, primaryEntity, hasTopic, hasMarket, hasFamily].filter(Boolean).length * 6,
   }
 }
 
@@ -209,36 +210,19 @@ async function measureEventDetailFanout(eventId: string | undefined, httpDetailM
     cwd: dataDir,
     path: "db.sqlite3",
   }))
-  const eventTable = new EventTable(db as never)
-  await eventTable.init()
+  const projectionTable = new EventProjectionTable(db as never)
+  const investmentQueryService = new InvestmentQueryService(projectionTable)
 
   const mainStartedAt = performance.now()
-  const detail = await eventTable.getEventDetail(eventId)
+  const detail = await investmentQueryService.getEventDetail(eventId, {
+    includeRelatedEvents: false,
+  })
   const mainDetailQueryMs = performance.now() - mainStartedAt
   if (!detail) return undefined
 
   const shape = getRelatedEventsQueryShape(detail)
   const relatedStartedAt = performance.now()
-  await buildInvestmentRelatedEvents(detail, {
-    getEntityEvents: async options => ({
-      updatedAt: Date.now(),
-      totalCount: 0,
-      items: await eventTable.listEvents({
-        ...options,
-        limit: options.limit ?? 6,
-        sortBy: options.sortBy ?? "investment",
-      }),
-    }),
-    listLatestEvents: async (options = {}) => ({
-      updatedAt: Date.now(),
-      totalCount: 0,
-      items: await eventTable.listEvents({
-        ...options,
-        limit: options.limit ?? 6,
-        sortBy: options.sortBy ?? "investment",
-      }),
-    }),
-  })
+  await investmentQueryService.getRelatedEvents(detail)
   const relatedEventsMs = performance.now() - relatedStartedAt
 
   return buildEventDetailFanoutBreakdown({

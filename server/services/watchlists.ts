@@ -1,7 +1,7 @@
 import md5 from "md5"
 import type { AffectedMarket, DirectionalView } from "@shared/event-profile"
-import type { WatchlistDetail, WatchlistQuery } from "@shared/types"
-import { getWatchlistTable, queryWatchlistEvents } from "#/database/watchlists"
+import type { WatchlistQuery } from "@shared/types"
+import { getWatchlistTable } from "#/database/watchlists"
 
 function sanitizeQuery(query?: WatchlistQuery): WatchlistQuery {
   const normalizeList = (items?: string[]) => items?.map(item => item.trim()).filter(Boolean)
@@ -57,35 +57,9 @@ export async function getWatchlist(id: string) {
   return table.get(id)
 }
 
-export async function getWatchlistDetail(id: string, options?: {
-  limit?: number
-  latest?: boolean
-  sortBy?: "latest" | "investment"
-}) {
+export async function touchWatchlistCheckedAt(id: string, checkedAt = Date.now()) {
   const table = await getWatchlistTable()
   if (!table) return undefined
-  const record = await table.get(id)
-  if (!record) return undefined
-
-  const sortBy = options?.sortBy ?? (options?.latest ? "latest" : "investment")
-  const recentEvents = await queryWatchlistEvents(record.query, {
-    limit: options?.limit ?? 20,
-    sortBy,
-  })
-  await table.touchCheckedAt(id)
-
-  return {
-    ...record,
-    recentEvents,
-    lastCheckedAt: Date.now(),
-  } satisfies WatchlistDetail
-}
-
-export async function getWatchlistEvents(id: string, options?: {
-  limit?: number
-  latest?: boolean
-  sortBy?: "latest" | "investment"
-}) {
-  const detail = await getWatchlistDetail(id, options)
-  return detail?.recentEvents ?? []
+  await table.touchCheckedAt(id, checkedAt)
+  return checkedAt
 }

@@ -1,22 +1,46 @@
 import { describe, expect, it } from "vitest"
-import type { InvestmentEventBrief } from "@shared/types"
+import type { InvestmentEventBrief, InvestmentEventDetail } from "@shared/types"
 import type { EventProjectionQueryOptions, EventProjectionRecord } from "#/database/event-projections"
 import { InvestmentQueryService } from "#/services/investment-query/service"
 
 class MemoryProjectionQueryStore {
   readonly listCalls: EventProjectionQueryOptions[] = []
   readonly countCalls: EventProjectionQueryOptions[] = []
+  readonly getCalls: string[] = []
 
   constructor(private readonly records: EventProjectionRecord[]) {}
 
   async listProjections(options: EventProjectionQueryOptions) {
     this.listCalls.push(options)
-    return this.records.slice(0, options.limit)
+    const rows = this.records.filter((record) => {
+      if (options.indexName === "entity" && options.indexValue) {
+        const values = [
+          ...record.brief.affectedEntities.flatMap(entity => [entity.entityId, entity.label, entity.code]),
+          record.brief.primarySubject?.entityId,
+          record.brief.primarySubject?.label,
+          record.brief.primarySubject?.code,
+        ].filter(Boolean).map(value => String(value).toLowerCase())
+        if (!values.includes(options.indexValue.toLowerCase())) return false
+      }
+      if (options.indexName === "related" && options.indexValue) {
+        if (record.eventId !== "evt_related") return false
+      }
+      if (options.topic && !(record.brief.relatedTopics as readonly string[]).includes(options.topic)) return false
+      if (options.market && !record.brief.affectedMarkets.includes(options.market)) return false
+      if (options.eventFamily && record.brief.eventFamily !== options.eventFamily) return false
+      return true
+    })
+    return rows.slice(0, options.limit)
   }
 
   async countProjections(options: EventProjectionQueryOptions) {
     this.countCalls.push(options)
     return this.records.length
+  }
+
+  async getProjection(eventId: string) {
+    this.getCalls.push(eventId)
+    return this.records.find(record => record.eventId === eventId)
   }
 }
 
@@ -86,7 +110,24 @@ function projection(record = brief()): EventProjectionRecord {
     canonicalUpdatedAt: 1700000010000,
     canonicalChecksum: "checksum",
     repairStatus: "ok",
+    eventType: record.eventType,
+    eventSubType: "industrial_policy",
+    sourceKind: record.sourceKind,
+    eventFamily: record.eventFamily,
+    sourceIds: [record.sourceSummary.primarySourceId ?? "wallstreetcn-quick"],
     brief: record,
+    detail: detail(record),
+  }
+}
+
+function detail(input = brief()): InvestmentEventDetail {
+  return {
+    ...input,
+    thesis: "先观察政策落地",
+    keyFacts: [],
+    evidence: [],
+    timelineSummary: [],
+    watchTargetCandidates: [],
   }
 }
 
@@ -159,5 +200,75 @@ describe("investmentQueryService", () => {
     })
     expect(store.listCalls).toHaveLength(0)
     expect(store.countCalls).toHaveLength(0)
+  })
+
+  it("reads detail and related sections from projection records", async () => {
+    const store = new MemoryProjectionQueryStore([
+      projection(),
+      projection(brief({
+        eventId: "evt_related",
+        title: "人工智能算力投资跟踪",
+      })),
+    ])
+    const service = new InvestmentQueryService(store)
+
+    const eventDetail = await service.getEventDetail("evt_1")
+
+    expect(eventDetail).toMatchObject({
+      eventId: "evt_1",
+      thesis: "先观察政策落地",
+      relatedEvents: [
+        expect.objectContaining({
+          context: "entity",
+          items: [expect.objectContaining({ eventId: "evt_related" })],
+        }),
+      ],
+    })
+    expect(store.getCalls).toEqual(["evt_1"])
+    expect(store.listCalls).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexName: "related", indexValue: "evt_1" }),
+      expect.objectContaining({ indexName: "entity", indexValue: "sh688256" }),
+      expect.objectContaining({ topic: "ai-computing" }),
+      expect.objectContaining({ market: "A" }),
+      expect.objectContaining({ eventFamily: "policy_signal" }),
+    ]))
+  })
+
+  it("matches watchlist event-read through projection records without canonical fanout", async () => {
+    const store = new MemoryProjectionQueryStore([
+      projection(),
+      projection(brief({
+        eventId: "evt_unmatched",
+        title: "消费政策",
+        relatedTopics: ["medicine"],
+        affectedEntities: [{
+          entityId: "medicine",
+          label: "医药",
+          entityType: "industry",
+          entityTypeLabel: "产业赛道",
+        }],
+      })),
+    ])
+    const service = new InvestmentQueryService(store)
+
+    await expect(service.getWatchlistEvents({
+      entities: ["寒武纪"],
+      topics: ["ai-computing"],
+      sourceIds: ["wallstreetcn-quick"],
+      markets: ["A"],
+      directionalViews: ["positive"],
+      minMaterialityScore: 80,
+    }, {
+      limit: 5,
+      sortBy: "investment",
+    })).resolves.toMatchObject({
+      items: [expect.objectContaining({ eventId: "evt_1" })],
+      totalCount: 1,
+    })
+    expect(store.listCalls.at(-1)).toMatchObject({
+      indexName: "latest",
+      indexValue: "all",
+      sortBy: "investment",
+    })
   })
 })

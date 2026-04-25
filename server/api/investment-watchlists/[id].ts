@@ -1,7 +1,7 @@
-import type { InvestmentProviderWatchlistDetailResponse, InvestmentWatchlistDetail } from "@shared/types"
-import { getWatchlistDetail } from "#/services/watchlists"
-import { projectInvestmentEventBrief } from "#/services/event-engine/investment-view"
+import type { InvestmentProviderWatchlistDetailResponse } from "@shared/types"
 import { buildInvestmentProviderMeta } from "#/services/event-engine/provider"
+import { getInvestmentQueryService } from "#/services/investment-query/factory"
+import { getWatchlist, touchWatchlistCheckedAt } from "#/services/watchlists"
 
 export default defineEventHandler(async (event): Promise<InvestmentProviderWatchlistDetailResponse> => {
   const id = getRouterParam(event, "id")
@@ -15,27 +15,30 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderWatch
   const query = getQuery(event)
   const sortBy = query.sort === "latest" ? "latest" : "investment"
   const limit = Number(query.limit ?? 20)
-  const detail = await getWatchlistDetail(id, {
-    limit: Number.isNaN(limit) ? 20 : Math.min(Math.max(limit, 1), 100),
-    latest: query.latest !== "false",
-    sortBy,
-  })
-  if (!detail) {
+  const watchlist = await getWatchlist(id)
+  if (!watchlist) {
     throw createError({
       statusCode: 404,
       message: "Watchlist not found",
     })
   }
 
-  const item: InvestmentWatchlistDetail = {
-    ...detail,
-    recentEvents: detail.recentEvents.map(event => projectInvestmentEventBrief(event)),
-  }
+  const investmentQueryService = await getInvestmentQueryService()
+  const checkedAt = await touchWatchlistCheckedAt(id) ?? Date.now()
+  const item = investmentQueryService
+    ? await investmentQueryService.getWatchlistDetail(watchlist, {
+      limit: Number.isNaN(limit) ? 20 : Math.min(Math.max(limit, 1), 100),
+      sortBy,
+    })
+    : { ...watchlist, recentEvents: [], lastCheckedAt: checkedAt }
 
   return {
     status: "success",
-    updatedTime: Date.now(),
+    updatedTime: checkedAt,
     contract: buildInvestmentProviderMeta("watchlist_detail"),
-    item,
+    item: {
+      ...item,
+      lastCheckedAt: checkedAt,
+    },
   }
 })
