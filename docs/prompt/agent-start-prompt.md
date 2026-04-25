@@ -27,11 +27,12 @@ Hotfix 协议：
 1. 读取用户指定的 `<HOTFIX_DOC>`。
 2. 从“实施状态”恢复当前进度。
 3. 以“问题现象描述”和“问题的根因分析”确定修复边界。
-4. 以“修复方案”为执行来源。
-5. 按 TDD 执行：red regression test / reproducible failing check -> green fix -> refactor -> validation。
-6. 每完成一个 step，更新 `<HOTFIX_DOC>` 的“实施状态”。
-7. 持续推进直到问题已修复、验证通过、hotfix 文档状态闭环。
-8. 如果修复范围超出单个 bug，停止扩大实现，并把后续工作转入 backlog。
+4. 以“修复方案”理解修复方向。
+5. 读取“实施计划”，找到下一个未完成 TDD step。
+6. 按“实施计划”执行：red regression test / reproducible failing check -> green fix -> refactor -> validation。
+7. 每完成一个 step，更新 `<HOTFIX_DOC>` 的“实施状态”。
+8. 持续推进直到问题已修复、验证通过、hotfix 文档状态闭环。
+9. 如果修复范围超出单个 bug，停止扩大实现，并把后续工作转入 backlog。
 
 通用收尾：
 

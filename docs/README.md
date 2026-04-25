@@ -187,14 +187,15 @@ docs/backlog/20260420-subject-resolution-hardening/
 - `20260420-fix-primary-subject-fallback.md`
 - `20260420-fix-watch-target-regression.md`
 
-### 5.3 固定 4 个部分
+### 5.3 固定 5 个部分
 
 每一个 hotfix 文档必须固定包含：
 
 1. 问题现象描述
 2. 问题的根因分析
 3. 修复方案
-4. 实施状态
+4. 实施计划
+5. 实施状态
 
 推荐结构：
 
@@ -207,7 +208,15 @@ docs/backlog/20260420-subject-resolution-hardening/
 
 ## 3. 修复方案
 
-## 4. 实施状态
+## 4. 实施计划
+
+- Red：
+- Green：
+- Refactor：
+- Validation：
+- 完成标准：
+
+## 5. 实施状态
 ```
 
 ### 5.4 Hotfix 固定启动方式
@@ -222,8 +231,9 @@ hotfix 也使用仓库级固定启动提示词：
 
 - 以 hotfix 文档的“实施状态”恢复当前进度
 - 以“问题现象描述”和“问题的根因分析”限定修复边界
-- 以“修复方案”作为执行来源
-- 必须按 TDD red regression test / reproducible failing check -> green fix -> refactor -> validation 推进
+- 以“修复方案”理解修复方向
+- 以“实施计划”作为执行来源
+- 必须按实施计划中的 TDD red regression test / reproducible failing check -> green fix -> refactor -> validation 推进
 - 每完成一个 step，更新 hotfix 文档的“实施状态”
 - 如果修复范围超出单个 bug，停止扩大实现，并把后续工作转入 backlog
 
@@ -240,4 +250,4 @@ hotfix 也使用仓库级固定启动提示词：
    - [event-operations-runbook.md](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/docs/event-operations-runbook.md)
 3. 如果是具体功能/重构主题，再进入对应 `backlog/`
 4. 如果是从 backlog 进入实现，读取该 backlog 的 `delivery-status.md` 和 `implementation-plan.md`
-5. 如果是修 bug，再进入对应 `hotfix/`；进入实现时读取该 hotfix 文档的“实施状态”
+5. 如果是修 bug，再进入对应 `hotfix/`；进入实现时读取该 hotfix 文档的“实施状态”和“实施计划”
