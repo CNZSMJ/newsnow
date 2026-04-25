@@ -6,10 +6,10 @@ import type {
   InvestmentEventFamily,
   InvestmentProviderEventListResponse,
 } from "@shared/types"
-import { getEntityEvents } from "#/services/event-engine/query"
-import { filterInvestmentBriefsByFocus, type InvestmentScanFocus } from "#/services/event-engine/investment-filters"
-import { matchesInvestmentEventFamily, projectInvestmentEventBrief } from "#/services/event-engine/investment-view"
+import { type InvestmentScanFocus, filterInvestmentBriefsByFocus } from "#/services/event-engine/investment-filters"
+import { matchesInvestmentEventFamily } from "#/services/event-engine/investment-view"
 import { buildInvestmentProviderMeta } from "#/services/event-engine/provider"
+import { getInvestmentQueryService } from "#/services/investment-query/factory"
 
 function parseTimestampQuery(value: unknown) {
   const raw = Array.isArray(value) ? value[0] : value
@@ -53,23 +53,25 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
   const minAuthorityScore = Number(query.min_authority_score)
   const lifecycleAfter = resolveLifecycleAfter(query)
 
-  const res = await getEntityEvents({
-    entity,
-    limit: Number.isNaN(limit) ? 20 : Math.min(Math.max(limit, 1), 400),
-    sortBy: resolveSort(query),
-    market: typeof query.market === "string" ? query.market as AffectedMarket : undefined,
-    directionalView: typeof query.directional_view === "string" ? query.directional_view as DirectionalView : undefined,
-    minMaterialityScore: Number.isNaN(minMaterialityScore) ? undefined : minMaterialityScore,
-    minAuthorityScore: Number.isNaN(minAuthorityScore) ? undefined : minAuthorityScore,
-    changedSince: parseTimestampQuery(query.changed_since),
-    lifecycleAfter,
-    seriesKey: typeof query.series_key === "string" ? query.series_key.trim() || undefined : undefined,
-    periodKey: typeof query.period_key === "string" ? query.period_key.trim() || undefined : undefined,
-  })
+  const investmentQueryService = await getInvestmentQueryService()
+  const res = investmentQueryService
+    ? await investmentQueryService.getEntityEvents({
+      entity,
+      limit: Number.isNaN(limit) ? 20 : Math.min(Math.max(limit, 1), 400),
+      sortBy: resolveSort(query),
+      market: typeof query.market === "string" ? query.market as AffectedMarket : undefined,
+      directionalView: typeof query.directional_view === "string" ? query.directional_view as DirectionalView : undefined,
+      minMaterialityScore: Number.isNaN(minMaterialityScore) ? undefined : minMaterialityScore,
+      minAuthorityScore: Number.isNaN(minAuthorityScore) ? undefined : minAuthorityScore,
+      changedSince: parseTimestampQuery(query.changed_since),
+      lifecycleAfter,
+      seriesKey: typeof query.series_key === "string" ? query.series_key.trim() || undefined : undefined,
+      periodKey: typeof query.period_key === "string" ? query.period_key.trim() || undefined : undefined,
+    })
+    : { updatedAt: Date.now(), items: [], totalCount: 0 }
 
   const items = filterInvestmentBriefsByFocus(
     res.items
-      .map(item => projectInvestmentEventBrief(item))
       .filter(item => matchesInvestmentEventFamily(item, eventFamily)),
     focus,
   )

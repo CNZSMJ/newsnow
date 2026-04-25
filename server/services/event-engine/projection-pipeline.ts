@@ -15,6 +15,14 @@ export interface CanonicalEventDetailStore {
   getEventDetail: (eventId: string) => Promise<EventDetail | undefined>
 }
 
+export interface CanonicalEventListStore extends CanonicalEventDetailStore {
+  listEvents: (options: {
+    limit: number
+    scanLimit?: number
+    sortBy?: "latest" | "investment" | "changed"
+  }) => Promise<Array<{ eventId: string }>>
+}
+
 export interface InvestmentProjectionBuildOptions {
   relatedEventIds?: string[]
   watchlistKeys?: string[]
@@ -36,6 +44,13 @@ export interface ProjectionRefreshResult {
   actualChecksum?: string
   canonicalUpdatedAt?: number
   projectionUpdatedAt?: number
+}
+
+export interface ProjectionBackfillResult {
+  scanned: number
+  written: number
+  skipped: number
+  missingCanonical: number
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -157,6 +172,12 @@ export function buildInvestmentProjectionInput(
     canonicalChecksum: computeInvestmentProjectionChecksum(detail),
     brief: toInvestmentBrief(projectedDetail),
     detail: projectedDetail,
+    eventType: detail.eventType,
+    eventSubType: detail.eventSubType,
+    sourceKind: detail.sourceKind,
+    sourceIds: detail.sourceIds,
+    seriesKey: detail.seriesKey,
+    periodKey: detail.periodKey,
     indexedEntities,
     relatedEventIds: options.relatedEventIds,
     watchlistKeys: options.watchlistKeys,
@@ -224,4 +245,46 @@ export async function refreshInvestmentProjectionForEvent(
 
   await writeInvestmentProjection(detail, projectionStore, options)
   return checkInvestmentProjectionConsistency(detail, projectionStore)
+}
+
+export async function backfillInvestmentProjections(
+  canonicalStore: CanonicalEventListStore,
+  projectionStore: InvestmentProjectionStore,
+  options: {
+    limit?: number
+    scanLimit?: number
+    sortBy?: "latest" | "investment" | "changed"
+  } = {},
+): Promise<ProjectionBackfillResult> {
+  const limit = Math.min(Math.max(Math.floor(options.limit ?? 400), 1), 2000)
+  const canonicalEvents = await canonicalStore.listEvents({
+    limit,
+    scanLimit: options.scanLimit ?? Math.max(limit, 400),
+    sortBy: options.sortBy ?? "investment",
+  })
+  const result: ProjectionBackfillResult = {
+    scanned: canonicalEvents.length,
+    written: 0,
+    skipped: 0,
+    missingCanonical: 0,
+  }
+
+  for (const event of canonicalEvents) {
+    const detail = await canonicalStore.getEventDetail(event.eventId)
+    if (!detail) {
+      result.missingCanonical += 1
+      continue
+    }
+
+    const consistency = await checkInvestmentProjectionConsistency(detail, projectionStore)
+    if (consistency.status === "ok") {
+      result.skipped += 1
+      continue
+    }
+
+    await writeInvestmentProjection(detail, projectionStore)
+    result.written += 1
+  }
+
+  return result
 }

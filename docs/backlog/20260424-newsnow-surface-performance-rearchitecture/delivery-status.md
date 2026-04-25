@@ -15,7 +15,7 @@
 - Sprint 1 Step 1.1-1.6 已完成；Sprint 1 gate 的 benchmark、SQL plan、MCP transport、frontend request-count 和 worker active / inactive 基线入口已补齐
 - Sprint 1 gate 已通过：`pnpm test`、`pnpm typecheck`、`pnpm build` 均通过，本地服务已按规范重启
 - Sprint 2 Step 2.1-2.6 已完成；Sprint 2 code gate 已通过
-- Sprint 3 Step 3.1-3.2 已完成；Step 3.3 准备进入 Investment Query Service 与主查询切换
+- Sprint 3 Step 3.1-3.3 已完成；Step 3.4 准备补 watchlist / related-events 索引策略
 
 ## 2. 已完成内容
 
@@ -62,10 +62,14 @@
 - Sprint 3 Step 3.2 完成 canonical -> projection 写入管线：新增 `projection-pipeline`，从 canonical `EventDetail` 调用 backend-owned investment projection helper 写入 `event_projection` 与 query indexes
 - Sprint 3 Step 3.2 完成 projection consistency check：以 canonical detail 的 deterministic checksum 判定 `missing` / `stale` / `ok`
 - Sprint 3 Step 3.2 完成事件生产链路挂接：`persistResolvedEvent` 在 canonical event transaction 完成后刷新 Investment Event Projection
+- Sprint 3 Step 3.3 完成 Investment Query Service：latest/search/entity 读取 `EventProjectionTable`，返回 backend-owned `InvestmentEventBrief`
+- Sprint 3 Step 3.3 完成 provider 主查询切换：`/api/investment-events/latest`、`/api/investment-events/search`、`/api/investment-events/entity` 已改为消费 Investment Query Service
+- Sprint 3 Step 3.3 完成 projection migration backfill 入口：新增 `pnpm events:backfill-projections`，用于把已有 canonical events 补齐到 `event_projection`
+- Sprint 3 Step 3.3 完成 shadow validation helper：新增 projection query result 与 legacy canonical query result 的 ID drift comparator
 
 ## 3. 进行中
 
-- Sprint 3 Step 3.3：Investment Query Service 与 latest / search / entity 主查询切换
+- Sprint 3 Step 3.4：Watchlist / related-events 索引策略
 
 ## 4. Blockers / 风险
 
@@ -74,7 +78,7 @@
 - 后续实现必须持续检查跨业务线 import、跨业务线 SQL join、跨业务线 fallback，避免短期共享基础设施演变成长期业务耦合
 - 后续 sprint 设计必须写明它推进的最终目标模块、临时兼容路径退出条件和 backlog-level definition of done 影响
 - SQL owner declaration 已对 Sprint 2 新增 news / shared-source SQL 落地；Sprint 3 起必须扩展到 event projection / query indexes / watchlist match / related-events query model
-- Sprint 3 / Sprint 4 的 route-level 切换顺序尚未在具体 sprint 设计中细化
+- Sprint 4 的 detail / watchlist / related-events route-level 切换顺序仍需在具体 sprint 实施中细化
 - 额外运行 `pnpm events:check-quality` 当前失败，blocker 是既有 Tier A 初始 canonical 延迟 P95 24,023,959ms > 300,000ms；这不是 Sprint 2 code gate 项，但必须在后续事件线性能 sprint 中处理
 
 ## 5. 验证记录
@@ -162,15 +166,24 @@
 - Sprint 3 Step 3.2 集成验证：`pnpm test -- server/services/event-engine/projection-pipeline.test.ts server/database/event-projections.test.ts server/services/event-engine/replay.test.ts` 通过，40 个 test files / 277 tests
 - Sprint 3 Step 3.2 类型验证：`pnpm typecheck` 通过
 - Sprint 3 Step 3.2 build 验证：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Sprint 3 Step 3.3 TDD red：新增 `server/services/investment-query/service.test.ts` 后缺失 `#/services/investment-query/service` 模块
+- Sprint 3 Step 3.3 TDD green：实现 `InvestmentQueryService`、`EventProjectionTable.listProjections/countProjections` 和 route 切换后，`pnpm test -- server/services/investment-query/service.test.ts server/database/event-projections.test.ts server/services/event-engine/projection-pipeline.test.ts` 通过，41 个 test files / 280 tests
+- Sprint 3 Step 3.3 migration 验证：`pnpm events:backfill-projections --limit 400` 成功，扫描 400，写入 400，缺失 canonical 0
+- Sprint 3 Step 3.3 类型验证：`pnpm typecheck` 通过
+- Sprint 3 Step 3.3 build 验证：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Sprint 3 Step 3.3 服务验证：`./scripts/service.sh restart` 后 launchd 服务运行，监听 `http://[::]:3000`
+- Sprint 3 Step 3.3 live API smoke：`GET /api/investment-events/latest?limit=5` 返回 5 items / totalCount 446；`GET /api/investment-events/search?q=AI&limit=3` 返回 3 items / totalCount 43；`GET /api/investment-events/entity?entity=贵州茅台&limit=3` 返回 1 item / totalCount 1
+- Sprint 3 Step 3.3 shadow helper 验证：`pnpm test -- server/services/investment-query/service.test.ts server/services/investment-query/shadow.test.ts server/database/event-projections.test.ts server/services/event-engine/projection-pipeline.test.ts` 通过，42 个 test files / 283 tests
+- Sprint 3 Step 3.3 shadow helper 类型验证：`pnpm typecheck` 通过
 
 尚未完成：
 
-- query model shadow validation
+- Sprint 3 gate 的 live-data shadow comparison 汇总
 - Sprint 3 / Sprint 4 route-level 切换清单
 
 ## 6. 下一步
 
-1. 提交 Sprint 3 Step 3.2 projection 写入管线，保持 `data.db` 等无关本地文件不入库
-2. Sprint 3 Step 3.3：实现 Investment Query Service 并切换 latest/search/entity
-3. Sprint 3 Step 3.4：补 watchlist / related-events 索引策略测试
-4. Sprint 3 gate：运行完整 code gate、事件线质量 gate 与性能 baseline 对比
+1. 提交 Sprint 3 Step 3.3 Investment Query Service 与 route 切换，保持 `data.db` 等无关本地文件不入库
+2. Sprint 3 Step 3.4：补 watchlist / related-events 索引策略测试
+3. Sprint 3 gate：运行完整 code gate、事件线质量 gate 与性能 baseline 对比
+4. Sprint 4：继续切换 detail / watchlist / related-events / MCP read tools

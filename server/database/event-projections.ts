@@ -1,6 +1,7 @@
 import process from "node:process"
 import type { Database } from "db0"
-import type { InvestmentEventBrief, InvestmentEventDetail } from "@shared/types"
+import type { AffectedMarket, DirectionalView, EventSourceKind } from "@shared/event-profile"
+import type { EventSubType, EventType, InvestmentEventBrief, InvestmentEventDetail, SourceID } from "@shared/types"
 import { declareSqlAccess } from "#/database/sql-ownership"
 
 export const REQUIRED_EVENT_QUERY_INDEX_NAMES = [
@@ -42,6 +43,9 @@ interface EventProjectionRow {
   canonical_updated_at: number
   canonical_checksum: string
   repair_status: "ok" | "stale" | "repair_required"
+  event_type: EventType | null
+  event_subtype: EventSubType | null
+  source_kind: EventSourceKind | null
   event_family: string
   action_bucket: string
   directional_view: string
@@ -51,6 +55,8 @@ interface EventProjectionRow {
   latest_lifecycle_at: number | null
   published_at: number | null
   ingested_at: number | null
+  series_key: string | null
+  period_key: string | null
   primary_subject_json: string | null
   affected_markets_json: string
   topic_tags_json: string
@@ -75,6 +81,12 @@ export interface EventProjectionInput {
   canonicalChecksum: string
   brief: InvestmentEventBrief
   detail?: InvestmentEventDetail
+  eventType?: EventType
+  eventSubType?: EventSubType
+  sourceKind?: EventSourceKind
+  sourceIds?: SourceID[]
+  seriesKey?: string
+  periodKey?: string
   indexedEntities?: string[]
   relatedEventIds?: string[]
   watchlistKeys?: string[]
@@ -98,6 +110,27 @@ export interface EventQueryIndexEntry {
   rankScore: number
   sortTime: number
   metadata: Record<string, unknown>
+}
+
+export interface EventProjectionQueryOptions {
+  limit?: number
+  indexName?: EventQueryIndexName
+  indexValue?: string
+  q?: string
+  eventType?: EventType
+  eventSubType?: EventSubType
+  sourceId?: SourceID
+  sourceIds?: SourceID[]
+  topic?: string
+  market?: AffectedMarket
+  directionalView?: DirectionalView
+  minMaterialityScore?: number
+  minAuthorityScore?: number
+  changedSince?: number
+  lifecycleAfter?: number
+  seriesKey?: string
+  periodKey?: string
+  sortBy?: "latest" | "investment" | "changed"
 }
 
 function unwrapRows<T>(result: T[] | { results?: T[] }): T[] {
@@ -128,6 +161,110 @@ function getSortTime(brief: InvestmentEventBrief) {
 
 function getRankScore(brief: InvestmentEventBrief) {
   return (brief.materialityScore * 0.4) + (brief.tradabilityScore * 0.35) + (brief.authorityScore * 0.25)
+}
+
+function jsonArrayContains(value: string) {
+  return `%\"${value}\"%`
+}
+
+function normalizeEntityIndexValues(values: string[]) {
+  return uniqueValues(values.flatMap(value => [value, value.toLowerCase()]))
+}
+
+function buildProjectionQueryParts(options: EventProjectionQueryOptions) {
+  const joins: string[] = []
+  const clauses = ["p.repair_status = 'ok'"]
+  const params: Array<string | number> = []
+  const lifecycleAfter = options.lifecycleAfter ?? options.changedSince
+
+  if (options.indexName && options.indexValue) {
+    joins.push(`
+      INNER JOIN event_query_indexes i
+        ON i.event_id = p.event_id
+       AND i.index_name = ?
+       AND i.index_value = ?
+    `)
+    params.push(options.indexName, options.indexValue)
+  }
+  if (options.q) {
+    clauses.push("p.search_text LIKE ?")
+    params.push(`%${options.q.toLowerCase()}%`)
+  }
+  if (options.eventType) {
+    clauses.push("p.event_type = ?")
+    params.push(options.eventType)
+  }
+  if (options.eventSubType) {
+    clauses.push("p.event_subtype = ?")
+    params.push(options.eventSubType)
+  }
+  if (options.sourceId) {
+    clauses.push("p.source_ids_json LIKE ?")
+    params.push(jsonArrayContains(options.sourceId))
+  }
+  if (options.sourceIds?.length) {
+    clauses.push(`(${options.sourceIds.map(() => "p.source_ids_json LIKE ?").join(" OR ")})`)
+    params.push(...options.sourceIds.map(jsonArrayContains))
+  }
+  if (options.topic) {
+    clauses.push("p.topic_tags_json LIKE ?")
+    params.push(jsonArrayContains(options.topic))
+  }
+  if (options.market) {
+    clauses.push("p.affected_markets_json LIKE ?")
+    params.push(jsonArrayContains(options.market))
+  }
+  if (options.directionalView) {
+    clauses.push("p.directional_view = ?")
+    params.push(options.directionalView)
+  }
+  if (options.minMaterialityScore !== undefined) {
+    clauses.push("p.materiality_score >= ?")
+    params.push(options.minMaterialityScore)
+  }
+  if (options.minAuthorityScore !== undefined) {
+    clauses.push("p.authority_score >= ?")
+    params.push(options.minAuthorityScore)
+  }
+  if (lifecycleAfter !== undefined) {
+    clauses.push("COALESCE(p.latest_lifecycle_at, 0) >= ?")
+    params.push(lifecycleAfter)
+  }
+  if (options.seriesKey) {
+    clauses.push("p.series_key = ?")
+    params.push(options.seriesKey)
+  }
+  if (options.periodKey) {
+    clauses.push("p.period_key = ?")
+    params.push(options.periodKey)
+  }
+
+  return {
+    joins: joins.join("\n"),
+    where: `WHERE ${clauses.join(" AND ")}`,
+    params,
+  }
+}
+
+function buildProjectionOrderBy(sortBy: EventProjectionQueryOptions["sortBy"]) {
+  if (sortBy === "changed") {
+    return `
+      ORDER BY COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC,
+               COALESCE(p.published_at, p.ingested_at, 0) DESC,
+               p.ingested_at DESC
+    `
+  }
+  if (sortBy === "latest") {
+    return `
+      ORDER BY COALESCE(p.published_at, p.latest_lifecycle_at, p.ingested_at, 0) DESC,
+               COALESCE(p.latest_lifecycle_at, p.ingested_at, 0) DESC,
+               p.ingested_at DESC
+    `
+  }
+  return `
+    ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
+             COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
+  `
 }
 
 function toRecord(row: EventProjectionRow): EventProjectionRecord {
@@ -170,6 +307,9 @@ export class EventProjectionTable {
         canonical_updated_at INTEGER NOT NULL,
         canonical_checksum TEXT NOT NULL,
         repair_status TEXT NOT NULL,
+        event_type TEXT,
+        event_subtype TEXT,
+        source_kind TEXT,
         event_family TEXT NOT NULL,
         action_bucket TEXT NOT NULL,
         directional_view TEXT NOT NULL,
@@ -179,6 +319,8 @@ export class EventProjectionTable {
         latest_lifecycle_at INTEGER,
         published_at INTEGER,
         ingested_at INTEGER,
+        series_key TEXT,
+        period_key TEXT,
         primary_subject_json TEXT,
         affected_markets_json TEXT NOT NULL,
         topic_tags_json TEXT NOT NULL,
@@ -188,6 +330,11 @@ export class EventProjectionTable {
         detail_json TEXT
       );
     `).run()
+    await this.ensureColumn("event_projection", "event_type", "TEXT")
+    await this.ensureColumn("event_projection", "event_subtype", "TEXT")
+    await this.ensureColumn("event_projection", "source_kind", "TEXT")
+    await this.ensureColumn("event_projection", "series_key", "TEXT")
+    await this.ensureColumn("event_projection", "period_key", "TEXT")
     await this.db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_event_projection_family_sort
       ON event_projection(event_family, latest_lifecycle_at DESC, published_at DESC, ingested_at DESC);
@@ -195,6 +342,14 @@ export class EventProjectionTable {
     await this.db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_event_projection_action_sort
       ON event_projection(action_bucket, latest_lifecycle_at DESC, published_at DESC, ingested_at DESC);
+    `).run()
+    await this.db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_event_projection_type_sort
+      ON event_projection(event_type, event_subtype, latest_lifecycle_at DESC, published_at DESC, ingested_at DESC);
+    `).run()
+    await this.db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_event_projection_series
+      ON event_projection(series_key, period_key, latest_lifecycle_at DESC);
     `).run()
     await this.db.prepare(`
       CREATE TABLE IF NOT EXISTS event_query_indexes (
@@ -230,6 +385,9 @@ export class EventProjectionTable {
         canonical_updated_at,
         canonical_checksum,
         repair_status,
+        event_type,
+        event_subtype,
+        source_kind,
         event_family,
         action_bucket,
         directional_view,
@@ -239,6 +397,8 @@ export class EventProjectionTable {
         latest_lifecycle_at,
         published_at,
         ingested_at,
+        series_key,
+        period_key,
         primary_subject_json,
         affected_markets_json,
         topic_tags_json,
@@ -247,13 +407,16 @@ export class EventProjectionTable {
         brief_json,
         detail_json
       )
-      VALUES (?, 1, ?, ?, ?, 'ok', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, 1, ?, ?, ?, 'ok', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(event_id) DO UPDATE SET
         projection_version = event_projection.projection_version + 1,
         projection_updated_at = excluded.projection_updated_at,
         canonical_updated_at = excluded.canonical_updated_at,
         canonical_checksum = excluded.canonical_checksum,
         repair_status = 'ok',
+        event_type = excluded.event_type,
+        event_subtype = excluded.event_subtype,
+        source_kind = excluded.source_kind,
         event_family = excluded.event_family,
         action_bucket = excluded.action_bucket,
         directional_view = excluded.directional_view,
@@ -263,6 +426,8 @@ export class EventProjectionTable {
         latest_lifecycle_at = excluded.latest_lifecycle_at,
         published_at = excluded.published_at,
         ingested_at = excluded.ingested_at,
+        series_key = excluded.series_key,
+        period_key = excluded.period_key,
         primary_subject_json = excluded.primary_subject_json,
         affected_markets_json = excluded.affected_markets_json,
         topic_tags_json = excluded.topic_tags_json,
@@ -275,6 +440,9 @@ export class EventProjectionTable {
       now,
       input.canonicalUpdatedAt,
       input.canonicalChecksum,
+      input.eventType ?? input.brief.eventType ?? null,
+      input.eventSubType ?? null,
+      input.sourceKind ?? input.brief.sourceKind ?? null,
       input.brief.eventFamily,
       input.brief.actionBucket,
       input.brief.signalDirection,
@@ -284,10 +452,12 @@ export class EventProjectionTable {
       input.brief.latestLifecycleAt ?? null,
       input.brief.publishedAt ?? null,
       input.brief.ingestedAt ?? null,
+      input.seriesKey ?? input.brief.seriesKey ?? null,
+      input.periodKey ?? input.brief.periodKey ?? null,
       input.brief.primarySubject ? JSON.stringify(input.brief.primarySubject) : null,
       JSON.stringify(input.brief.affectedMarkets),
       JSON.stringify(input.brief.relatedTopics),
-      JSON.stringify([input.brief.sourceSummary.primarySourceId].filter(Boolean)),
+      JSON.stringify(input.sourceIds ?? [input.brief.sourceSummary.primarySourceId].filter(Boolean)),
       buildSearchText(input.brief),
       JSON.stringify(input.brief),
       input.detail ? JSON.stringify(input.detail) : null,
@@ -317,6 +487,30 @@ export class EventProjectionTable {
     return rows.map(toIndexEntry)
   }
 
+  async listProjections(options: EventProjectionQueryOptions): Promise<EventProjectionRecord[]> {
+    const query = buildProjectionQueryParts(options)
+    const rows = unwrapRows(await this.db.prepare(`
+      SELECT p.*
+      FROM event_projection p
+      ${query.joins}
+      ${query.where}
+      ${buildProjectionOrderBy(options.sortBy)}
+      LIMIT ?
+    `).all(...query.params, options.limit ?? 20) as EventProjectionRow[] | { results?: EventProjectionRow[] })
+    return rows.map(toRecord)
+  }
+
+  async countProjections(options: EventProjectionQueryOptions): Promise<number> {
+    const query = buildProjectionQueryParts(options)
+    const row = await this.db.prepare(`
+      SELECT COUNT(DISTINCT p.event_id) AS total_count
+      FROM event_projection p
+      ${query.joins}
+      ${query.where}
+    `).get(...query.params) as { total_count?: number } | undefined
+    return Number(row?.total_count) || 0
+  }
+
   private async insertIndexEntries(input: EventProjectionInput, sortTime: number, rankScore: number) {
     const insert = this.db.prepare(`
       INSERT OR REPLACE INTO event_query_indexes (
@@ -332,10 +526,10 @@ export class EventProjectionTable {
         input.brief.primarySubject?.label,
         ...input.brief.relatedTopics,
       ]).map(value => ({ indexName: "search" as const, indexValue: value.toLowerCase(), eventId: input.eventId })),
-      ...uniqueValues([
+      ...normalizeEntityIndexValues(uniqueValues([
         ...input.brief.affectedEntities.flatMap(entity => [entity.entityId, entity.label, entity.code]),
         ...input.indexedEntities ?? [],
-      ]).map(value => ({ indexName: "entity" as const, indexValue: value, eventId: input.eventId })),
+      ])).map(value => ({ indexName: "entity" as const, indexValue: value, eventId: input.eventId })),
       ...uniqueValues(input.watchlistKeys ?? []).map(value => ({ indexName: "watchlist" as const, indexValue: value, eventId: input.eventId })),
       ...uniqueValues(input.relatedEventIds ?? []).map(value => ({
         indexName: "related" as const,
@@ -355,6 +549,12 @@ export class EventProjectionTable {
         JSON.stringify(entry.metadata ?? {}),
       )
     }
+  }
+
+  private async ensureColumn(table: string, column: string, definition: string) {
+    const rows = unwrapRows<{ name: string }>(await this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }> | { results?: Array<{ name: string }> })
+    if (rows.some(row => row.name === column)) return
+    await this.db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run()
   }
 }
 

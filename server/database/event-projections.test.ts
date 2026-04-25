@@ -114,6 +114,12 @@ describe("eventProjectionTable", () => {
       canonicalChecksum: "checksum-1",
       brief: brief(),
       detail: detail(),
+      eventType: "policy",
+      eventSubType: "industrial_policy",
+      sourceKind: "media_fast_feed",
+      sourceIds: ["wallstreetcn-quick"],
+      seriesKey: "policy-ai",
+      periodKey: "2026",
       indexedEntities: ["人工智能"],
       relatedEventIds: ["evt_related"],
       watchlistKeys: ["wl_ai"],
@@ -140,5 +146,30 @@ describe("eventProjectionTable", () => {
     await expect(table.listIndexEntries("detail", "evt_1")).resolves.toMatchObject([
       { eventId: "evt_1" },
     ])
+    await expect(table.listProjections({
+      indexName: "latest",
+      indexValue: "all",
+      eventType: "policy",
+      eventSubType: "industrial_policy",
+      sourceId: "wallstreetcn-quick",
+      topic: "ai-computing",
+      market: "A",
+      seriesKey: "policy-ai",
+      periodKey: "2026",
+      limit: 5,
+    })).resolves.toMatchObject([
+      { eventId: "evt_1" },
+    ])
+    await expect(table.listProjections({
+      indexName: "entity",
+      indexValue: "人工智能",
+      limit: 5,
+    })).resolves.toMatchObject([
+      { eventId: "evt_1" },
+    ])
+    await expect(table.countProjections({
+      q: "政策",
+      limit: 5,
+    })).resolves.toBe(1)
   })
 })

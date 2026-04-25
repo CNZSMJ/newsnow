@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { EventDetail } from "@shared/types"
 import type { EventProjectionInput, EventProjectionRecord } from "#/database/event-projections"
 import {
+  backfillInvestmentProjections,
   checkInvestmentProjectionConsistency,
   computeInvestmentProjectionChecksum,
   refreshInvestmentProjectionForEvent,
@@ -192,6 +193,38 @@ describe("investment projection pipeline", () => {
       status: "stale",
       expectedChecksum: computeInvestmentProjectionChecksum(detail),
       actualChecksum: "old-checksum",
+    })
+  })
+
+  it("backfills missing projection rows from canonical event list", async () => {
+    const detail = canonicalEvent()
+    const store = new MemoryProjectionStore()
+    const canonicalStore = {
+      async listEvents() {
+        return [{ eventId: detail.eventId }, { eventId: "missing" }]
+      },
+      async getEventDetail(eventId: string) {
+        return eventId === detail.eventId ? detail : undefined
+      },
+    }
+
+    await expect(backfillInvestmentProjections(canonicalStore, store, {
+      limit: 10,
+    })).resolves.toEqual({
+      scanned: 2,
+      written: 1,
+      skipped: 0,
+      missingCanonical: 1,
+    })
+    expect(store.upserts).toHaveLength(1)
+
+    await expect(backfillInvestmentProjections(canonicalStore, store, {
+      limit: 10,
+    })).resolves.toEqual({
+      scanned: 2,
+      written: 0,
+      skipped: 1,
+      missingCanonical: 1,
     })
   })
 })

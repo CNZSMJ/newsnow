@@ -26,6 +26,7 @@
     "events:repair-entities": "tsx --tsconfig tsconfig.node.json ./scripts/repair-event-entities.ts",
     "events:repair-explicit-tickers": "tsx --tsconfig tsconfig.node.json ./scripts/repair-explicit-ticker-entities.ts",
     "events:repair-timeline": "tsx --tsconfig tsconfig.node.json ./scripts/repair-event-timeline.ts",
+    "events:backfill-projections": "tsx --tsconfig tsconfig.node.json ./scripts/backfill-event-projections.ts",
     "events:check-quality": "tsx --tsconfig tsconfig.node.json ./scripts/evaluate-event-quality-gates.ts",
     "events:check-slos": "tsx --tsconfig tsconfig.node.json ./scripts/evaluate-event-quality-gates.ts",
     "events:ops-report": "tsx --tsconfig tsconfig.node.json ./scripts/report-event-operations.ts",
