@@ -30,10 +30,47 @@ function clampPositiveInteger(value: unknown, defaultValue: number, maxValue: nu
   return Math.min(Math.max(1, Math.floor(parsed)), maxValue)
 }
 
+function wantsDiagnostics(query: Record<string, unknown>) {
+  return query.diagnostics === "true"
+    || query.mode === "diagnostics"
+    || query.full === "true"
+}
+
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const eventTable = await getEventTable()
   const updatedTime = Date.now()
+  const worker = getEventBusWorkerStatus()
+  const liveExtractorStatus = getLiveSubjectRoleExtractorStatus()
+
+  if (!wantsDiagnostics(query)) {
+    const databaseReady = Boolean(eventTable)
+    return {
+      status: "success",
+      mode: "light",
+      updatedTime,
+      worker,
+      versions: EVENT_ENGINE_VERSIONS,
+      database: {
+        ready: databaseReady,
+      },
+      llm: {
+        enabled: liveExtractorStatus.enabled,
+        provider: liveExtractorStatus.provider,
+        model: liveExtractorStatus.model,
+        promptId: liveExtractorStatus.promptId,
+        promptVersion: liveExtractorStatus.promptVersion,
+        missingConfig: liveExtractorStatus.missingConfig,
+        latencyMs: null,
+        fallbackRate: null,
+      },
+      health: {
+        healthy: databaseReady && (!worker.enabled || (worker.started && !worker.lastError)),
+        lastError: worker.lastError,
+      },
+    }
+  }
+
   const operationalWindowHours = clampPositiveNumber(
     query.windowHours ?? query.hours,
     DEFAULT_OPERATIONAL_WINDOW_HOURS,
@@ -149,12 +186,12 @@ export default defineEventHandler(async (event) => {
   const extractorFailureRate = extractionAttempts ? Number((extractorFailure / extractionAttempts).toFixed(4)) : 0
   const mergeCollisionRate = extractorSuccess ? Number((mergeCollisions / extractorSuccess).toFixed(4)) : 0
   const qualityGate = evaluateEventQualityGates(qualitySnapshot, { evaluatedAt: updatedTime })
-  const liveExtractorStatus = getLiveSubjectRoleExtractorStatus()
 
   return {
     status: "success",
+    mode: "diagnostics",
     updatedTime,
-    worker: getEventBusWorkerStatus(),
+    worker,
     versions: EVENT_ENGINE_VERSIONS,
     retention: rawRange,
     operations: {

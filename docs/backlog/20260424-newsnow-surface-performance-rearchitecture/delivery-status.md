@@ -1,6 +1,6 @@
 # Delivery Status
 
-状态：Sprint 4 gate 通过，Sprint 5 待执行
+状态：最终 gate 通过；无已知未实现性能重构项
 最后更新：2026-04-25
 范围：`newsnow` 双业务线系统性性能重构的实施状态、blocker、验证记录和下一步
 
@@ -10,13 +10,14 @@
 - Sprint 2 已完成：News Snapshot Model 与新闻 Surface 收敛
 - Sprint 3 已完成：Investment Event Query Model 主查询收敛
 - 阶段 0 已完成：文档、关键代码和现有验证命令已确认
+- Sprint 4 已完成：detail / watchlist / related-events / MCP read tools 收敛，Sprint 4 gate 已通过
+- Sprint 5 已完成：frontend cleanup、ops decoupling、benchmark 与回归验证工程化，最终 gate 已通过
 - 已创建单一 backlog 主题
 - 已完成前期代码审查和文档边界校正
 - Sprint 1 Step 1.1-1.6 已完成；Sprint 1 gate 的 benchmark、SQL plan、MCP transport、frontend request-count 和 worker active / inactive 基线入口已补齐
 - Sprint 1 gate 已通过：`pnpm test`、`pnpm typecheck`、`pnpm build` 均通过，本地服务已按规范重启
 - Sprint 2 Step 2.1-2.6 已完成；Sprint 2 code gate 已通过
 - Sprint 3 Step 3.1-3.4 已完成；Sprint 3 gate 已通过
-- Sprint 4 已完成：detail / watchlist / related-events / MCP read tools 收敛，Sprint 4 gate 已通过
 
 ## 2. 已完成内容
 
@@ -77,20 +78,25 @@
 - Sprint 4 删除旧 route-level related-events fan-out helper：`server/services/event-engine/related-events.ts` 已移除，避免后续 surface 绕过 projection query model
 - Sprint 4 修正 benchmark 干扰：`pnpm perf:surface-baseline` 的 detail breakdown 改为只读 projection，不再在运行态对 projection 表执行 DDL 初始化，避免与服务进程 SQLite 写入争锁
 - Sprint 4 扩展 SQL query plan 覆盖：`pnpm perf:query-plans` 现在覆盖 investment detail projection、related-events lookup 和 watchlist projection scan
+- Sprint 5 完成 watchlist detail frontend cleanup：`/watchlists/$watchlistId` 现在通过 `/api/investment-watchlists/:id` 单次 detail 请求传入 `focus`，不再因 focus mode 额外请求 `/events`
+- Sprint 5 完成 provider watchlist detail adapter 收敛：`/api/investment-watchlists/:id` 支持 `focus` 与 `event_family` 过滤，detail 与 events adapter 共享 Investment Query Service 输出，不新增 route-level 投资语义
+- Sprint 5 完成 ops decoupling：`/api/ops/events/status` 默认只返回 lightweight worker / version / database / LLM / health 状态，只有 `mode=diagnostics`、`diagnostics=true` 或 `full=true` 才触发 heavy diagnostics
+- Sprint 5 完成 benchmark 去重型诊断依赖：`pnpm perf:surface-baseline` 的 worker state 读取改为 `/api/ops/events/status?mode=light`
+- Sprint 5 完成当前生效文档同步：`docs/api-contract.md` 与 `docs/event-operations-runbook.md` 已记录 lightweight status 默认行为与 explicit diagnostics 入口
 
 ## 3. 进行中
 
-- Sprint 5 待执行：frontend cleanup、ops decoupling、benchmark 与回归验证工程化
+- 无进行中实现项
+- 后续只保留持续观测、真实 watchlist 样本补录和常规性能回归对比
 
 ## 4. Blockers / 风险
 
-- 新闻 source getter 的上游 latency / error rate / cache hit ratio 尚未量化
+- 当前无阻塞最终 gate 的 blocker
+- 新闻 source getter 的逐源上游 latency / error rate 尚未作为独立 public observability contract 暴露；本 backlog 的关闭依据是新闻在线请求已收敛到 News Query Model，且 surface latency、frontend request-count 和 read-model fallback 行为已通过验证入口记录
 - docs 当前生效文档偏 investment event 线，后续如果要更新顶层事实，需要单独达成共识
-- 后续实现必须持续检查跨业务线 import、跨业务线 SQL join、跨业务线 fallback，避免短期共享基础设施演变成长期业务耦合
-- 后续 sprint 设计必须写明它推进的最终目标模块、临时兼容路径退出条件和 backlog-level definition of done 影响
-- SQL owner declaration 已对 Sprint 2 新增 news / shared-source SQL 落地；Sprint 3 起必须扩展到 event projection / query indexes / watchlist match / related-events query model
-- 本地当前没有持久 watchlist 样本，因此 Sprint 4 live surface benchmark 的 `watchlistId` 为 `null`；watchlist event-read 已由 unit tests、route code 和 query-plan 覆盖，但尚未记录持久样本的 HTTP latency
-- Sprint 5 仍需验证 frontend navigation request-count、事件页 / watchlist 页重复派生计算、listener / timer cleanup 和 ops lightweight status / diagnostics snapshot 边界
+- 后续实现必须继续检查跨业务线 import、跨业务线 SQL join、跨业务线 fallback，避免短期共享基础设施演变成长期业务耦合
+- SQL owner declaration 已覆盖本 backlog 新增 news / shared-source / event projection / query indexes；未来新增表仍必须先声明 owner
+- 本地当前没有持久 watchlist 样本，因此最终 live surface benchmark 的 `watchlistId` 为 `null`，也无法记录 `/watchlists/$watchlistId` 页面 live request-count；watchlist event-read 已由 route code、Investment Query Service 测试和 query-plan 覆盖
 
 ## 5. 验证记录
 
@@ -210,14 +216,27 @@
 - Sprint 4 detail projection benchmark：样本事件 `evt_ae4e82663c5651f9adc8618e1948f4f0`，HTTP detail 5.01ms，projection detail query 5.78ms，projection related-events query 9.25ms，related query count 4，scanLimit 24
 - Sprint 4 query plan：`pnpm perf:query-plans` 通过，9 个 plan；investment detail 命中 `event_projection` primary key，related lookup 命中 `idx_event_query_indexes_lookup` + `event_projection`，watchlist projection scan 命中 `event_query_indexes` + `event_projection`
 - Sprint 4 ops / quality：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 通过，release status `insufficient_data`，无 blocking failure
+- Sprint 5 full test：`pnpm test` 通过，41 个 test files / 281 tests
+- Sprint 5 typecheck：`pnpm typecheck` 通过
+- Sprint 5 build：`pnpm build` 通过；仍存在既有 duplicate import、chunk size、Browserslist 和 npm config warning
+- Sprint 5 服务验证：build 后通过 `./scripts/service.sh restart` 重启，`./scripts/service.sh status` 显示 launchd 服务运行中，pid 40873
+- Sprint 5 lightweight ops status：`GET /api/ops/events/status?mode=light` 返回 200，耗时约 20.59ms，`mode=light`，`database.ready=true`，`health.healthy=true`
+- Sprint 5 diagnostics status：`GET /api/ops/events/status?mode=diagnostics&diagnosticLimit=1` 返回 200，耗时约 2.71s，`mode=diagnostics`，包含 retention / operations / quality / metrics
+- Sprint 5 actual MCP transport smoke：`pnpm perf:mcp-smoke` 通过；`get_hotest_latest_news` 33.6ms，`event_get_latest_events` 124.61ms，均有 `structuredContent`
+- Sprint 5 surface benchmark：`pnpm perf:surface-baseline -- --iterations 1` 四类 surface 覆盖通过；`news_user` P50 12.09ms / P95 20.97ms，`news_agent` 3.48ms，`investment_user` P50 18.49ms / P95 34.88ms，`investment_agent` P50 12.41ms / P95 22.83ms
+- Sprint 5 detail projection benchmark：样本事件 `evt_0c360a3c1972c9cf4fb76ab73dbd1489`，HTTP detail 18.49ms，projection detail query 24.59ms，projection related-events query 14.11ms，related query count 4，scanLimit 24
+- Sprint 5 query plan：`pnpm perf:query-plans` 通过，9 个 plan；investment detail 命中 `event_projection` primary key，related lookup 命中 `idx_event_query_indexes_lookup` + `event_projection`，watchlist projection scan 命中 `event_query_indexes` + `event_projection`
+- Sprint 5 frontend request-count 复测：`/` 本地 API 请求 2 个，`/events` 3 个，`/watchlists` 2 个，`/events/evt_0c360a3c1972c9cf4fb76ab73dbd1489` 3 个；本地当前无持久 watchlist，无法复测 `/watchlists/$watchlistId`
+- Sprint 5 ops / quality：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 通过，release status `insufficient_data`，无 blocking failure
 
 尚未完成：
 
-- Sprint 5 frontend cleanup、ops decoupling、benchmark 与回归验证工程化
-- backlog-level definition of done 的最终关闭验收
+- 无未实现代码项
+- 无 blocking validation failure
+- 本地缺少持久 watchlist 样本，后续一旦存在真实 watchlist，应补录 `/watchlists/$watchlistId` live request-count 与 latency 样本
 
 ## 6. 下一步
 
-1. Sprint 5：复测并收敛 frontend navigation request-count、事件页 / watchlist 页重复派生计算和 listener / timer cleanup
-2. Sprint 5：拆分 lightweight ops status 与 heavy diagnostics，避免 ops 入口拖慢在线 surface
-3. backlog close：用最终目标验收清单复核所有已发现性能问题、临时路径、owner declaration 和回滚边界
+1. 将本 backlog 进入常规性能回归观测：继续跑 `pnpm perf:surface-baseline`、`pnpm perf:mcp-smoke`、`pnpm perf:query-plans`、`pnpm events:ops-report`、`pnpm events:check-quality`
+2. 出现真实 watchlist 样本后，补录 `/watchlists/$watchlistId` live request-count 与 latency，确认 frontend 单请求 detail 路径在真实数据上持续成立
+3. 未来新增表、route 或 surface 时，继续按 SQL owner declaration、双业务线解耦矩阵和 backlog-level definition of done 执行

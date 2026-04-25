@@ -127,7 +127,8 @@ Latency remediation 要优先处理那些直接影响盘中或开盘决策的 so
 - `pnpm events:ops-report -- --hours 24 --limit 20`
 - `pnpm events:check-quality`
 - `pnpm events:blind-review -- --hours 24 --scan-limit 20 --random 2 --high-risk 3`
-- `curl http://127.0.0.1:3000/api/ops/events/status`
+- `curl http://127.0.0.1:3000/api/ops/events/status?mode=light`
+- 需要完整诊断时再跑 `curl "http://127.0.0.1:3000/api/ops/events/status?mode=diagnostics&diagnosticLimit=20"`
 
 最低限度要看清楚：
 

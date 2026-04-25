@@ -123,7 +123,7 @@ async function readJson<T>(baseUrl: string, path: string, init?: RequestInit) {
 
 async function getWorkerState(baseUrl: string): Promise<WorkerState> {
   try {
-    const status = await readJson<{ worker?: { running?: boolean } }>(baseUrl, "/api/ops/events/status?diagnosticLimit=1")
+    const status = await readJson<{ worker?: { running?: boolean } }>(baseUrl, "/api/ops/events/status?mode=light")
     if (status.worker?.running) return "active"
     return "inactive"
   } catch {

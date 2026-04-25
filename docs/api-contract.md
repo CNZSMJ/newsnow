@@ -302,15 +302,26 @@
 
 用途：
 
-- 读取当前 worker、版本、保留、ops、LLM、quality、health、metrics 状态
+- 默认读取轻量 worker、版本、database、LLM 和 health 状态
+- 只有显式请求 diagnostics 时，才读取保留、ops、quality 和 metrics 诊断数据
 
 查询参数：
 
+- `mode=light`：轻量状态，默认值
+- `mode=diagnostics` 或 `diagnostics=true` 或 `full=true`：完整诊断状态
 - `windowHours` 或 `hours`
 - `diagnosticLimit` 或 `limit`
 - `staleThresholdMinutes` 或 `staleMinutes`
 
-响应主体：
+轻量响应主体：
+
+- `worker`
+- `versions`
+- `database`
+- `llm`
+- `health`
+
+诊断响应主体：
 
 - `worker`
 - `versions`

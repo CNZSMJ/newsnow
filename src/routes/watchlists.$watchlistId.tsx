@@ -41,21 +41,10 @@ function WatchlistDetailPage() {
         query: {
           limit: 30,
           sort: sortBy,
+          focus: focusMode === "all" ? undefined : focusMode,
         },
       })
-      if (focusMode === "all") return res.item
-
-      const eventsRes = await myFetch<{ status: "success", items: InvestmentEventBrief[] }>(`investment-watchlists/${watchlistId}/events`, {
-        query: {
-          limit: 30,
-          sort: sortBy,
-          focus: focusMode,
-        },
-      })
-      return {
-        ...res.item,
-        recentEvents: eventsRes.items,
-      }
+      return res.item
     },
     staleTime: 60 * 1000,
   })
