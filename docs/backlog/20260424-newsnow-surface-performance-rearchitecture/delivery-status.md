@@ -1,6 +1,6 @@
 # Delivery Status
 
-状态：最终 gate 通过；无已知未实现性能重构项
+状态：已完成；最终 gate 通过；无已知未实现性能重构项
 最后更新：2026-04-25
 范围：`newsnow` 双业务线系统性性能重构的实施状态、blocker、验证记录和下一步
 
@@ -244,14 +244,14 @@
 - Review follow-up query plan：`pnpm perf:query-plans` 通过，9 个 plan；watchlist index-seed scan 命中 `event_query_indexes` + `event_projection`
 - Review follow-up ops / quality：`pnpm events:ops-report` 通过；`pnpm events:check-quality` 通过，release status `insufficient_data`，无 blocking failure
 
-尚未完成：
+关闭时说明：
 
-- 无未实现代码项
+- 无 backlog 未完成实现项
 - 无 blocking validation failure
-- 本地缺少持久 watchlist 样本，后续一旦存在真实 watchlist，应补录 `/watchlists/$watchlistId` live request-count 与 latency 样本
+- 本地缺少持久 watchlist 样本，无法在关闭时补录 `/watchlists/$watchlistId` live request-count；这不是 backlog blocker，后续一旦出现真实 watchlist，归入常规性能观测补录
 
 ## 6. 下一步
 
-1. 将本 backlog 进入常规性能回归观测：继续跑 `pnpm perf:surface-baseline`、`pnpm perf:mcp-smoke`、`pnpm perf:query-plans`、`pnpm events:ops-report`、`pnpm events:check-quality`
+1. 本 backlog 进入常规性能回归观测：继续跑 `pnpm perf:surface-baseline`、`pnpm perf:mcp-smoke`、`pnpm perf:query-plans`、`pnpm events:ops-report`、`pnpm events:check-quality`
 2. 出现真实 watchlist 样本后，补录 `/watchlists/$watchlistId` live request-count 与 latency，确认 frontend 单请求 detail 路径在真实数据上持续成立
 3. 未来新增表、route 或 surface 时，继续按 SQL owner declaration、双业务线解耦矩阵和 backlog-level definition of done 执行

@@ -1,6 +1,6 @@
 # NewsNow Surface Performance Rearchitecture Product Spec
 
-状态：规划中
+状态：已完成；验收标准已通过最终 gate 验证
 最后更新：2026-04-25
 范围：`newsnow` 双业务线系统性性能优化的产品目标、范围、非目标和验收标准
 

@@ -1,5 +1,6 @@
 # Technical Design Review
 
+状态：审查完成；审查意见已在后续实施中闭环
 审查日期：2026-04-25（第四轮）
 审查范围：`20260424-newsnow-surface-performance-rearchitecture` 全套文档 + 关键代码交叉验证
 审查人：Claude Code (deepseek-v4-pro) + Antigravity (Claude Opus 4.6)
@@ -121,7 +122,7 @@
 
 - §7.3（新增）：二次审查结论
 - §7.4（新增）：合并终稿残留观察结论
-- §8 新增 3 项待确认问题
+- §8 新增 3 项待确认问题（后续实施中已闭环）
 
 ### delivery-status.md（+25 行，5.7KB → 7.9KB）
 
@@ -176,7 +177,7 @@ TD-11 纳入了二次审查的 4 条建议。TD-12 纳入了合并终稿的 4 �
 | product-spec.md §5 验收标准 → technical-design.md §3.5/§3.6/§5.1/§5.4/§7/§8 | ✅ 对应 |
 | product-spec.md §6 量化方式 → technical-design.md 验证入口表 | ✅ 覆盖 |
 | research.md §7.1\~§7.4 审查结论 → decisions.md TD-9\~TD-12 | ✅ 一致 |
-| research.md §8 待确认问题 → technical-design.md §6 Step 1 & §7 Sprint 1 必须产出 | ✅ 转化 |
+| research.md 原 §8 待确认问题 → technical-design.md §6 Step 1 & §7 Sprint 1 必须产出 | ✅ 转化；后续实施中已闭环 |
 | delivery-status.md §3/§4/§5/§6 → technical-design.md 新增约束 | ✅ 对应 |
 | 五份文档间无矛盾表述 | ✅ 一致 |
 

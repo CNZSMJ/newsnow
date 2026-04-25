@@ -1,8 +1,8 @@
 # NewsNow Surface Performance Rearchitecture Research
 
-状态：规划中
+状态：已完成；调研结论已进入决策、产品方案、技术方案和交付记录
 最后更新：2026-04-25
-范围：`newsnow` 双业务线的系统性性能问题调研、方案背景、证据和待确认问题
+范围：`newsnow` 双业务线的系统性性能问题调研、方案背景、证据和已闭环问题
 
 ## 1. 背景
 
@@ -168,8 +168,8 @@ Agent-facing interface：
 证据类型：
 
 - 当前阶段主要是代码结构风险确认
-- 尚未完成新闻线 live endpoint 压测
-- 尚未量化各 source getter 的上游 latency、error rate 和 cache hit ratio
+- 后续 Sprint 已补齐新闻 user / agent surface baseline、MCP transport smoke 和最终 gate 验证
+- 各 source getter 的逐源 upstream latency / error rate 可继续作为后续 observability contract 扩展项，但不再阻塞本 backlog 关闭
 
 ## 5. 系统性根因
 
@@ -291,15 +291,15 @@ Agent-facing interface：
 - 方案可以进入 Sprint 1，但 `source_fetch_runs` 存在当前代码位置与目标 owner 的张力；Sprint 1 必须把当前 `events.ts` 中的 DDL / DAO / writes / ops joins 标记为 migration bridge 或 cross-owner read，并给出分离 milestone
 - `neutral priority class` 当前仍是机制名称，缺少接口候选；Sprint 1 必须比较 in-process service、persistent queue table、event-bus / worker queue 等候选，并给出推荐方案
 
-## 8. 待确认问题
+## 8. 已闭环问题
 
-- 新闻业务线是否需要正式 provider HTTP contract，还是只保留 public news API contract
-- 新闻 agent-facing 输出是否需要结构化 response，而不是当前简单 markdown link list
-- news query model 的物理形态：继续使用 cache table 扩展，还是新增 source snapshot / source item table
-- investment event query model 的物理形态：projection table、materialized snapshot、index table 或混合方案
-- shared source runtime 是否需要独立 worker / queue，还是先在当前进程内做并发与刷新调度治理
-- ops diagnostics 是否采用定期快照表，还是按 surface 拆出 lightweight status API
-- 每条业务线的正式 SLO 指标和 baseline 数据采集方式
-- Sprint 3 / Sprint 4 的最终 route-level 切换清单和验收顺序需要在 Sprint 3 设计中确认
-- `source_fetch_runs` 从 event database module 迁移到 shared-source contract 的具体里程碑
-- neutral priority class interface 的最终实现形态
+- 新闻业务线 contract：本 backlog 不新增独立 provider HTTP contract；新闻 user-facing API 和新闻 MCP 统一经 News Query Service 读取。
+- 新闻 agent-facing 输出：`get_hotest_latest_news` 已接入 News Query Service，并提供 `structuredContent`。
+- News Query Model 物理形态：采用 news-owned `source_snapshots` + `source_items`；原 `cache` 只作为 migration fallback / compatibility bridge。
+- Investment Event Query Model 物理形态：采用 `event_projection` + `event_query_indexes`，并覆盖 latest / search / entity / topic / source / market / watchlist / detail / related index。
+- Shared Source Runtime 形态：第一阶段采用 in-process `SharedSourceRuntime` + neutral refresh intent + business-line drain，保留 persistent queue / worker queue 迁移路径。
+- Ops diagnostics 形态：`/api/ops/events/status` 默认 lightweight，重型 diagnostics 只通过显式 `mode=diagnostics` / `diagnostics=true` / `full=true` 入口触发。
+- 双业务线 baseline：已通过 `pnpm perf:surface-baseline`、`pnpm perf:mcp-smoke`、`pnpm perf:query-plans`、`pnpm events:ops-report`、`pnpm events:check-quality` 形成固定验证入口。
+- Sprint 3 / Sprint 4 route 切换清单：已在 `technical-design.md` 拆分 metadata routes 与 event-read routes，并在实现中完成 latest / search / entity / detail / watchlist / related-events 收敛。
+- `source_fetch_runs` owner：已拆出 `SourceFetchRunsTable` shared-source contract，`EventTable` 只保留 migration bridge 委托。
+- Neutral priority class interface：已实现 `backfill_catch_up` / `force_refresh` / `routine_fetch`、dedupe、concurrency、source fetch state 和跨业务线 hot-path hint 拒绝。
