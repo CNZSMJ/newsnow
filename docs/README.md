@@ -55,6 +55,7 @@
 
 - `docs/backlog/` 是功能/重构主题的过程文档
 - `docs/hotfix/` 是现有系统问题修复文档
+- `docs/agents/` 是本仓库工程 agent 技能的本地配置，包括 issue tracker、triage labels 和 domain docs 读取规则
 - `docs/prompt/` 是仓库级固定 agent 启动提示词
 - `docs/archive/` 当前只作为历史存量区，默认不代表当前事实
 

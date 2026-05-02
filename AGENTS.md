@@ -131,6 +131,20 @@ When working from this repository, keep the implementation focus here:
 
 Do not push core event-engine responsibilities into external skill repositories or workflow wrappers.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs for this repo are tracked as local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The repo uses the default five-role triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo; engineering skills must read the repository rules and current effective docs before proposing domain changes. See `docs/agents/domain.md`.
+
 ## Documentation rule
 
 Any task that reads, writes, reorganizes, creates, updates, archives, or otherwise changes repository documentation must begin by reading:
