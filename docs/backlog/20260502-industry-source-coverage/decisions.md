@@ -1,6 +1,6 @@
 # Decisions
 
-状态：已接受；实现进入验证阶段
+状态：已接受并实施；默认启用来源 live smoke gate 通过
 最后更新：2026-05-02
 范围：行业源覆盖扩展的产品与技术决策
 
@@ -49,3 +49,13 @@ canonical event semantics 仍由 backend event engine 统一计算。
 ### TD-4 查询侧保留历史 broad-tag 兼容
 
 旧 canonical rows 可能仍保存 8 个 legacy 行业 tag。查询侧必须继续把这种集合视为 broad，避免历史数据在 topic filter 下误入具体行业列表。
+
+### TD-5 默认启用来源必须通过 live smoke
+
+候选来源可以登记在 `shared/pre-sources.ts` 和 getter module 中，但不能因为“配置存在”就进入默认 source registry。
+
+当前策略：
+
+- 默认启用：`pnpm sources:smoke-industry` 必须返回非空条目。
+- 候选保留但禁用：403、timeout、fetch error、empty 或只返回导航/分类页的来源先 `disable: true`。
+- 后续恢复：必须补 source-specific adapter、RSS/API 替代或更严格抽取规则，并重新通过 enabled live smoke。

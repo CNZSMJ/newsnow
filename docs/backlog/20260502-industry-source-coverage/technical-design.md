@@ -1,6 +1,6 @@
 # Industry Source Coverage Technical Design
 
-状态：审批通过；实现进入验证阶段
+状态：审批通过；已实施；默认启用来源 live smoke gate 通过
 最后更新：2026-05-02
 范围：行业源覆盖扩展的模块边界、数据流和验证方案
 
@@ -42,6 +42,7 @@
 
 - 将外部行业研究页面和 RSS 转成 `NewsItem[]`。
 - 对泛页面抽取使用 source-specific keywords 做初步噪音过滤。
+- 为 live source smoke 提供可调用 getter。
 
 非职责：
 
@@ -71,6 +72,19 @@
 
 - resolver 在写入 canonical event 前抑制 broad source tags。
 - EventTable 在 topic filter / count / repair 时避免历史 broad tags 误入单一行业结果。
+
+### 2.5 Source Enablement Gate
+
+文件：
+
+- `scripts/smoke-industry-research-sources.ts`
+- `package.json`
+
+职责：
+
+- 默认检查当前 generated registry 中启用的 industryResearch sources。
+- `--all` 模式审计候选池，但不作为默认通过条件。
+- 默认模式下任一 enabled source 返回 empty 或 error 时失败。
 
 ## 3. 数据流
 

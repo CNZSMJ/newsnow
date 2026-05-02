@@ -1,52 +1,32 @@
 import { describe, expect, it } from "vitest"
+import { originSources } from "./pre-sources"
 import sources from "./sources"
 
-const requestedSourceGroups: Record<string, string[]> = {
+const enabledSourceGroups: Record<string, string[]> = {
   "semiconductor": [
-    "gartner-newsroom",
-    "omdia-semiconductor",
     "trendforce-semiconductor",
-    "techinsights-semiconductor",
-    "yole-semiconductor",
     "semi-semiconductor",
     "semi-data",
     "wsts-press",
   ],
   "ai server and cloud infrastructure": [
     "idc-cloud-infrastructure",
-    "gartner-newsroom",
-    "canalys-cloud-infrastructure",
-    "omdia-cloud-infrastructure",
-  ],
-  "optical modules and communication equipment": [
-    "lightcounting-newsletter",
-    "delloro-telecom",
-    "omdia-optical-communications",
-    "cignal-ai-optical",
   ],
   "power battery": [
     "sne-research-battery",
-    "cabia-battery",
-    "ggii-battery",
     "evtank-battery",
   ],
   "photovoltaic": [
     "chinapv-policy",
     "chinapv-news",
     "infolink-solar",
-    "woodmac-renewables",
-    "bnef-energy-transition",
   ],
   "robotics and industrial automation": [
     "ifr-robotics",
-    "mir-automation",
-    "ggii-robotics",
   ],
   "china manufacturing": [
     "miit-industry",
     "stats-industry",
-    "customs-manufacturing",
-    "ccid-consulting",
     "caict-reports",
     "chinaisa-stats",
     "caam-nev-stats",
@@ -54,45 +34,76 @@ const requestedSourceGroups: Record<string, string[]> = {
   ],
 }
 
+const deferredCandidateSourceIds = [
+  "gartner-newsroom",
+  "omdia-semiconductor",
+  "omdia-cloud-infrastructure",
+  "omdia-optical-communications",
+  "techinsights-semiconductor",
+  "yole-semiconductor",
+  "canalys-cloud-infrastructure",
+  "lightcounting-newsletter",
+  "delloro-telecom",
+  "cignal-ai-optical",
+  "cabia-battery",
+  "ggii-battery",
+  "ggii-robotics",
+  "woodmac-renewables",
+  "bnef-energy-transition",
+  "mir-automation",
+  "customs-manufacturing",
+  "ccid-consulting",
+] as const
+
 const expectedTagCoverage = {
   "cloud-infrastructure": [
-    "gartner-newsroom",
     "idc-cloud-infrastructure",
-    "canalys-cloud-infrastructure",
-    "omdia-cloud-infrastructure",
-  ],
-  "communication-equipment": [
-    "lightcounting-newsletter",
-    "delloro-telecom",
-    "omdia-optical-communications",
-    "cignal-ai-optical",
   ],
   "power-battery": [
     "sne-research-battery",
-    "cabia-battery",
-    "ggii-battery",
     "evtank-battery",
   ],
   "robotics": [
     "ifr-robotics",
-    "mir-automation",
-    "ggii-robotics",
   ],
   "manufacturing": [
     "miit-industry",
     "stats-industry",
-    "customs-manufacturing",
-    "ccid-consulting",
     "caict-reports",
   ],
 } as const
 
+function sourceCandidatesFromOriginSources() {
+  const originSourceRecords = originSources as Record<string, any>
+  const entries: Record<string, {
+    disable?: boolean | "cf"
+    column?: string
+    eventProfile?: unknown
+    tags?: readonly string[]
+  }> = {}
+
+  for (const [sourceId, source] of Object.entries(originSourceRecords)) {
+    if (source.sub && Object.keys(source.sub).length) {
+      for (const [subId, subSource] of Object.entries(source.sub)) {
+        entries[`${sourceId}-${subId}`] = {
+          ...source,
+          ...(subSource as Record<string, unknown>),
+        }
+      }
+    } else {
+      entries[sourceId] = source
+    }
+  }
+
+  return entries
+}
+
 describe("requested investment data source coverage", () => {
-  it("registers every requested source as an investment-facing industry source", () => {
+  it("registers every enabled source as an investment-facing industry source", () => {
     const missing: string[] = []
     const invalid: string[] = []
 
-    for (const [group, sourceIds] of Object.entries(requestedSourceGroups)) {
+    for (const [group, sourceIds] of Object.entries(enabledSourceGroups)) {
       for (const sourceId of sourceIds) {
         const source = sources[sourceId as keyof typeof sources]
         if (!source) {
@@ -111,6 +122,36 @@ describe("requested investment data source coverage", () => {
     }
 
     expect(missing).toEqual([])
+    expect(invalid).toEqual([])
+  })
+
+  it("keeps unstable live-smoke candidates documented but disabled by default", () => {
+    const candidates = sourceCandidatesFromOriginSources()
+    const missing: string[] = []
+    const stillEnabled: string[] = []
+    const invalid: string[] = []
+
+    for (const sourceId of deferredCandidateSourceIds) {
+      const candidate = candidates[sourceId]
+      if (!candidate) {
+        missing.push(sourceId)
+        continue
+      }
+      if (sources[sourceId as keyof typeof sources]) {
+        stillEnabled.push(sourceId)
+      }
+      if (
+        candidate.disable !== true
+        || candidate.column !== "industry"
+        || !candidate.eventProfile
+        || !candidate.tags?.length
+      ) {
+        invalid.push(sourceId)
+      }
+    }
+
+    expect(missing).toEqual([])
+    expect(stillEnabled).toEqual([])
     expect(invalid).toEqual([])
   })
 

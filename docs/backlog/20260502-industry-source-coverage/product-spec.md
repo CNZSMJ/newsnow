@@ -1,6 +1,6 @@
 # Industry Source Coverage Product Spec
 
-状态：已接受；实现进入验证阶段
+状态：已完成；默认启用来源 live smoke gate 通过
 最后更新：2026-05-02
 范围：面向投资事件系统的行业数据源覆盖扩展
 
@@ -38,9 +38,10 @@ Out of scope：
 
 ## 4. 验收标准
 
-- 每个请求覆盖的 source id 都存在于 generated source registry。
+- 每个默认启用的 source id 都存在于 generated source registry。
+- 不稳定候选来源必须在配置中保留但禁用，不能进入默认调度集合。
 - 每个新增 investment-facing source 都有 `eventProfile`。
 - 新增 source getter 能被 `#/getters` 聚合。
 - 新增 canonical tags 能通过 alias 查询命中。
 - broad-tag guardrail 兼容 legacy 8-tag 集合和新增 tag 集合。
-- `pnpm test`、`pnpm typecheck`、`pnpm docs:check` 通过。
+- `pnpm test`、`pnpm typecheck`、`pnpm docs:check`、`pnpm sources:smoke-industry` 通过。

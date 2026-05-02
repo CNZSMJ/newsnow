@@ -1,6 +1,6 @@
 # Implementation Plan
 
-状态：验证中
+状态：已完成
 最后更新：2026-05-02
 范围：`20260502-industry-source-coverage` 的实施步骤和验证计划
 
@@ -52,6 +52,15 @@
 - `pnpm typecheck`
 - `pnpm docs:check`
 - `pnpm exec tsx ./scripts/source.ts`
+- `pnpm sources:smoke-industry`
 - `git diff --check`
 
-状态：静态验证已完成；live source smoke 仍有外部站点可用性缺口，详见 `delivery-status.md`。
+状态：已完成。
+
+### Step 6：禁用不稳定候选来源
+
+- 对 403、timeout、fetch error、empty 或只返回导航/分类页的候选来源设置 `disable: true`。
+- 保留候选配置和 getter，方便后续补 source-specific adapter 后恢复。
+- 更新 coverage 测试，区分默认 enabled source 和 deferred candidate。
+
+状态：已完成。

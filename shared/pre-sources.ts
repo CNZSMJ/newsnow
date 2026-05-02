@@ -793,12 +793,15 @@ export const originSources = {
   },
   "gartner": {
     name: "Gartner",
+    disable: true,
     color: "indigo",
     column: "industry",
     home: "https://www.gartner.com/en/newsroom",
     sub: {
       newsroom: {
         title: "Newsroom",
+        disable: true,
+        desc: "Deferred: live source smoke returned 403 on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["semiconductor", "ai-computing", "cloud-infrastructure"],
         eventProfile: profile.industryReportRelease,
@@ -807,24 +810,31 @@ export const originSources = {
   },
   "omdia": {
     name: "Omdia",
+    disable: true,
     color: "sky",
     column: "industry",
     home: "https://omdia.tech.informa.com/pr",
     sub: {
       "semiconductor": {
         title: "半导体研究",
+        disable: true,
+        desc: "Deferred: live source smoke returned 403 on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["semiconductor", "ai-computing"],
         eventProfile: profile.industryReportRelease,
       },
       "cloud-infrastructure": {
         title: "云基础设施",
+        disable: true,
+        desc: "Deferred: live source smoke returned 403 on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["ai-computing", "cloud-infrastructure"],
         eventProfile: profile.industryReportRelease,
       },
       "optical-communications": {
         title: "光通信/通信设备",
+        disable: true,
+        desc: "Deferred: live source smoke returned 403 on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["communication-equipment", "cloud-infrastructure"],
         eventProfile: profile.industryReportRelease,
@@ -847,12 +857,15 @@ export const originSources = {
   },
   "techinsights": {
     name: "TechInsights",
+    disable: true,
     color: "slate",
     column: "industry",
     home: "https://www.techinsights.com/technical-capabilities/overview/markets-served/semiconductors",
     sub: {
       semiconductor: {
         title: "半导体洞察",
+        disable: true,
+        desc: "Deferred: live source smoke timed out on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["semiconductor", "ai-computing"],
         eventProfile: profile.industryReportRelease,
@@ -861,12 +874,15 @@ export const originSources = {
   },
   "yole": {
     name: "Yole Group",
+    disable: true,
     color: "violet",
     column: "industry",
     home: "https://www.yolegroup.com/press-releases/",
     sub: {
       semiconductor: {
         title: "Semiconductor",
+        disable: true,
+        desc: "Deferred: live source smoke returned empty results on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["semiconductor"],
         eventProfile: profile.industryReportRelease,
@@ -903,12 +919,15 @@ export const originSources = {
   },
   "canalys": {
     name: "Canalys",
+    disable: true,
     color: "emerald",
     column: "industry",
     home: "https://www.canalys.com/newsroom",
     sub: {
       "cloud-infrastructure": {
         title: "云基础设施",
+        disable: true,
+        desc: "Deferred: live source smoke returned 403 on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["ai-computing", "cloud-infrastructure"],
         eventProfile: profile.industryReportRelease,
@@ -917,12 +936,15 @@ export const originSources = {
   },
   "lightcounting": {
     name: "LightCounting",
+    disable: true,
     color: "orange",
     column: "industry",
     home: "https://www.lightcounting.com/newsletter",
     sub: {
       newsletter: {
         title: "光模块市场",
+        disable: true,
+        desc: "Deferred: live source smoke returned empty results on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["communication-equipment", "cloud-infrastructure"],
         eventProfile: profile.industryReportRelease,
@@ -931,12 +953,15 @@ export const originSources = {
   },
   "delloro": {
     name: "Dell'Oro",
+    disable: true,
     color: "amber",
     column: "industry",
     home: "https://www.delloro.com/news/",
     sub: {
       telecom: {
         title: "通信设备市场",
+        disable: true,
+        desc: "Deferred: live source smoke returned empty results on 2026-05-02 after navigation filtering; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["communication-equipment", "cloud-infrastructure"],
         eventProfile: profile.industryReportRelease,
@@ -945,12 +970,15 @@ export const originSources = {
   },
   "cignal-ai": {
     name: "Cignal AI",
+    disable: true,
     color: "purple",
     column: "industry",
     home: "https://www.cignal.ai/news/",
     sub: {
       optical: {
         title: "Optical/Telecom",
+        disable: true,
+        desc: "Deferred: live source smoke timed out on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["communication-equipment"],
         eventProfile: profile.industryReportRelease,
@@ -973,12 +1001,15 @@ export const originSources = {
   },
   "cabia": {
     name: "中国汽车动力电池产业创新联盟",
+    disable: true,
     color: "red",
     column: "industry",
     home: "https://batteryalliancechina.org/about",
     sub: {
       battery: {
         title: "动力电池月度信息",
+        disable: true,
+        desc: "Deferred: live source smoke returned empty results on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["power-battery", "new-energy-vehicle"],
         eventProfile: profile.industryStatRelease,
@@ -987,18 +1018,23 @@ export const originSources = {
   },
   "ggii": {
     name: "GGII/高工产业研究院",
+    disable: true,
     color: "lime",
     column: "industry",
     home: "https://www.gg-ii.com/",
     sub: {
       battery: {
         title: "动力电池",
+        disable: true,
+        desc: "Deferred: live source smoke failed to fetch on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["power-battery", "new-energy-vehicle"],
         eventProfile: profile.industryReportRelease,
       },
       robotics: {
         title: "机器人/工控",
+        disable: true,
+        desc: "Deferred: live source smoke failed to fetch on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["robotics", "manufacturing"],
         eventProfile: profile.industryReportRelease,
@@ -1035,12 +1071,15 @@ export const originSources = {
   },
   "woodmac": {
     name: "Wood Mackenzie",
+    disable: true,
     color: "orange",
     column: "industry",
     home: "https://www.woodmac.com/news/",
     sub: {
       renewables: {
         title: "新能源/光伏",
+        disable: true,
+        desc: "Deferred: live source smoke returned empty results on 2026-05-02 after navigation filtering; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["photovoltaic", "power-battery", "new-energy-vehicle"],
         eventProfile: profile.industryReportRelease,
@@ -1049,12 +1088,15 @@ export const originSources = {
   },
   "bnef": {
     name: "BloombergNEF",
+    disable: true,
     color: "green",
     column: "industry",
     home: "https://about.bnef.com/insights/",
     sub: {
       "energy-transition": {
         title: "能源转型",
+        disable: true,
+        desc: "Deferred: live source smoke returned empty results on 2026-05-02 after navigation filtering; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["photovoltaic", "power-battery", "new-energy-vehicle"],
         eventProfile: profile.industryReportRelease,
@@ -1077,12 +1119,15 @@ export const originSources = {
   },
   "mir": {
     name: "MIR睿工业",
+    disable: true,
     color: "violet",
     column: "industry",
     home: "https://www.mirdatabank.com/news",
     sub: {
       automation: {
         title: "工业自动化",
+        disable: true,
+        desc: "Deferred: live source smoke returned empty results on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["robotics", "manufacturing"],
         eventProfile: profile.industryReportRelease,
@@ -1091,12 +1136,15 @@ export const originSources = {
   },
   "customs": {
     name: "海关总署",
+    disable: true,
     color: "cyan",
     column: "industry",
     home: "https://english.customs.gov.cn/Statistics/Statistics?ColumnId=1",
     sub: {
       manufacturing: {
         title: "进出口统计",
+        disable: true,
+        desc: "Deferred: live source smoke failed to fetch on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["manufacturing", "semiconductor", "photovoltaic", "power-battery", "communication-equipment"],
         eventProfile: profile.officialMacroRelease,
@@ -1105,12 +1153,15 @@ export const originSources = {
   },
   "ccid": {
     name: "赛迪顾问",
+    disable: true,
     color: "indigo",
     column: "industry",
     home: "https://www.ccidconsulting.com/en/",
     sub: {
       consulting: {
         title: "制造业研究",
+        disable: true,
+        desc: "Deferred: live source smoke returned empty results on 2026-05-02; needs source-specific adapter or alternate feed.",
         interval: Time.Common,
         tags: ["manufacturing", "semiconductor", "ai-computing", "cloud-infrastructure", "robotics"],
         eventProfile: profile.industryReportRelease,
