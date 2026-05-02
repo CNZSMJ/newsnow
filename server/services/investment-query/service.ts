@@ -21,7 +21,7 @@ import {
   getInvestmentEventFamilyLabel,
   getInvestmentRelatedSectionDisplayLabel,
 } from "#/services/event-engine/investment-view"
-import { getInvestmentScanFocusActionBuckets, type InvestmentScanFocus } from "#/services/event-engine/investment-filters"
+import { type InvestmentScanFocus, getInvestmentScanFocusActionBuckets } from "#/services/event-engine/investment-filters"
 import { refreshInvestmentProjectionForEvent } from "#/services/event-engine/projection-pipeline"
 
 export interface InvestmentProjectionQueryStore {
@@ -122,6 +122,11 @@ interface RelatedSectionInput {
   context: RelatedEventsSectionContext
   label?: string
   items: InvestmentEventBrief[]
+}
+
+export interface RelatedEventsFanoutDiagnostics {
+  relatedQueryCount: number
+  relatedScanLimit: number
 }
 
 function normalizeLimit(limit?: number) {
@@ -295,6 +300,25 @@ function buildRelatedEventLookups(
     primaryTopic: detail.relatedTopics[0],
     primaryMarket: detail.affectedMarkets[0],
     familyLabel: getInvestmentEventFamilyLabel(detail.eventFamily),
+  }
+}
+
+export function getRelatedEventsFanoutDiagnostics(
+  detail: InvestmentEventDetail,
+  options: InvestmentRelatedEventsOptions = {},
+): RelatedEventsFanoutDiagnostics {
+  const plan = buildRelatedEventLookups(detail, options)
+  const relatedQueryCount = [
+    true,
+    plan.primaryEntityLookup,
+    plan.primaryTopic,
+    plan.primaryMarket,
+    true,
+  ].filter(Boolean).length
+
+  return {
+    relatedQueryCount,
+    relatedScanLimit: relatedQueryCount * plan.queryLimit,
   }
 }
 

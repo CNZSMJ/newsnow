@@ -5,10 +5,10 @@ import { config as loadEnv } from "dotenv"
 import { consola } from "consola"
 import { createDatabase } from "db0"
 import sqliteConnector from "db0/connectors/better-sqlite3"
-import type { InvestmentEventDetail, InvestmentProviderEventListResponse, SourceID, WatchlistRecord } from "../shared/types"
+import type { InvestmentProviderEventListResponse, SourceID, WatchlistRecord } from "../shared/types"
 import { projectDir } from "../shared/dir"
 import { EventProjectionTable } from "../server/database/event-projections"
-import { InvestmentQueryService } from "../server/services/investment-query/service"
+import { InvestmentQueryService, getRelatedEventsFanoutDiagnostics } from "../server/services/investment-query/service"
 import {
   type SurfaceBenchmarkSample,
   type SurfaceKind,
@@ -189,19 +189,6 @@ async function measureProbe(baseUrl: string, probe: HttpProbe, workerState: Work
   }
 }
 
-function getRelatedEventsQueryShape(detail: InvestmentEventDetail) {
-  const primaryEntity = detail.primarySubject ?? detail.affectedEntities[0]
-  const hasTopic = Boolean(detail.relatedTopics[0])
-  const hasMarket = Boolean(detail.affectedMarkets[0])
-  const hasFamily = Boolean(detail.eventFamily)
-  const hasRelatedIndex = true
-
-  return {
-    queryCount: [hasRelatedIndex, primaryEntity, hasTopic, hasMarket, hasFamily].filter(Boolean).length,
-    scanLimit: [hasRelatedIndex, primaryEntity, hasTopic, hasMarket, hasFamily].filter(Boolean).length * 6,
-  }
-}
-
 async function measureEventDetailFanout(eventId: string | undefined, httpDetailMs: number | undefined) {
   if (!eventId || httpDetailMs === undefined) return undefined
 
@@ -220,7 +207,7 @@ async function measureEventDetailFanout(eventId: string | undefined, httpDetailM
   const mainDetailQueryMs = performance.now() - mainStartedAt
   if (!detail) return undefined
 
-  const shape = getRelatedEventsQueryShape(detail)
+  const diagnostics = getRelatedEventsFanoutDiagnostics(detail)
   const relatedStartedAt = performance.now()
   await investmentQueryService.getRelatedEvents(detail)
   const relatedEventsMs = performance.now() - relatedStartedAt
@@ -230,8 +217,8 @@ async function measureEventDetailFanout(eventId: string | undefined, httpDetailM
     httpDetailMs,
     mainDetailQueryMs,
     relatedEventsMs,
-    relatedQueryCount: shape.queryCount,
-    relatedScanLimit: shape.scanLimit,
+    relatedQueryCount: diagnostics.relatedQueryCount,
+    relatedScanLimit: diagnostics.relatedScanLimit,
   })
 }
 
