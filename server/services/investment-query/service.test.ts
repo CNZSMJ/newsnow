@@ -1,20 +1,39 @@
-import { describe, expect, it } from "vitest"
-import type { InvestmentEventBrief, InvestmentEventDetail } from "@shared/types"
-import type { EventProjectionQueryOptions, EventProjectionRecord } from "#/database/event-projections"
-import { InvestmentQueryService } from "#/services/investment-query/service"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import type { EventDetail, InvestmentEventBrief, InvestmentEventDetail } from "@shared/types"
+import type { EventProjectionInput, EventProjectionQueryOptions, EventProjectionRecord } from "#/database/event-projections"
+import { type CanonicalProjectionRepairStore, InvestmentQueryService } from "#/services/investment-query/service"
+
+afterEach(() => {
+  delete (globalThis as typeof globalThis & { logger?: unknown }).logger
+})
 
 class MemoryProjectionQueryStore {
   readonly listCalls: EventProjectionQueryOptions[] = []
   readonly countCalls: EventProjectionQueryOptions[] = []
   readonly getCalls: string[] = []
+  readonly upserts: string[] = []
 
   constructor(
-    private readonly records: EventProjectionRecord[],
+    private records: EventProjectionRecord[],
     private readonly relatedIndex: Record<string, string[]> = {},
   ) {}
 
   private filterRecords(options: EventProjectionQueryOptions) {
     return this.records.filter((record) => {
+      if (options.q) {
+        const q = options.q.toLowerCase()
+        const searchText = [
+          record.brief.title,
+          record.brief.summary,
+          record.brief.whatHappened,
+          record.brief.subjectSummary,
+          record.brief.whyItMatters,
+          ...record.brief.whoIsAffected,
+          ...record.brief.relatedTopics,
+          ...record.brief.affectedEntities.flatMap(entity => [entity.entityId, entity.label, entity.code]),
+        ].filter(Boolean).join(" ").toLowerCase()
+        if (!searchText.includes(q)) return false
+      }
       if (options.indexName === "entity" && options.indexValue) {
         const values = [
           ...record.brief.affectedEntities.flatMap(entity => [entity.entityId, entity.label, entity.code]),
@@ -65,6 +84,74 @@ class MemoryProjectionQueryStore {
 
   async getProjection(eventId: string) {
     this.getCalls.push(eventId)
+    return this.records.find(record => record.eventId === eventId)
+  }
+
+  async upsertProjection(input: EventProjectionInput) {
+    this.upserts.push(input.eventId)
+    const record: EventProjectionRecord = {
+      eventId: input.eventId,
+      projectionVersion: 1,
+      projectionUpdatedAt: 1700000020000,
+      canonicalUpdatedAt: input.canonicalUpdatedAt,
+      canonicalChecksum: input.canonicalChecksum,
+      repairStatus: "ok",
+      eventType: input.eventType,
+      eventSubType: input.eventSubType,
+      sourceKind: input.sourceKind,
+      eventFamily: input.brief.eventFamily,
+      sourceIds: input.sourceIds ?? [input.brief.sourceSummary.primarySourceId ?? "wallstreetcn-quick"],
+      seriesKey: input.seriesKey,
+      periodKey: input.periodKey,
+      brief: input.brief,
+      detail: input.detail,
+    }
+    this.records = [
+      ...this.records.filter(item => item.eventId !== input.eventId),
+      record,
+    ]
+  }
+}
+
+class MemoryCanonicalEventStore {
+  readonly listCalls: Array<Parameters<CanonicalProjectionRepairStore["listEvents"]>[0]> = []
+  readonly getCalls: string[] = []
+  private readonly brokenEventIds: ReadonlySet<string>
+
+  constructor(
+    private readonly records: EventDetail[],
+    options: { brokenEventIds?: string[] } = {},
+  ) {
+    this.brokenEventIds = new Set(options.brokenEventIds ?? [])
+  }
+
+  async listEvents(options: Parameters<CanonicalProjectionRepairStore["listEvents"]>[0]) {
+    this.listCalls.push(options)
+    const q = typeof options.q === "string" ? options.q.toLowerCase() : undefined
+    const entity = typeof options.entity === "string" ? options.entity.toLowerCase() : undefined
+    const rows = this.records.filter((record) => {
+      if (q) {
+        const haystack = [record.title, record.summary, ...record.topicTags].filter(Boolean).join(" ").toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      if (entity) {
+        const values = [
+          record.primaryEntityName,
+          ...record.entities.flatMap(item => [item.entityName, item.code, item.fullCode]),
+        ].filter(Boolean).map(value => String(value).toLowerCase())
+        if (!values.includes(entity)) return false
+      }
+      return true
+    })
+    const limit = typeof options.limit === "number" ? options.limit : rows.length
+    return rows.slice(0, limit).map(record => ({ eventId: record.eventId }))
+  }
+
+  async getEventDetail(eventId: string) {
+    this.getCalls.push(eventId)
+    if (this.brokenEventIds.has(eventId)) {
+      throw new Error(`broken canonical detail: ${eventId}`)
+    }
     return this.records.find(record => record.eventId === eventId)
   }
 }
@@ -179,6 +266,55 @@ function detail(input = brief()): InvestmentEventDetail {
   }
 }
 
+function canonicalDetail(overrides: Partial<EventDetail> = {}): EventDetail {
+  return {
+    eventId: overrides.eventId ?? "evt_laser",
+    title: overrides.title ?? "龙虎榜丨帝尔激光20CM涨停，二游资净买入1.74亿元",
+    summary: overrides.summary,
+    eventType: overrides.eventType ?? "market_move",
+    eventSubType: overrides.eventSubType ?? "other",
+    sourceKind: overrides.sourceKind ?? "media_fast_feed",
+    publishedAt: overrides.publishedAt ?? 1700000000000,
+    ingestedAt: overrides.ingestedAt ?? 1700000005000,
+    canonicalUrl: overrides.canonicalUrl ?? "https://example.com/laser",
+    primaryEntityName: overrides.primaryEntityName ?? "帝尔激光",
+    importance: overrides.importance ?? "high",
+    sentiment: overrides.sentiment ?? "positive",
+    directionalView: overrides.directionalView ?? "positive",
+    directionalConfidence: overrides.directionalConfidence ?? 78,
+    materialityScore: overrides.materialityScore ?? 86,
+    tradabilityScore: overrides.tradabilityScore ?? 80,
+    authorityScore: overrides.authorityScore ?? 72,
+    affectedMarkets: overrides.affectedMarkets ?? ["A"],
+    impactSummary: overrides.impactSummary ?? [],
+    degraded: overrides.degraded ?? false,
+    latestLifecycleState: overrides.latestLifecycleState ?? "confirmed",
+    latestLifecycleAt: overrides.latestLifecycleAt ?? 1700000010000,
+    topicTags: overrides.topicTags ?? ["photovoltaic"],
+    evidenceCount: overrides.evidenceCount ?? 1,
+    sourceIds: overrides.sourceIds ?? ["wallstreetcn-quick"],
+    evidences: overrides.evidences ?? [],
+    entities: overrides.entities ?? [{
+      eventId: overrides.eventId ?? "evt_laser",
+      entityType: "stock",
+      entityName: "帝尔激光",
+      code: "300776",
+      fullCode: "sz300776",
+      confidence: 90,
+      resolver: "test",
+    }],
+    facts: overrides.facts ?? [],
+    timeline: overrides.timeline ?? [{
+      timelineId: "tl_evt_laser",
+      eventId: overrides.eventId ?? "evt_laser",
+      stateTo: "confirmed",
+      changedAt: 1700000010000,
+    }],
+    watchTargetCandidates: overrides.watchTargetCandidates,
+    ...overrides,
+  }
+}
+
 describe("investmentQueryService", () => {
   it("reads latest events from the projection latest index", async () => {
     const store = new MemoryProjectionQueryStore([projection()])
@@ -278,6 +414,134 @@ describe("investmentQueryService", () => {
       eventFamily: "policy_signal",
       actionBuckets: ["actionable", "watch"],
     })
+  })
+
+  it("repairs missing search projections from canonical events before returning results", async () => {
+    const store = new MemoryProjectionQueryStore([])
+    const canonicalStore = new MemoryCanonicalEventStore([canonicalDetail()])
+    const service = new InvestmentQueryService(store, canonicalStore)
+
+    await expect(service.searchEvents({
+      q: "帝尔激光",
+      limit: 5,
+      includeTotalCount: false,
+    })).resolves.toMatchObject({
+      items: [expect.objectContaining({
+        eventId: "evt_laser",
+        title: expect.stringContaining("帝尔激光"),
+      })],
+      totalCount: 1,
+    })
+    expect(canonicalStore.listCalls[0]).toMatchObject({
+      q: "帝尔激光",
+      limit: expect.any(Number),
+      scanLimit: expect.any(Number),
+    })
+    expect(canonicalStore.getCalls).toEqual(["evt_laser"])
+    expect(store.upserts).toEqual(["evt_laser"])
+  })
+
+  it("repairs missing search projections even when the projected result page is full", async () => {
+    const store = new MemoryProjectionQueryStore([
+      projection(brief({
+        eventId: "evt_projected",
+        title: "帝尔激光 已投影事件",
+        subjectSummary: "帝尔激光",
+      })),
+    ])
+    const canonicalStore = new MemoryCanonicalEventStore([
+      canonicalDetail({
+        eventId: "evt_projected",
+        title: "帝尔激光 已投影事件",
+      }),
+      canonicalDetail({
+        eventId: "evt_missing",
+        title: "帝尔激光 新增事件",
+      }),
+    ])
+    const service = new InvestmentQueryService(store, canonicalStore)
+
+    await expect(service.searchEvents({
+      q: "帝尔激光",
+      limit: 1,
+    })).resolves.toMatchObject({
+      items: [expect.objectContaining({ eventId: "evt_projected" })],
+      totalCount: 2,
+    })
+    expect(canonicalStore.getCalls).toEqual(["evt_missing"])
+    expect(store.upserts).toEqual(["evt_missing"])
+  })
+
+  it("keeps projected search results available when one canonical repair fails", async () => {
+    const warn = vi.fn()
+    ;(globalThis as typeof globalThis & { logger?: { warn: typeof warn } }).logger = { warn }
+    const store = new MemoryProjectionQueryStore([
+      projection(brief({
+        eventId: "evt_projected",
+        title: "帝尔激光 已投影事件",
+        subjectSummary: "帝尔激光",
+      })),
+    ])
+    const canonicalStore = new MemoryCanonicalEventStore([
+      canonicalDetail({
+        eventId: "evt_broken",
+        title: "帝尔激光 异常事件",
+      }),
+    ], {
+      brokenEventIds: ["evt_broken"],
+    })
+    const service = new InvestmentQueryService(store, canonicalStore)
+
+    await expect(service.searchEvents({
+      q: "帝尔激光",
+      limit: 2,
+    })).resolves.toMatchObject({
+      items: [expect.objectContaining({ eventId: "evt_projected" })],
+      totalCount: 1,
+    })
+    expect(canonicalStore.getCalls).toEqual(["evt_broken"])
+    expect(store.upserts).toEqual([])
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("evt_broken"),
+      expect.any(Error),
+    )
+  })
+
+  it("repairs missing entity projections from canonical events before returning results", async () => {
+    const store = new MemoryProjectionQueryStore([])
+    const canonicalStore = new MemoryCanonicalEventStore([canonicalDetail()])
+    const service = new InvestmentQueryService(store, canonicalStore)
+
+    await expect(service.getEntityEvents({
+      entity: "帝尔激光",
+      limit: 5,
+      includeTotalCount: false,
+    })).resolves.toMatchObject({
+      items: [expect.objectContaining({ eventId: "evt_laser" })],
+      totalCount: 1,
+    })
+    expect(canonicalStore.listCalls[0]).toMatchObject({
+      entity: "帝尔激光",
+      limit: expect.any(Number),
+      scanLimit: expect.any(Number),
+    })
+    expect(canonicalStore.getCalls).toEqual(["evt_laser"])
+    expect(store.upserts).toEqual(["evt_laser"])
+  })
+
+  it("repairs missing detail projections from canonical events before reading detail", async () => {
+    const store = new MemoryProjectionQueryStore([])
+    const canonicalStore = new MemoryCanonicalEventStore([canonicalDetail()])
+    const service = new InvestmentQueryService(store, canonicalStore)
+
+    await expect(service.getEventDetail("evt_laser", {
+      includeRelatedEvents: false,
+    })).resolves.toMatchObject({
+      eventId: "evt_laser",
+      title: expect.stringContaining("帝尔激光"),
+    })
+    expect(canonicalStore.getCalls).toEqual(["evt_laser"])
+    expect(store.upserts).toEqual(["evt_laser"])
   })
 
   it("reads detail and related sections from projection records", async () => {
