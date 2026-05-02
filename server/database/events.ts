@@ -1,7 +1,7 @@
 import process from "node:process"
 import md5 from "md5"
 import type { AffectedMarket, DirectionalView, EventSourceKind } from "@shared/event-profile"
-import { type IndustryTag, allIndustryTags, resolveIndustryTagsFromKeywordQuery } from "@shared/industry"
+import { type IndustryTag, isBroadIndustryTagSet, resolveIndustryTagsFromKeywordQuery } from "@shared/industry"
 import { DEFERRED_PUBLISH_GAP_MS } from "@shared/investment-event-time"
 import type {
   EventDetail,
@@ -3070,7 +3070,7 @@ export class EventTable {
 
     if (assigned.includes(target)) return true
     if (!originalTags.includes(target)) return false
-    if (originalTags.length >= allIndustryTags.length) return false
+    if (isBroadIndustryTagSet(originalTags)) return false
     return true
   }
 
@@ -3162,7 +3162,7 @@ export class EventTable {
       return narrowed.length ? narrowed : inferred
     }
 
-    if (assigned.length >= allIndustryTags.length) return []
+    if (isBroadIndustryTagSet(assigned)) return []
 
     return assigned
   }

@@ -1,5 +1,5 @@
 import type { EventProfile } from "@shared/event-profile"
-import { type IndustryTag, allIndustryTags } from "@shared/industry"
+import { type IndustryTag, isBroadIndustryTagSet } from "@shared/industry"
 import type { EventImportance, EventSubType, EventType, SourceID } from "@shared/types"
 import sources from "@shared/sources"
 import { getSourceEventProfile } from "#/services/event-engine/profiles"
@@ -119,7 +119,7 @@ function getSourceTags(sourceId: SourceID) {
 
 function shouldSuppressBroadSourceTags(profile: EventProfile | undefined, sourceTags: readonly IndustryTag[]) {
   if (!sourceTags.length) return false
-  if (sourceTags.length >= allIndustryTags.length) return true
+  if (isBroadIndustryTagSet(sourceTags)) return true
   return profile?.sourceKind === "official_macro_release" || profile?.sourceKind === "official_policy_notice"
 }
 

@@ -1434,10 +1434,15 @@
     "column": "industry",
     "home": "https://www.miit.gov.cn/xwdt/gxdt/sjdt/index.html",
     "tags": [
+      "manufacturing",
       "semiconductor",
       "photovoltaic",
       "new-energy-vehicle",
+      "power-battery",
       "ai-computing",
+      "cloud-infrastructure",
+      "communication-equipment",
+      "robotics",
       "steel",
       "non-ferrous",
       "chemical"
@@ -1472,10 +1477,15 @@
     "column": "industry",
     "home": "https://www.miit.gov.cn/xwdt/gxdt/sjdt/index.html",
     "tags": [
+      "manufacturing",
       "semiconductor",
       "photovoltaic",
       "new-energy-vehicle",
+      "power-battery",
       "ai-computing",
+      "cloud-infrastructure",
+      "communication-equipment",
+      "robotics",
       "steel",
       "non-ferrous",
       "chemical"
@@ -1511,11 +1521,16 @@
     "column": "industry",
     "home": "https://www.ndrc.gov.cn/xwdt/dt/sjdt/",
     "tags": [
+      "manufacturing",
       "semiconductor",
       "photovoltaic",
       "new-energy-vehicle",
+      "power-battery",
       "medicine",
       "ai-computing",
+      "cloud-infrastructure",
+      "communication-equipment",
+      "robotics",
       "steel",
       "non-ferrous",
       "chemical"
@@ -1550,11 +1565,16 @@
     "column": "industry",
     "home": "https://www.ndrc.gov.cn/xwdt/dt/sjdt/",
     "tags": [
+      "manufacturing",
       "semiconductor",
       "photovoltaic",
       "new-energy-vehicle",
+      "power-battery",
       "medicine",
       "ai-computing",
+      "cloud-infrastructure",
+      "communication-equipment",
+      "robotics",
       "steel",
       "non-ferrous",
       "chemical"
@@ -1593,8 +1613,13 @@
       "semiconductor",
       "photovoltaic",
       "new-energy-vehicle",
+      "power-battery",
       "medicine",
       "ai-computing",
+      "cloud-infrastructure",
+      "communication-equipment",
+      "robotics",
+      "manufacturing",
       "steel",
       "non-ferrous",
       "chemical"
@@ -1632,8 +1657,13 @@
       "semiconductor",
       "photovoltaic",
       "new-energy-vehicle",
+      "power-battery",
       "medicine",
       "ai-computing",
+      "cloud-infrastructure",
+      "communication-equipment",
+      "robotics",
+      "manufacturing",
       "steel",
       "non-ferrous",
       "chemical"
@@ -1932,6 +1962,33 @@
     "interval": 1800000,
     "title": "政策法规"
   },
+  "chinapv-news": {
+    "name": "光伏行业协会",
+    "column": "industry",
+    "home": "https://www.chinapv.org.cn/",
+    "tags": [
+      "photovoltaic"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "lime",
+    "interval": 1800000,
+    "title": "行业动态"
+  },
   "chinania": {
     "redirect": "chinania-stats",
     "name": "有色工业网",
@@ -2123,6 +2180,1364 @@
     "color": "blue",
     "interval": 1800000,
     "title": "SEMI数据"
+  },
+  "gartner": {
+    "redirect": "gartner-newsroom",
+    "name": "Gartner",
+    "column": "industry",
+    "home": "https://www.gartner.com/en/newsroom",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "indigo",
+    "interval": 1800000,
+    "title": "Newsroom"
+  },
+  "gartner-newsroom": {
+    "name": "Gartner",
+    "column": "industry",
+    "home": "https://www.gartner.com/en/newsroom",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "indigo",
+    "interval": 1800000,
+    "title": "Newsroom"
+  },
+  "omdia": {
+    "redirect": "omdia-semiconductor",
+    "name": "Omdia",
+    "column": "industry",
+    "home": "https://omdia.tech.informa.com/pr",
+    "tags": [
+      "semiconductor",
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 1800000,
+    "title": "半导体研究"
+  },
+  "omdia-semiconductor": {
+    "name": "Omdia",
+    "column": "industry",
+    "home": "https://omdia.tech.informa.com/pr",
+    "tags": [
+      "semiconductor",
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 1800000,
+    "title": "半导体研究"
+  },
+  "omdia-cloud-infrastructure": {
+    "name": "Omdia",
+    "column": "industry",
+    "home": "https://omdia.tech.informa.com/pr",
+    "tags": [
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 1800000,
+    "title": "云基础设施"
+  },
+  "omdia-optical-communications": {
+    "name": "Omdia",
+    "column": "industry",
+    "home": "https://omdia.tech.informa.com/pr",
+    "tags": [
+      "communication-equipment",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 1800000,
+    "title": "光通信/通信设备"
+  },
+  "trendforce": {
+    "redirect": "trendforce-semiconductor",
+    "name": "TrendForce",
+    "column": "industry",
+    "home": "https://www.trendforce.com/news",
+    "tags": [
+      "semiconductor",
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 1800000,
+    "title": "Semiconductors"
+  },
+  "trendforce-semiconductor": {
+    "name": "TrendForce",
+    "column": "industry",
+    "home": "https://www.trendforce.com/news",
+    "tags": [
+      "semiconductor",
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 1800000,
+    "title": "Semiconductors"
+  },
+  "techinsights": {
+    "redirect": "techinsights-semiconductor",
+    "name": "TechInsights",
+    "column": "industry",
+    "home": "https://www.techinsights.com/technical-capabilities/overview/markets-served/semiconductors",
+    "tags": [
+      "semiconductor",
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "slate",
+    "interval": 1800000,
+    "title": "半导体洞察"
+  },
+  "techinsights-semiconductor": {
+    "name": "TechInsights",
+    "column": "industry",
+    "home": "https://www.techinsights.com/technical-capabilities/overview/markets-served/semiconductors",
+    "tags": [
+      "semiconductor",
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "slate",
+    "interval": 1800000,
+    "title": "半导体洞察"
+  },
+  "yole": {
+    "redirect": "yole-semiconductor",
+    "name": "Yole Group",
+    "column": "industry",
+    "home": "https://www.yolegroup.com/press-releases/",
+    "tags": [
+      "semiconductor"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "violet",
+    "interval": 1800000,
+    "title": "Semiconductor"
+  },
+  "yole-semiconductor": {
+    "name": "Yole Group",
+    "column": "industry",
+    "home": "https://www.yolegroup.com/press-releases/",
+    "tags": [
+      "semiconductor"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "violet",
+    "interval": 1800000,
+    "title": "Semiconductor"
+  },
+  "wsts": {
+    "redirect": "wsts-press",
+    "name": "WSTS",
+    "column": "industry",
+    "home": "https://www.wsts.org/",
+    "tags": [
+      "semiconductor"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "cyan",
+    "interval": 1800000,
+    "title": "市场统计"
+  },
+  "wsts-press": {
+    "name": "WSTS",
+    "column": "industry",
+    "home": "https://www.wsts.org/",
+    "tags": [
+      "semiconductor"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "cyan",
+    "interval": 1800000,
+    "title": "市场统计"
+  },
+  "idc": {
+    "redirect": "idc-cloud-infrastructure",
+    "name": "IDC",
+    "column": "industry",
+    "home": "https://www.idc.com/about/press",
+    "tags": [
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 1800000,
+    "title": "云/服务器基础设施"
+  },
+  "idc-cloud-infrastructure": {
+    "name": "IDC",
+    "column": "industry",
+    "home": "https://www.idc.com/about/press",
+    "tags": [
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 1800000,
+    "title": "云/服务器基础设施"
+  },
+  "canalys": {
+    "redirect": "canalys-cloud-infrastructure",
+    "name": "Canalys",
+    "column": "industry",
+    "home": "https://www.canalys.com/newsroom",
+    "tags": [
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "emerald",
+    "interval": 1800000,
+    "title": "云基础设施"
+  },
+  "canalys-cloud-infrastructure": {
+    "name": "Canalys",
+    "column": "industry",
+    "home": "https://www.canalys.com/newsroom",
+    "tags": [
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "emerald",
+    "interval": 1800000,
+    "title": "云基础设施"
+  },
+  "lightcounting": {
+    "redirect": "lightcounting-newsletter",
+    "name": "LightCounting",
+    "column": "industry",
+    "home": "https://www.lightcounting.com/newsletter",
+    "tags": [
+      "communication-equipment",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "orange",
+    "interval": 1800000,
+    "title": "光模块市场"
+  },
+  "lightcounting-newsletter": {
+    "name": "LightCounting",
+    "column": "industry",
+    "home": "https://www.lightcounting.com/newsletter",
+    "tags": [
+      "communication-equipment",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "orange",
+    "interval": 1800000,
+    "title": "光模块市场"
+  },
+  "delloro": {
+    "redirect": "delloro-telecom",
+    "name": "Dell'Oro",
+    "column": "industry",
+    "home": "https://www.delloro.com/news/",
+    "tags": [
+      "communication-equipment",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "amber",
+    "interval": 1800000,
+    "title": "通信设备市场"
+  },
+  "delloro-telecom": {
+    "name": "Dell'Oro",
+    "column": "industry",
+    "home": "https://www.delloro.com/news/",
+    "tags": [
+      "communication-equipment",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "amber",
+    "interval": 1800000,
+    "title": "通信设备市场"
+  },
+  "cignal-ai": {
+    "redirect": "cignal-ai-optical",
+    "name": "Cignal AI",
+    "column": "industry",
+    "home": "https://www.cignal.ai/news/",
+    "tags": [
+      "communication-equipment"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "purple",
+    "interval": 1800000,
+    "title": "Optical/Telecom"
+  },
+  "cignal-ai-optical": {
+    "name": "Cignal AI",
+    "column": "industry",
+    "home": "https://www.cignal.ai/news/",
+    "tags": [
+      "communication-equipment"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "purple",
+    "interval": 1800000,
+    "title": "Optical/Telecom"
+  },
+  "sne-research": {
+    "redirect": "sne-research-battery",
+    "name": "SNE Research",
+    "column": "industry",
+    "home": "https://sneresearch.com/en/insight/release/",
+    "tags": [
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "rose",
+    "interval": 1800000,
+    "title": "动力电池"
+  },
+  "sne-research-battery": {
+    "name": "SNE Research",
+    "column": "industry",
+    "home": "https://sneresearch.com/en/insight/release/",
+    "tags": [
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "rose",
+    "interval": 1800000,
+    "title": "动力电池"
+  },
+  "cabia": {
+    "redirect": "cabia-battery",
+    "name": "中国汽车动力电池产业创新联盟",
+    "column": "industry",
+    "home": "https://batteryalliancechina.org/about",
+    "tags": [
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "red",
+    "interval": 1800000,
+    "title": "动力电池月度信息"
+  },
+  "cabia-battery": {
+    "name": "中国汽车动力电池产业创新联盟",
+    "column": "industry",
+    "home": "https://batteryalliancechina.org/about",
+    "tags": [
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "red",
+    "interval": 1800000,
+    "title": "动力电池月度信息"
+  },
+  "ggii": {
+    "redirect": "ggii-battery",
+    "name": "GGII/高工产业研究院",
+    "column": "industry",
+    "home": "https://www.gg-ii.com/",
+    "tags": [
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "lime",
+    "interval": 1800000,
+    "title": "动力电池"
+  },
+  "ggii-battery": {
+    "name": "GGII/高工产业研究院",
+    "column": "industry",
+    "home": "https://www.gg-ii.com/",
+    "tags": [
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "lime",
+    "interval": 1800000,
+    "title": "动力电池"
+  },
+  "ggii-robotics": {
+    "name": "GGII/高工产业研究院",
+    "column": "industry",
+    "home": "https://www.gg-ii.com/",
+    "tags": [
+      "robotics",
+      "manufacturing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "lime",
+    "interval": 1800000,
+    "title": "机器人/工控"
+  },
+  "evtank": {
+    "redirect": "evtank-battery",
+    "name": "EVTank",
+    "column": "industry",
+    "home": "http://www.evtank.cn/",
+    "tags": [
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "green",
+    "interval": 1800000,
+    "title": "动力电池研究"
+  },
+  "evtank-battery": {
+    "name": "EVTank",
+    "column": "industry",
+    "home": "http://www.evtank.cn/",
+    "tags": [
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "green",
+    "interval": 1800000,
+    "title": "动力电池研究"
+  },
+  "infolink": {
+    "redirect": "infolink-solar",
+    "name": "InfoLink",
+    "column": "industry",
+    "home": "https://www.infolink-group.com/energy-article",
+    "tags": [
+      "photovoltaic"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 1800000,
+    "title": "光伏供应链"
+  },
+  "infolink-solar": {
+    "name": "InfoLink",
+    "column": "industry",
+    "home": "https://www.infolink-group.com/energy-article",
+    "tags": [
+      "photovoltaic"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 1800000,
+    "title": "光伏供应链"
+  },
+  "woodmac": {
+    "redirect": "woodmac-renewables",
+    "name": "Wood Mackenzie",
+    "column": "industry",
+    "home": "https://www.woodmac.com/news/",
+    "tags": [
+      "photovoltaic",
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "orange",
+    "interval": 1800000,
+    "title": "新能源/光伏"
+  },
+  "woodmac-renewables": {
+    "name": "Wood Mackenzie",
+    "column": "industry",
+    "home": "https://www.woodmac.com/news/",
+    "tags": [
+      "photovoltaic",
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "orange",
+    "interval": 1800000,
+    "title": "新能源/光伏"
+  },
+  "bnef": {
+    "redirect": "bnef-energy-transition",
+    "name": "BloombergNEF",
+    "column": "industry",
+    "home": "https://about.bnef.com/insights/",
+    "tags": [
+      "photovoltaic",
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "green",
+    "interval": 1800000,
+    "title": "能源转型"
+  },
+  "bnef-energy-transition": {
+    "name": "BloombergNEF",
+    "column": "industry",
+    "home": "https://about.bnef.com/insights/",
+    "tags": [
+      "photovoltaic",
+      "power-battery",
+      "new-energy-vehicle"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "green",
+    "interval": 1800000,
+    "title": "能源转型"
+  },
+  "ifr": {
+    "redirect": "ifr-robotics",
+    "name": "IFR",
+    "column": "industry",
+    "home": "https://ifr.org/ifr-press-releases/",
+    "tags": [
+      "robotics",
+      "manufacturing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 1800000,
+    "title": "机器人统计"
+  },
+  "ifr-robotics": {
+    "name": "IFR",
+    "column": "industry",
+    "home": "https://ifr.org/ifr-press-releases/",
+    "tags": [
+      "robotics",
+      "manufacturing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_stat_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_data",
+      "authorityLevel": "association",
+      "parserFamily": "industry_stat",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 1800000,
+    "title": "机器人统计"
+  },
+  "mir": {
+    "redirect": "mir-automation",
+    "name": "MIR睿工业",
+    "column": "industry",
+    "home": "https://www.mirdatabank.com/news",
+    "tags": [
+      "robotics",
+      "manufacturing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "violet",
+    "interval": 1800000,
+    "title": "工业自动化"
+  },
+  "mir-automation": {
+    "name": "MIR睿工业",
+    "column": "industry",
+    "home": "https://www.mirdatabank.com/news",
+    "tags": [
+      "robotics",
+      "manufacturing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "violet",
+    "interval": 1800000,
+    "title": "工业自动化"
+  },
+  "customs": {
+    "redirect": "customs-manufacturing",
+    "name": "海关总署",
+    "column": "industry",
+    "home": "https://english.customs.gov.cn/Statistics/Statistics?ColumnId=1",
+    "tags": [
+      "manufacturing",
+      "semiconductor",
+      "photovoltaic",
+      "power-battery",
+      "communication-equipment"
+    ],
+    "eventProfile": {
+      "sourceKind": "official_macro_release",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "macro_data",
+      "authorityLevel": "official",
+      "parserFamily": "macro_release",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "CN_macro",
+        "CN_rates",
+        "A",
+        "HK"
+      ]
+    },
+    "color": "cyan",
+    "interval": 1800000,
+    "title": "进出口统计"
+  },
+  "customs-manufacturing": {
+    "name": "海关总署",
+    "column": "industry",
+    "home": "https://english.customs.gov.cn/Statistics/Statistics?ColumnId=1",
+    "tags": [
+      "manufacturing",
+      "semiconductor",
+      "photovoltaic",
+      "power-battery",
+      "communication-equipment"
+    ],
+    "eventProfile": {
+      "sourceKind": "official_macro_release",
+      "defaultEventType": "macro",
+      "defaultEventSubType": "macro_data",
+      "authorityLevel": "official",
+      "parserFamily": "macro_release",
+      "assetClasses": [
+        "equity",
+        "rates",
+        "fx",
+        "commodity",
+        "credit",
+        "fund"
+      ],
+      "markets": [
+        "CN_macro",
+        "CN_rates",
+        "A",
+        "HK"
+      ]
+    },
+    "color": "cyan",
+    "interval": 1800000,
+    "title": "进出口统计"
+  },
+  "ccid": {
+    "redirect": "ccid-consulting",
+    "name": "赛迪顾问",
+    "column": "industry",
+    "home": "https://www.ccidconsulting.com/en/",
+    "tags": [
+      "manufacturing",
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure",
+      "robotics"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "indigo",
+    "interval": 1800000,
+    "title": "制造业研究"
+  },
+  "ccid-consulting": {
+    "name": "赛迪顾问",
+    "column": "industry",
+    "home": "https://www.ccidconsulting.com/en/",
+    "tags": [
+      "manufacturing",
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure",
+      "robotics"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "indigo",
+    "interval": 1800000,
+    "title": "制造业研究"
   },
   "cnchemicals": {
     "redirect": "cnchemicals-industry",
@@ -2498,6 +3913,36 @@
     "color": "blue",
     "interval": 1800000,
     "title": "算力/AI报告"
+  },
+  "caict-reports": {
+    "name": "信通院",
+    "column": "industry",
+    "home": "https://gma.caict.ac.cn/plat/news",
+    "tags": [
+      "manufacturing",
+      "ai-computing",
+      "cloud-infrastructure",
+      "communication-equipment"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_report_release",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_report",
+      "authorityLevel": "association",
+      "parserFamily": "industry_report",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 1800000,
+    "title": "产业报告"
   },
   "gov": {
     "redirect": "gov-latest",
