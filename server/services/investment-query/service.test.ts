@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { EventDetail, InvestmentEventBrief, InvestmentEventDetail } from "@shared/types"
 import type { EventProjectionInput, EventProjectionQueryOptions, EventProjectionRecord } from "#/database/event-projections"
-import { type CanonicalProjectionRepairStore, InvestmentQueryService } from "#/services/investment-query/service"
+import {
+  type CanonicalProjectionRepairStore,
+  InvestmentQueryService,
+  getRelatedEventsFanoutDiagnostics,
+} from "#/services/investment-query/service"
 
 afterEach(() => {
   delete (globalThis as typeof globalThis & { logger?: unknown }).logger
@@ -316,6 +320,31 @@ function canonicalDetail(overrides: Partial<EventDetail> = {}): EventDetail {
 }
 
 describe("investmentQueryService", () => {
+  it("reports related-events fanout diagnostics from the same lookup plan as related reads", () => {
+    expect(getRelatedEventsFanoutDiagnostics(detail())).toEqual({
+      relatedQueryCount: 5,
+      relatedScanLimit: 30,
+    })
+    expect(getRelatedEventsFanoutDiagnostics(detail(), { limitPerSection: 12 })).toEqual({
+      relatedQueryCount: 5,
+      relatedScanLimit: 70,
+    })
+  })
+
+  it("does not count absent entity, topic, or market lookups in related-events fanout diagnostics", () => {
+    const sparse = detail(brief({
+      affectedEntities: [],
+      primarySubject: undefined,
+      relatedTopics: [],
+      affectedMarkets: [],
+    }))
+
+    expect(getRelatedEventsFanoutDiagnostics(sparse)).toEqual({
+      relatedQueryCount: 2,
+      relatedScanLimit: 12,
+    })
+  })
+
   it("reads latest events from the projection latest index", async () => {
     const store = new MemoryProjectionQueryStore([projection()])
     const service = new InvestmentQueryService(store)
