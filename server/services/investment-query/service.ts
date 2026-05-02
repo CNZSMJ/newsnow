@@ -1,5 +1,6 @@
 import type { AffectedMarket, DirectionalView } from "@shared/event-profile"
 import { getPrimaryEventTimestamp } from "@shared/investment-event-time"
+import { consola } from "consola"
 import type {
   EventSubType,
   EventType,
@@ -15,16 +16,40 @@ import type {
   WatchlistRecord,
 } from "@shared/types"
 import type { EventProjectionQueryOptions, EventProjectionRecord, EventQueryIndexName } from "#/database/event-projections"
+import type { CanonicalEventDetailStore, InvestmentProjectionStore } from "#/services/event-engine/projection-pipeline"
 import {
   getInvestmentEventFamilyLabel,
   getInvestmentRelatedSectionDisplayLabel,
 } from "#/services/event-engine/investment-view"
 import { getInvestmentScanFocusActionBuckets, type InvestmentScanFocus } from "#/services/event-engine/investment-filters"
+import { refreshInvestmentProjectionForEvent } from "#/services/event-engine/projection-pipeline"
 
 export interface InvestmentProjectionQueryStore {
   getProjection: (eventId: string) => Promise<EventProjectionRecord | undefined>
   listProjections: (options: EventProjectionQueryOptions) => Promise<EventProjectionRecord[]>
   countProjections: (options: EventProjectionQueryOptions) => Promise<number>
+}
+
+interface CanonicalProjectionRepairQueryOptions extends InvestmentBaseQueryOptions {
+  q?: string
+  entity?: string
+  limit: number
+  scanLimit?: number
+}
+
+type InvestmentProjectionQueryOptions = EventProjectionQueryOptions & {
+  focus?: InvestmentScanFocus
+  includeTotalCount?: boolean
+}
+
+export interface CanonicalProjectionRepairStore extends CanonicalEventDetailStore {
+  listEvents: (options: CanonicalProjectionRepairQueryOptions) => Promise<Array<{ eventId: string }>>
+}
+
+function getInvestmentQueryLogger() {
+  return (globalThis as typeof globalThis & {
+    logger?: Pick<typeof consola, "warn">
+  }).logger ?? consola.withTag("investment-query")
 }
 
 export interface InvestmentQueryResult {
@@ -204,9 +229,10 @@ function sortProjectionRecords(records: EventProjectionRecord[], sortBy: Investm
   })
 }
 
-type InvestmentProjectionQueryOptions = EventProjectionQueryOptions & {
-  focus?: InvestmentScanFocus
-  includeTotalCount?: boolean
+type RepairableProjectionStore = InvestmentProjectionQueryStore & InvestmentProjectionStore
+
+function isRepairableProjectionStore(store: InvestmentProjectionQueryStore): store is RepairableProjectionStore {
+  return typeof (store as Partial<InvestmentProjectionStore>).upsertProjection === "function"
 }
 
 function normalizeActionBuckets(
@@ -300,7 +326,10 @@ function appendDistinctRelatedSection(
 }
 
 export class InvestmentQueryService {
-  constructor(private readonly store: InvestmentProjectionQueryStore) {}
+  constructor(
+    private readonly store: InvestmentProjectionQueryStore,
+    private readonly canonicalStore?: CanonicalProjectionRepairStore,
+  ) {}
 
   async listLatestEvents(options: InvestmentBaseQueryOptions = {}): Promise<InvestmentQueryResult> {
     return this.query({
@@ -315,27 +344,57 @@ export class InvestmentQueryService {
     const q = normalizeText(options.q)
     if (!q) return toResult([], 0)
 
-    return this.query({
+    const limit = normalizeLimit(options.limit)
+    const queryOptions: InvestmentProjectionQueryOptions = {
       ...options,
       q,
-      limit: normalizeLimit(options.limit),
-    })
+      limit,
+    }
+    let result = await this.query(queryOptions)
+    const repairLimit = normalizeScanLimit(options.scanLimit, limit)
+    const repaired = await this.repairProjectionsForCanonicalMatches({
+      ...options,
+      q,
+      limit: repairLimit,
+      scanLimit: repairLimit,
+    }, new Set(result.items.map(item => item.eventId)))
+    if (repaired > 0) {
+      result = await this.query(queryOptions)
+    }
+    return result
   }
 
   async getEntityEvents(options: InvestmentEntityQueryOptions): Promise<InvestmentQueryResult> {
     const entity = normalizeText(options.entity)
     if (!entity) return toResult([], 0)
 
-    return this.query({
+    const limit = normalizeLimit(options.limit)
+    const queryOptions: InvestmentProjectionQueryOptions = {
       ...options,
-      indexName: "entity",
+      indexName: "entity" as const,
       indexValue: entity,
-      limit: normalizeLimit(options.limit),
-    })
+      limit,
+    }
+    let result = await this.query(queryOptions)
+    const repairLimit = normalizeScanLimit(options.scanLimit, limit)
+    const repaired = await this.repairProjectionsForCanonicalMatches({
+      ...options,
+      entity,
+      limit: repairLimit,
+      scanLimit: repairLimit,
+    }, new Set(result.items.map(item => item.eventId)))
+    if (repaired > 0) {
+      result = await this.query(queryOptions)
+    }
+    return result
   }
 
   async getEventDetail(eventId: string, options: InvestmentEventDetailQueryOptions = {}): Promise<InvestmentEventDetail | undefined> {
-    const projection = await this.store.getProjection(eventId)
+    let projection = await this.store.getProjection(eventId)
+    if (!projection?.detail) {
+      await this.repairProjectionForEvent(eventId)
+      projection = await this.store.getProjection(eventId)
+    }
     if (!projection?.detail) return undefined
 
     if (options.includeRelatedEvents === false) return projection.detail
@@ -486,5 +545,35 @@ export class InvestmentQueryService {
       ? records.length
       : await this.store.countProjections(projectionOptions)
     return toResult(records, totalCount)
+  }
+
+  private async repairProjectionsForCanonicalMatches(
+    options: CanonicalProjectionRepairQueryOptions,
+    projectedEventIds: ReadonlySet<string>,
+  ) {
+    if (!this.canonicalStore || !isRepairableProjectionStore(this.store)) return 0
+
+    const candidates = await this.canonicalStore.listEvents(options)
+    let repaired = 0
+    for (const candidate of candidates) {
+      if (projectedEventIds.has(candidate.eventId)) continue
+      let result
+      try {
+        result = await refreshInvestmentProjectionForEvent(candidate.eventId, this.canonicalStore, this.store)
+      } catch (error) {
+        getInvestmentQueryLogger().warn(`failed to repair investment projection for ${candidate.eventId}`, error)
+        continue
+      }
+      if (result.status !== "missing_canonical") {
+        repaired += 1
+      }
+    }
+    return repaired
+  }
+
+  private async repairProjectionForEvent(eventId: string) {
+    if (!this.canonicalStore || !isRepairableProjectionStore(this.store)) return false
+    const result = await refreshInvestmentProjectionForEvent(eventId, this.canonicalStore, this.store)
+    return result.status !== "missing_canonical"
   }
 }

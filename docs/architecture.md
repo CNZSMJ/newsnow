@@ -1,7 +1,7 @@
 # 投资事件系统架构
 
 状态：使用中
-最后更新：2026-04-20
+最后更新：2026-05-02
 范围：`newsnow` 事件系统当前代码实现的抽象层级、模块边界与现状
 文档角色：当前生效的总体架构设计与约束
 更新时机：系统分层、关键模块边界、核心存储结构或对外语义边界发生变化时
@@ -38,7 +38,7 @@ flowchart LR
   B --> C["摄取与编排层\nscheduler / worker / backfill"]
   C --> D["语义处理层\nprofiles / resolver / extractors / merger / impact / subject / watch-target"]
   D --> E["持久化层\nevents db + facts + evidence + entity links + timeline"]
-  E --> F["查询与投影层\nquery / investment-view / related-events / ranking"]
+  E --> F["查询与投影层\nprojection / investment-query / compatibility query"]
   F --> G["对外 surface\nHTTP provider routes / local MCP / frontend"]
   C --> H["运维与质量层\nmetrics / slo / quality-gates / replay / shadow / runbook"]
   D --> H
@@ -171,22 +171,30 @@ flowchart LR
 
 当前代码：
 
-- [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/event-engine/query.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/event-engine/query.ts)
+- [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/database/event-projections.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/database/event-projections.ts)
+- [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/event-engine/projection-pipeline.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/event-engine/projection-pipeline.ts)
+- [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/investment-query/service.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/investment-query/service.ts)
 - [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/event-engine/investment-view.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/event-engine/investment-view.ts)
 - `investment-filters.ts`
-- `related-events.ts`
-- `ranking.ts`
+- [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/event-engine/query.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/services/event-engine/query.ts)（兼容 canonical query helper，不是 provider/user/agent 主热路径）
 
 职责：
 
-- 读取 canonical event store
-- 投影成 investor / provider-facing investment view
-- 生成 related events、scan filters、排序分数
+- 从 canonical event detail 构建 provider / investor-facing investment projection
+- 将 `InvestmentEventBrief` / `InvestmentEventDetail` 写入 `event_projection`
+- 维护 `event_query_indexes`，覆盖 latest、entity、topic、source、market、watchlist、related 等在线读取入口
+- 通过 `InvestmentQueryService` 为 provider HTTP、watchlist event-read、frontend 和本地 MCP 提供统一读取 Interface
+- 在 projection 缺失或 stale 时，通过 canonical truth 做受控 repair / fallback，避免继续服务错误投影
+- 保留 legacy canonical query helper 供兼容、shadow、运维或迁移场景使用
 
 当前现状：
 
 - `InvestmentEventBrief` / `InvestmentEventDetail` 已经是稳定的 provider-facing projection
-- watchlists 查询也消费同一套 backend truth
+- provider 主查询 `/api/investment-events/latest`、`search`、`entity` 已经通过 `InvestmentQueryService` 消费 `event_projection`
+- provider detail `/api/investment-events/:id` 已经读取 `event_projection.detail_json`
+- watchlist event-read 已经通过 `InvestmentQueryService` 消费 projection records，不再由 watchlist metadata Module 读取 event table
+- related-events 已经由 `InvestmentQueryService` 通过 projection index / projection filter 生成，不再由 route 层 fan-out 到 canonical query
+- `server/services/event-engine/query.ts` 仍然存在，但它是兼容 canonical read helper；不应被视为当前 provider/user/agent 在线查询的主路径
 
 ### 4.7 对外 surface
 
