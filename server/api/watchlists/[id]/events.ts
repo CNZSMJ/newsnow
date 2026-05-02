@@ -1,5 +1,5 @@
 import type { InvestmentEventFamily, InvestmentEventListResponse } from "@shared/types"
-import { matchesInvestmentEventFamily } from "#/services/event-engine/investment-view"
+import type { InvestmentScanFocus } from "#/services/event-engine/investment-filters"
 import { getInvestmentQueryService } from "#/services/investment-query/factory"
 import { getWatchlist, touchWatchlistCheckedAt } from "#/services/watchlists"
 
@@ -16,6 +16,7 @@ export default defineEventHandler(async (event): Promise<InvestmentEventListResp
   const limit = Number(query.limit ?? 20)
   const sortBy = query.sort === "latest" ? "latest" : "investment"
   const eventFamily = typeof query.event_family === "string" ? query.event_family as InvestmentEventFamily : undefined
+  const focus = typeof query.focus === "string" ? query.focus as InvestmentScanFocus : "all"
   const watchlist = await getWatchlist(id)
   if (!watchlist) {
     throw createError({
@@ -28,17 +29,18 @@ export default defineEventHandler(async (event): Promise<InvestmentEventListResp
   const res = investmentQueryService
     ? await investmentQueryService.getWatchlistEvents(watchlist.query, {
       limit: Number.isNaN(limit) ? 20 : Math.min(Math.max(limit, 1), 100),
+      eventFamily,
+      focus,
       sortBy,
     })
     : { updatedAt: Date.now(), items: [], totalCount: 0 }
   await touchWatchlistCheckedAt(id, res.updatedAt)
-  const items = res.items.filter(item => matchesInvestmentEventFamily(item, eventFamily))
   return {
     status: "success",
     updatedTime: res.updatedAt,
-    items,
+    items: res.items,
     totalCount: res.totalCount,
-    displayedCount: items.length,
-    hasMore: items.length < res.totalCount,
+    displayedCount: res.items.length,
+    hasMore: res.items.length < res.totalCount,
   }
 })

@@ -278,6 +278,42 @@ describe("eventProjectionTable", () => {
     ])
   })
 
+  it("filters projection rows by materialized action buckets", async () => {
+    const { table } = createProjectionTable()
+    await table.init()
+
+    for (const item of [
+      brief({ eventId: "evt_action", actionBucket: "actionable", latestLifecycleAt: 3000 }),
+      brief({ eventId: "evt_watch", actionBucket: "watch", latestLifecycleAt: 2000 }),
+      brief({ eventId: "evt_noise", actionBucket: "noise", latestLifecycleAt: 1000 }),
+    ]) {
+      await table.upsertProjection({
+        eventId: item.eventId,
+        canonicalUpdatedAt: item.latestLifecycleAt ?? 0,
+        canonicalChecksum: `checksum-${item.eventId}`,
+        brief: item,
+        detail: detail(item),
+        eventType: "policy",
+        sourceKind: "media_fast_feed",
+        sourceIds: ["wallstreetcn-quick"],
+      })
+    }
+
+    await expect(table.listProjections({
+      indexName: "latest",
+      indexValue: "all",
+      actionBuckets: ["actionable", "watch"],
+      sortBy: "latest",
+      limit: 10,
+    })).resolves.toMatchObject([
+      { eventId: "evt_action" },
+      { eventId: "evt_watch" },
+    ])
+    await expect(table.countProjections({
+      actionBuckets: ["actionable", "watch"],
+    })).resolves.toBe(2)
+  })
+
   it("replaces current-event indexes while preserving inbound related edges", async () => {
     const { table } = createProjectionTable()
     await table.init()
