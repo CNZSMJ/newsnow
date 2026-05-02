@@ -3,6 +3,7 @@ import { getPrimaryEventTimestamp } from "@shared/investment-event-time"
 import type {
   EventSubType,
   EventType,
+  InvestmentActionBucket,
   InvestmentEntityRef,
   InvestmentEventBrief,
   InvestmentEventDetail,
@@ -18,6 +19,7 @@ import {
   getInvestmentEventFamilyLabel,
   getInvestmentRelatedSectionDisplayLabel,
 } from "#/services/event-engine/investment-view"
+import { getInvestmentScanFocusActionBuckets, type InvestmentScanFocus } from "#/services/event-engine/investment-filters"
 
 export interface InvestmentProjectionQueryStore {
   getProjection: (eventId: string) => Promise<EventProjectionRecord | undefined>
@@ -35,6 +37,7 @@ interface InvestmentBaseQueryOptions {
   limit?: number
   scanLimit?: number
   eventFamily?: InvestmentEventFamily
+  focus?: InvestmentScanFocus
   eventType?: EventType
   eventSubType?: EventSubType
   sourceId?: SourceID
@@ -201,6 +204,26 @@ function sortProjectionRecords(records: EventProjectionRecord[], sortBy: Investm
   })
 }
 
+type InvestmentProjectionQueryOptions = EventProjectionQueryOptions & {
+  focus?: InvestmentScanFocus
+  includeTotalCount?: boolean
+}
+
+function normalizeActionBuckets(
+  actionBuckets: InvestmentActionBucket[] | undefined,
+  focus?: InvestmentScanFocus,
+) {
+  return getInvestmentScanFocusActionBuckets(focus) ?? actionBuckets
+}
+
+function toProjectionQueryOptions(options: InvestmentProjectionQueryOptions): EventProjectionQueryOptions {
+  const { includeTotalCount: _includeTotalCount, focus, actionBuckets, ...projectionOptions } = options
+  const normalizedActionBuckets = normalizeActionBuckets(actionBuckets, focus)
+  return normalizedActionBuckets?.length
+    ? { ...projectionOptions, actionBuckets: normalizedActionBuckets }
+    : projectionOptions
+}
+
 function buildWatchlistIndexSeeds(query: WatchlistQuery) {
   const seeds: Array<{ indexName: EventQueryIndexName, indexValue: string }> = [
     ...normalizeTextList(query.entities).map(indexValue => ({ indexName: "entity" as const, indexValue })),
@@ -334,13 +357,13 @@ export class InvestmentQueryService {
     const recordsByEventId = new Map<string, EventProjectionRecord>()
 
     for (const seed of seedQueries) {
-      const records = await this.store.listProjections({
+      const records = await this.store.listProjections(toProjectionQueryOptions({
         ...options,
         ...projectionFilters,
         ...seed,
         limit: scanLimit,
         sortBy: options.sortBy ?? "investment",
-      })
+      }))
       for (const record of records) {
         if (matchesWatchlistQuery(record, query)) {
           recordsByEventId.set(record.eventId, record)
@@ -349,9 +372,9 @@ export class InvestmentQueryService {
     }
 
     const matched = sortProjectionRecords([...recordsByEventId.values()], options.sortBy)
-      .slice(0, limit)
+    const items = matched.slice(0, limit)
 
-    return toResult(matched, matched.length)
+    return toResult(items, matched.length)
   }
 
   async getWatchlistDetail(record: WatchlistRecord, options: InvestmentBaseQueryOptions = {}): Promise<InvestmentWatchlistDetail> {
@@ -456,11 +479,12 @@ export class InvestmentQueryService {
     return sections
   }
 
-  private async query(options: EventProjectionQueryOptions & { includeTotalCount?: boolean }) {
-    const records = await this.store.listProjections(options)
+  private async query(options: InvestmentProjectionQueryOptions) {
+    const projectionOptions = toProjectionQueryOptions(options)
+    const records = await this.store.listProjections(projectionOptions)
     const totalCount = options.includeTotalCount === false
       ? records.length
-      : await this.store.countProjections(options)
+      : await this.store.countProjections(projectionOptions)
     return toResult(records, totalCount)
   }
 }

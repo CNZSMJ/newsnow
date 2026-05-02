@@ -2,7 +2,7 @@ import process from "node:process"
 import type { Database } from "db0"
 import type { AffectedMarket, DirectionalView, EventSourceKind } from "@shared/event-profile"
 import { DEFERRED_PUBLISH_GAP_MS } from "@shared/investment-event-time"
-import type { EventSubType, EventType, InvestmentEventBrief, InvestmentEventDetail, InvestmentEventFamily, SourceID } from "@shared/types"
+import type { EventSubType, EventType, InvestmentActionBucket, InvestmentEventBrief, InvestmentEventDetail, InvestmentEventFamily, SourceID } from "@shared/types"
 import { declareSqlAccess } from "#/database/sql-ownership"
 
 export const REQUIRED_EVENT_QUERY_INDEX_NAMES = [
@@ -164,6 +164,7 @@ export interface EventProjectionQueryOptions {
   indexValue?: string
   q?: string
   eventFamily?: InvestmentEventFamily
+  actionBuckets?: InvestmentActionBucket[]
   eventType?: EventType
   eventSubType?: EventSubType
   sourceId?: SourceID
@@ -331,6 +332,10 @@ function buildProjectionQueryParts(options: EventProjectionQueryOptions) {
   if (options.eventFamily) {
     clauses.push("p.event_family = ?")
     params.push(options.eventFamily)
+  }
+  if (options.actionBuckets?.length) {
+    clauses.push(`p.action_bucket IN (${options.actionBuckets.map(() => "?").join(", ")})`)
+    params.push(...options.actionBuckets)
   }
   if (options.eventType) {
     clauses.push("p.event_type = ?")

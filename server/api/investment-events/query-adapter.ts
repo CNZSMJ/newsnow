@@ -7,8 +7,7 @@ import type {
   InvestmentEventFamily,
   InvestmentProviderEventListResponse,
 } from "@shared/types"
-import { type InvestmentScanFocus, filterInvestmentBriefsByFocus } from "#/services/event-engine/investment-filters"
-import { matchesInvestmentEventFamily } from "#/services/event-engine/investment-view"
+import type { InvestmentScanFocus } from "#/services/event-engine/investment-filters"
 import { buildInvestmentProviderMeta } from "#/services/event-engine/provider"
 
 export interface InvestmentListQueryOptions {
@@ -80,20 +79,14 @@ export function parseInvestmentListQuery(query: Record<string, unknown>): Invest
 
 export function buildInvestmentListResponse(
   result: InvestmentListQueryResult,
-  options: Pick<InvestmentListQueryOptions, "focus" | "eventFamily">,
 ): InvestmentProviderEventListResponse {
-  const items = filterInvestmentBriefsByFocus(
-    result.items.filter(item => matchesInvestmentEventFamily(item, options.eventFamily)),
-    options.focus,
-  )
-
   return {
     status: "success",
     updatedTime: result.updatedAt,
     contract: buildInvestmentProviderMeta("event_list"),
-    items,
+    items: result.items,
     totalCount: result.totalCount,
-    displayedCount: items.length,
-    hasMore: items.length < result.totalCount,
+    displayedCount: result.items.length,
+    hasMore: result.items.length < result.totalCount,
   }
 }

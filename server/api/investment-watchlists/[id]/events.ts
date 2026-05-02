@@ -1,6 +1,5 @@
 import type { InvestmentEventFamily, InvestmentProviderEventListResponse } from "@shared/types"
-import { type InvestmentScanFocus, filterInvestmentBriefsByFocus } from "#/services/event-engine/investment-filters"
-import { matchesInvestmentEventFamily } from "#/services/event-engine/investment-view"
+import type { InvestmentScanFocus } from "#/services/event-engine/investment-filters"
 import { buildInvestmentProviderMeta } from "#/services/event-engine/provider"
 import { getInvestmentQueryService } from "#/services/investment-query/factory"
 import { getWatchlist, touchWatchlistCheckedAt } from "#/services/watchlists"
@@ -32,23 +31,20 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
   const res = investmentQueryService
     ? await investmentQueryService.getWatchlistEvents(watchlist.query, {
       limit: Number.isNaN(limit) ? 20 : Math.min(Math.max(limit, 1), 100),
+      eventFamily,
+      focus,
       sortBy,
     })
     : { updatedAt: Date.now(), items: [], totalCount: 0 }
   await touchWatchlistCheckedAt(id, res.updatedAt)
-  const items = filterInvestmentBriefsByFocus(
-    res.items
-      .filter(item => matchesInvestmentEventFamily(item, eventFamily)),
-    focus,
-  )
 
   return {
     status: "success",
     updatedTime: res.updatedAt,
     contract: buildInvestmentProviderMeta("watchlist_events"),
-    items,
+    items: res.items,
     totalCount: res.totalCount,
-    displayedCount: items.length,
-    hasMore: items.length < res.totalCount,
+    displayedCount: res.items.length,
+    hasMore: res.items.length < res.totalCount,
   }
 })

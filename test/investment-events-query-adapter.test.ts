@@ -109,7 +109,7 @@ describe("investment events query adapter", () => {
     })
   })
 
-  it("builds the provider event-list response with family and focus filters", () => {
+  it("builds the provider event-list response from query-model-filtered results", () => {
     const response = buildInvestmentListResponse({
       updatedAt: 1700000020000,
       totalCount: 3,
@@ -118,22 +118,19 @@ describe("investment events query adapter", () => {
         brief({ eventId: "evt_trade", actionBucket: "actionable", eventFamily: "policy_signal" }),
         brief({ eventId: "evt_other", actionBucket: "actionable", eventFamily: "earnings" }),
       ],
-    }, {
-      focus: "actionable",
-      eventFamily: "policy_signal",
     })
 
     expect(response).toMatchObject({
       status: "success",
       updatedTime: 1700000020000,
       totalCount: 3,
-      displayedCount: 1,
-      hasMore: true,
+      displayedCount: 3,
+      hasMore: false,
     })
     expect(response.contract).toMatchObject({
       surface: "event_list",
       projection: "investment",
     })
-    expect(response.items.map(item => item.eventId)).toEqual(["evt_trade"])
+    expect(response.items.map(item => item.eventId)).toEqual(["evt_watch", "evt_trade", "evt_other"])
   })
 })

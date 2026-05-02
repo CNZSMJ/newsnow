@@ -13,9 +13,8 @@ class MemoryProjectionQueryStore {
     private readonly relatedIndex: Record<string, string[]> = {},
   ) {}
 
-  async listProjections(options: EventProjectionQueryOptions) {
-    this.listCalls.push(options)
-    const rows = this.records.filter((record) => {
+  private filterRecords(options: EventProjectionQueryOptions) {
+    return this.records.filter((record) => {
       if (options.indexName === "entity" && options.indexValue) {
         const values = [
           ...record.brief.affectedEntities.flatMap(entity => [entity.entityId, entity.label, entity.code]),
@@ -45,17 +44,23 @@ class MemoryProjectionQueryStore {
       if (options.eventType && record.eventType !== options.eventType) return false
       if (options.eventSubType && record.eventSubType !== options.eventSubType) return false
       if (options.eventFamily && record.brief.eventFamily !== options.eventFamily) return false
+      if (options.actionBuckets?.length && !options.actionBuckets.includes(record.brief.actionBucket)) return false
       if (options.directionalView && record.brief.signalDirection !== options.directionalView) return false
       if (options.minMaterialityScore !== undefined && record.brief.materialityScore < options.minMaterialityScore) return false
       if (options.minAuthorityScore !== undefined && record.brief.authorityScore < options.minAuthorityScore) return false
       return true
     })
+  }
+
+  async listProjections(options: EventProjectionQueryOptions) {
+    this.listCalls.push(options)
+    const rows = this.filterRecords(options)
     return rows.slice(0, options.limit)
   }
 
   async countProjections(options: EventProjectionQueryOptions) {
     this.countCalls.push(options)
-    return this.records.length
+    return this.filterRecords(options).length
   }
 
   async getProjection(eventId: string) {
@@ -245,6 +250,36 @@ describe("investmentQueryService", () => {
     expect(store.countCalls).toHaveLength(0)
   })
 
+  it("applies event family and focus filters inside the projection query model", async () => {
+    const store = new MemoryProjectionQueryStore([
+      projection(brief({ eventId: "evt_watch_policy", eventFamily: "policy_signal", actionBucket: "watch" })),
+      projection(brief({ eventId: "evt_action_policy", eventFamily: "policy_signal", actionBucket: "actionable" })),
+      projection(brief({ eventId: "evt_noise_policy", eventFamily: "policy_signal", actionBucket: "noise" })),
+      projection(brief({ eventId: "evt_action_earnings", eventFamily: "earnings", actionBucket: "actionable" })),
+    ])
+    const service = new InvestmentQueryService(store)
+
+    await expect(service.listLatestEvents({
+      limit: 10,
+      eventFamily: "policy_signal",
+      focus: "watchable",
+    })).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ eventId: "evt_watch_policy" }),
+        expect.objectContaining({ eventId: "evt_action_policy" }),
+      ],
+      totalCount: 2,
+    })
+    expect(store.listCalls[0]).toMatchObject({
+      eventFamily: "policy_signal",
+      actionBuckets: ["actionable", "watch"],
+    })
+    expect(store.countCalls[0]).toMatchObject({
+      eventFamily: "policy_signal",
+      actionBuckets: ["actionable", "watch"],
+    })
+  })
+
   it("reads detail and related sections from projection records", async () => {
     const store = new MemoryProjectionQueryStore([
       projection(),
@@ -379,6 +414,35 @@ describe("investmentQueryService", () => {
     expect(store.listCalls).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ indexName: "latest", indexValue: "all" }),
     ]))
+  })
+
+  it("counts filtered watchlist matches before applying the response limit", async () => {
+    const store = new MemoryProjectionQueryStore([
+      projection(brief({ eventId: "evt_action_new", actionBucket: "actionable", latestLifecycleAt: 1700000040000 })),
+      projection(brief({ eventId: "evt_watch", actionBucket: "watch", latestLifecycleAt: 1700000030000 })),
+      projection(brief({ eventId: "evt_noise", actionBucket: "noise", latestLifecycleAt: 1700000020000 })),
+      projection(brief({ eventId: "evt_action_old", actionBucket: "actionable", latestLifecycleAt: 1700000010000 })),
+    ])
+    const service = new InvestmentQueryService(store)
+
+    await expect(service.getWatchlistEvents({
+      topics: ["ai-computing"],
+    }, {
+      limit: 2,
+      focus: "watchable",
+      sortBy: "latest",
+    })).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ eventId: "evt_action_new" }),
+        expect.objectContaining({ eventId: "evt_watch" }),
+      ],
+      totalCount: 3,
+    })
+    expect(store.listCalls[0]).toMatchObject({
+      indexName: "topic",
+      indexValue: "ai-computing",
+      actionBuckets: ["actionable", "watch"],
+    })
   })
 
   it("queries indexed watchlist seeds instead of bounded global latest slices", async () => {

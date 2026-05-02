@@ -171,6 +171,7 @@ export function getServer() {
     async ({ count, event_type, event_subtype, event_family, source_id, topic, market, directional_view, focus, min_materiality_score, min_authority_score, changed_since, lifecycle_after, series_key, period_key, latest, sort }): Promise<CallToolResult> => {
       let n = Number(count)
       if (Number.isNaN(n) || n < 1) n = 10
+      const focusMode = focus ?? "all"
 
       const query = new URLSearchParams({
         limit: String(n),
@@ -195,7 +196,7 @@ export function getServer() {
       const res: InvestmentProviderEventListResponse = await $fetch(`/api/investment-events/latest?${query.toString()}`)
       const items = res.items.map(item => toMcpEventBrief(item))
       return {
-        structuredContent: buildInvestmentScanStructuredContent(res.contract, items, "all"),
+        structuredContent: buildInvestmentScanStructuredContent(res.contract, items, focusMode),
         content: items.map(item => ({
           type: "text",
           text: formatInvestmentEventSummary(item),
@@ -483,6 +484,7 @@ export function getServer() {
     async ({ watchlist_id, count, latest, sort, event_family, focus }): Promise<CallToolResult> => {
       let n = Number(count)
       if (Number.isNaN(n) || n < 1) n = 10
+      const focusMode = focus ?? "all"
       const query = new URLSearchParams({
         limit: String(n),
         latest: String(latest ?? true),
@@ -493,7 +495,7 @@ export function getServer() {
       const res: InvestmentProviderEventListResponse = await $fetch(`/api/investment-watchlists/${watchlist_id}/events?${query.toString()}`)
       const items = res.items.map(item => toMcpEventBrief(item))
       return {
-        structuredContent: buildInvestmentScanStructuredContent(res.contract, items, "all"),
+        structuredContent: buildInvestmentScanStructuredContent(res.contract, items, focusMode),
         content: items.map(item => ({
           type: "text",
           text: formatInvestmentEventSummary(item),

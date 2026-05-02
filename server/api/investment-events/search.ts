@@ -20,6 +20,8 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
     ? await investmentQueryService.searchEvents({
       q,
       limit: listQuery.limit,
+      eventFamily: listQuery.eventFamily,
+      focus: listQuery.focus,
       market: listQuery.market,
       directionalView: listQuery.directionalView,
       minMaterialityScore: listQuery.minMaterialityScore,
@@ -32,5 +34,5 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
     })
     : { updatedAt: Date.now(), items: [], totalCount: 0 }
 
-  return buildInvestmentListResponse(res, listQuery)
+  return buildInvestmentListResponse(res)
 })

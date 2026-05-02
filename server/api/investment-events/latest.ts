@@ -21,6 +21,8 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
   const res = investmentQueryService
     ? await investmentQueryService.listLatestEvents({
       limit: listQuery.limit,
+      eventFamily: listQuery.eventFamily,
+      focus: listQuery.focus,
       eventType: typeof query.event_type === "string" ? query.event_type as EventType : undefined,
       eventSubType: typeof query.event_subtype === "string" ? query.event_subtype as EventSubType : undefined,
       sourceId: typeof query.source_id === "string" ? query.source_id as SourceID : undefined,
@@ -38,5 +40,5 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
     })
     : { updatedAt: Date.now(), items: [], totalCount: 0 }
 
-  return buildInvestmentListResponse(res, listQuery)
+  return buildInvestmentListResponse(res)
 })

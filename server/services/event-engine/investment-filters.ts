@@ -17,6 +17,12 @@ export function filterInvestmentBriefsByFocus(items: InvestmentEventBrief[], foc
   return items
 }
 
+export function getInvestmentScanFocusActionBuckets(focus?: InvestmentScanFocus): InvestmentActionBucket[] | undefined {
+  if (focus === "actionable") return ["actionable"]
+  if (focus === "watchable") return ["actionable", "watch"]
+  return undefined
+}
+
 export function countInvestmentActionBuckets(items: Pick<InvestmentEventBrief, "actionBucket">[]): InvestmentScanSummary {
   return items.reduce<InvestmentScanSummary>((acc, item) => {
     acc.total += 1
