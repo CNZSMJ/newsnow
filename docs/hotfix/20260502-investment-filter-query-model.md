@@ -2,7 +2,7 @@
 
 状态：Completed
 日期：2026-05-02
-关联 issue：`.scratch/investment-event-filter-query-model/issues/01-filter-semantics-in-query-model.md`
+关联 issue：临时 issue 内容已并入本文档
 
 ## 1. 问题现象描述
 
