@@ -1,7 +1,7 @@
 # 事件运维手册
 
 状态：使用中
-最后更新：2026-04-19
+最后更新：2026-05-25
 范围：`events` 系统在 post-foundation 阶段的 latency remediation、repair、backfill、manual review 运维流程
 文档角色：运维流程与发布验证手册
 更新时机：运维命令、triage 步骤、repair 流程或验证规则变化时
@@ -210,6 +210,32 @@ Latency remediation 要优先处理那些直接影响盘中或开盘决策的 so
 当前标准 repair 命令：
 
 - `pnpm events:repair-ingested-at`
+
+### 原因假设 backfill / inspect / consistency
+
+原因假设是 backend-owned canonical 语义的一部分。历史事件需要补原因假设时，使用内部脚本，小批量、默认 dry-run：
+
+- `pnpm --silent events:backfill-causal-hypotheses --json --limit <1..100>`
+- `pnpm --silent events:backfill-causal-hypotheses --json --limit <1..100> --execute`
+- `pnpm --silent events:backfill-causal-hypotheses --json --event-id <eventId>`
+- `pnpm --silent events:backfill-causal-hypotheses --json --run-id <runId>`
+
+查看运行记录：
+
+- `pnpm --silent events:inspect-causal-hypothesis-run --event-id <eventId>`
+- `pnpm --silent events:inspect-causal-hypothesis-run --run-id <runId>`
+- 只有显式 `--include-snapshots` 且传 `--run-id` 时才输出已保存快照；不得通过 frontend、provider API 或 MCP 暴露快照。
+
+一致性检查：
+
+- `pnpm --silent events:check-causal-hypothesis-runs --json`
+
+边界：
+
+- 默认批量候选不包含 `actionBucket = noise`；只有精确 `--event-id` 或显式 `--include-noise` 才包含。
+- 真实排队必须传 `--execute`。
+- `--concurrency` 只允许 `1..2`。
+- projection repair / rebuild 只能读取已有原因结果，不能触发模型生成。
 
 如果未来新增 repair 脚本，也要在这里补充用途和使用边界。
 

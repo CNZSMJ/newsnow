@@ -12,6 +12,11 @@ import type { EventRow, RawItemRow } from "#/types"
 import { normalizeEntityLinks, normalizeFactEntityIds, normalizePrimaryEntityName } from "#/services/event-engine/entity-normalization"
 import { extractEventFacts } from "#/services/event-engine/extractors"
 import { buildImpactSnapshot } from "#/services/event-engine/impact"
+import {
+  enqueueCausalHypothesisGeneration,
+  enqueueDueCausalHypothesisRetries,
+  processPendingCausalHypothesisRuns,
+} from "#/services/event-engine/causal-hypothesis/service"
 import { buildEventIdentity, buildEventIdentityHints, derivePeriodicSeriesMetadata } from "#/services/event-engine/merger"
 import { EVENT_ENGINE_METRICS, incrementEventEngineMetric, toMetricLabels } from "#/services/event-engine/metrics"
 import { refreshInvestmentProjectionForEvent } from "#/services/event-engine/projection-pipeline"
@@ -34,14 +39,32 @@ import { resolveSecurityByName } from "#/services/tdx-api"
 
 const DEFAULT_EVENT_COLUMNS = new Set(["finance", "industry"])
 const WORKER_INTERVAL_MS = Number(process.env.EVENT_BUS_INTERVAL_MS || 2 * 60 * 1000)
+const WORKER_START_DELAY_MS = Number(process.env.EVENT_BUS_START_DELAY_MS || 1000)
 const WORKER_ENABLED = process.env.EVENT_BUS_WORKER !== "false"
+const CAUSAL_HYPOTHESIS_WORKER_ENABLED = process.env.EVENT_ENGINE_CAUSAL_HYPOTHESIS_WORKER !== "false"
+const WORKER_SOURCE_IDS = process.env.EVENT_BUS_SOURCE_IDS
+  ?.split(",")
+  .map(sourceId => sourceId.trim())
+  .filter(Boolean) as SourceID[] | undefined
+const WORKER_MAX_SOURCES_PER_TICK = getPositiveIntegerEnv("EVENT_BUS_MAX_SOURCES_PER_TICK", 1000, 1000)
+const WORKER_ITEMS_PER_SOURCE = getPositiveIntegerEnv("EVENT_BUS_ITEMS_PER_SOURCE", 50, 50)
 const BACKFILL_MAX_HOURS = 24 * 365
+const CAUSAL_HYPOTHESIS_RETRY_LIMIT = getPositiveIntegerEnv("EVENT_ENGINE_CAUSAL_HYPOTHESIS_RETRY_LIMIT", 4, 20)
+const CAUSAL_HYPOTHESIS_PROCESS_LIMIT = getPositiveIntegerEnv("EVENT_ENGINE_CAUSAL_HYPOTHESIS_PROCESS_LIMIT", 16, 100)
+const CAUSAL_HYPOTHESIS_PROCESS_CONCURRENCY = getPositiveIntegerEnv("EVENT_ENGINE_CAUSAL_HYPOTHESIS_PROCESS_CONCURRENCY", 4, 8)
+const CAUSAL_HYPOTHESIS_COMPACT_PENDING_LIMIT = getPositiveIntegerEnv("EVENT_ENGINE_CAUSAL_HYPOTHESIS_COMPACT_PENDING_LIMIT", 0, 50000)
 
 let workerStarted = false
 let workerRunning = false
 let workerLastRunAt = 0
 let workerLastError = ""
 type EventTableInstance = NonNullable<Awaited<ReturnType<typeof getEventTable>>>
+
+function getPositiveIntegerEnv(name: string, fallback: number, max: number) {
+  const value = Number(process.env[name])
+  if (!Number.isInteger(value) || value < 1) return fallback
+  return Math.min(value, max)
+}
 
 function getDefaultEventSourceIds() {
   return Object.entries(sources)
@@ -362,6 +385,18 @@ async function persistResolvedEvent(input: {
     }
   })
 
+  try {
+    await enqueueCausalHypothesisGeneration({
+      eventId: result.eventRow.event_id,
+      triggerSource: "auto_event_ingest",
+      triggerReason: "event_persisted",
+    }, {
+      eventStore: input.eventTable,
+    })
+  } catch (error) {
+    console.error("failed to enqueue causal hypothesis generation", error)
+  }
+
   const projectionTable = await getEventProjectionTable()
   if (projectionTable) {
     await refreshInvestmentProjectionForEvent(result.eventRow.event_id, input.eventTable, projectionTable)
@@ -640,11 +675,11 @@ export async function ingestEventSources(options?: {
       })
 
   const ingestedSources: SourceID[] = []
-  for (const sourceId of staleSourceIds) {
+  for (const sourceId of staleSourceIds.slice(0, WORKER_MAX_SOURCES_PER_TICK)) {
     try {
       const profile = getSourceEventProfile(sourceId)
       await upsertSourceProfile(sourceId, profile)
-      const items = (await getters[sourceId]()).slice(0, 50)
+      const items = (await getters[sourceId]()).slice(0, WORKER_ITEMS_PER_SOURCE)
       const fetchedAt = Date.now()
       await eventTable.recordSourceFetchRun({
         source_id: sourceId,
@@ -820,7 +855,11 @@ async function runWorkerTick() {
   if (workerRunning) return
   workerRunning = true
   try {
-    const res = await ingestEventSources()
+    await runCausalHypothesisWorkerTick()
+    const res = await ingestEventSources({
+      sourceIds: WORKER_SOURCE_IDS,
+    })
+    await runCausalHypothesisWorkerTick()
     workerLastRunAt = res.updatedAt
     workerLastError = ""
   } catch (error: unknown) {
@@ -828,6 +867,24 @@ async function runWorkerTick() {
     logger.error("event-engine worker tick failed", error)
   } finally {
     workerRunning = false
+  }
+}
+
+async function runCausalHypothesisWorkerTick() {
+  if (!CAUSAL_HYPOTHESIS_WORKER_ENABLED) return
+
+  try {
+    await enqueueDueCausalHypothesisRetries({
+      limit: CAUSAL_HYPOTHESIS_RETRY_LIMIT,
+    })
+    await processPendingCausalHypothesisRuns({
+      limit: CAUSAL_HYPOTHESIS_PROCESS_LIMIT,
+      concurrency: CAUSAL_HYPOTHESIS_PROCESS_CONCURRENCY,
+      compactPendingLimit: CAUSAL_HYPOTHESIS_COMPACT_PENDING_LIMIT,
+      lockOwner: "event-engine-worker",
+    })
+  } catch (error) {
+    logger.error("causal hypothesis worker tick failed", error)
   }
 }
 
@@ -846,7 +903,7 @@ export function ensureEventEngineWorkerStarted() {
     }, WORKER_INTERVAL_MS)
   }
 
-  setTimeout(start, 1000)
+  setTimeout(start, WORKER_START_DELAY_MS)
   logger.success(`event-engine worker started, interval=${WORKER_INTERVAL_MS}ms`)
   return true
 }
@@ -857,6 +914,10 @@ export function getEventEngineWorkerStatus() {
     started: workerStarted,
     running: workerRunning,
     intervalMs: WORKER_INTERVAL_MS,
+    startDelayMs: WORKER_START_DELAY_MS,
+    sourceIds: WORKER_SOURCE_IDS,
+    maxSourcesPerTick: WORKER_MAX_SOURCES_PER_TICK,
+    itemsPerSource: WORKER_ITEMS_PER_SOURCE,
     lastRunAt: workerLastRunAt || undefined,
     lastError: workerLastError || undefined,
   }

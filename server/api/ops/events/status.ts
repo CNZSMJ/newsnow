@@ -2,6 +2,8 @@ import { getEventBusWorkerStatus } from "#/services/event-bus"
 import { getEventTable } from "#/database/events"
 import { evaluateEventQualityGates } from "#/services/event-engine/quality-gates"
 import { getLiveSubjectRoleExtractorStatus } from "#/services/event-engine/subject-role-live-extractor"
+import { getCausalHypothesisOpsStatus } from "#/services/event-engine/causal-hypothesis/service"
+import { getLiveCausalHypothesisGeneratorStatus } from "#/services/event-engine/causal-hypothesis/generator"
 import type { EventBaseQualitySnapshot } from "#/services/event-engine/slo"
 import { EVENT_ENGINE_VERSIONS } from "#/services/event-engine/versions"
 
@@ -42,9 +44,11 @@ export default defineEventHandler(async (event) => {
   const updatedTime = Date.now()
   const worker = getEventBusWorkerStatus()
   const liveExtractorStatus = getLiveSubjectRoleExtractorStatus()
+  const causalHypothesisGeneratorStatus = getLiveCausalHypothesisGeneratorStatus()
 
   if (!wantsDiagnostics(query)) {
     const databaseReady = Boolean(eventTable)
+    const causalHypothesisStatus = await getCausalHypothesisOpsStatus()
     return {
       status: "success",
       mode: "light",
@@ -63,6 +67,10 @@ export default defineEventHandler(async (event) => {
         missingConfig: liveExtractorStatus.missingConfig,
         latencyMs: null,
         fallbackRate: null,
+      },
+      causalHypothesis: {
+        ...causalHypothesisStatus,
+        generator: causalHypothesisGeneratorStatus,
       },
       health: {
         healthy: databaseReady && (!worker.enabled || (worker.started && !worker.lastError)),
@@ -186,6 +194,10 @@ export default defineEventHandler(async (event) => {
   const extractorFailureRate = extractionAttempts ? Number((extractorFailure / extractionAttempts).toFixed(4)) : 0
   const mergeCollisionRate = extractorSuccess ? Number((mergeCollisions / extractorSuccess).toFixed(4)) : 0
   const qualityGate = evaluateEventQualityGates(qualitySnapshot, { evaluatedAt: updatedTime })
+  const causalHypothesisStatus = await getCausalHypothesisOpsStatus({
+    diagnostics: true,
+    now: updatedTime,
+  })
 
   return {
     status: "success",
@@ -209,6 +221,10 @@ export default defineEventHandler(async (event) => {
       missingConfig: liveExtractorStatus.missingConfig,
       latencyMs: null,
       fallbackRate: null,
+    },
+    causalHypothesis: {
+      ...causalHypothesisStatus,
+      generator: causalHypothesisGeneratorStatus,
     },
     quality: {
       snapshot: qualitySnapshot,

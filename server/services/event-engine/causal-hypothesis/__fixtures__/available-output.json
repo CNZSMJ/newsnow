@@ -1,0 +1,39 @@
+{
+  "status": "available",
+  "confidence": 0.82,
+  "hypotheses": [
+    {
+      "statement": "政策端明确释放供给约束放松信号，是行业价格预期变化的直接原因。",
+      "causeType": "policy_or_regulation",
+      "basis": "stated",
+      "confidence": 0.86,
+      "rationale": "公告正文直接提到主管部门发布调整措施，且结构化事实记录了政策支持方向。",
+      "evidenceIds": ["ev_policy"],
+      "factIds": ["fact_policy_support"],
+      "evidenceSpans": [
+        {
+          "evidenceId": "ev_policy",
+          "field": "summary",
+          "snippet": "主管部门发布调整措施"
+        }
+      ]
+    },
+    {
+      "statement": "市场反应可能还受到资金风险偏好回升影响。",
+      "causeType": "market_flow_or_sentiment",
+      "basis": "inferred",
+      "confidence": 0.63,
+      "rationale": "多家市场报道同时强调成交活跃和板块情绪升温，但输入材料没有直接声明资金流入是根因。",
+      "evidenceIds": ["ev_market"],
+      "factIds": [],
+      "evidenceSpans": [
+        {
+          "evidenceId": "ev_market",
+          "field": "title",
+          "snippet": "板块情绪升温"
+        }
+      ]
+    }
+  ],
+  "unknownReason": null
+}

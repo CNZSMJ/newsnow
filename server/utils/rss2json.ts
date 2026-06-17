@@ -1,5 +1,14 @@
 import { XMLParser } from "fast-xml-parser"
 import type { RSSInfo } from "../types"
+import { myFetch } from "./fetch"
+
+async function toXmlText(data: unknown) {
+  if (typeof data === "string") return data
+  if (data && typeof (data as { text?: unknown }).text === "function") {
+    return await (data as { text: () => Promise<string> }).text()
+  }
+  return String(data ?? "")
+}
 
 export async function rss2json(url: string): Promise<RSSInfo | undefined> {
   if (!/^https?:\/\/[^\s$.?#].\S*/i.test(url)) return
@@ -12,10 +21,11 @@ export async function rss2json(url: string): Promise<RSSInfo | undefined> {
     ignoreAttributes: false,
   })
 
-  const result = xml.parse(data as string)
+  const result = xml.parse(await toXmlText(data))
 
   let channel = result.rss && result.rss.channel ? result.rss.channel : result.feed
   if (Array.isArray(channel)) channel = channel[0]
+  if (!channel) throw new Error("Cannot parse RSS feed: missing channel")
 
   const rss = {
     title: channel.title ?? "",

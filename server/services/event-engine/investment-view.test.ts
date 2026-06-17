@@ -47,6 +47,8 @@ describe("investment event projection", () => {
     expect(brief.sourceKind).toBe("official_rate_fixing")
     expect(brief.ingestedAt).toBe(Date.UTC(2026, 3, 12, 11, 31, 0))
     expect(brief.sourceSummary.primarySourceName).toBeTruthy()
+    expect(brief).not.toHaveProperty("causalStatus")
+    expect(brief).not.toHaveProperty("causalHypotheses")
   })
 
   it("surfaces industry follow-up subjects when only an investable chain clue survives", () => {
@@ -103,6 +105,8 @@ describe("investment event projection", () => {
       "中天科技",
       "烽火通信",
     ])
+    expect(projected.causalStatus).toBe("pending")
+    expect(projected.causalHypotheses).toEqual([])
   })
 
   it("prefers persisted watch-target candidates over projection-time fallback derivation", () => {
@@ -857,7 +861,7 @@ describe("investment event projection", () => {
   })
 
   it("projects low-value generic events into the noise bucket", () => {
-    const brief = projectInvestmentEventBrief({
+    const event = {
       eventId: "evt_noise",
       title: "一般行业资讯",
       eventType: "news",
@@ -877,11 +881,22 @@ describe("investment event projection", () => {
       topicTags: [],
       evidenceCount: 1,
       sourceIds: ["zhihu"],
+    } satisfies Omit<EventDetail, "evidences" | "entities" | "facts" | "timeline">
+    const brief = projectInvestmentEventBrief(event)
+    const detail = projectInvestmentEventDetail({
+      ...event,
+      evidences: [],
+      entities: [],
+      facts: [],
+      timeline: [],
     })
 
     expect(brief.eventFamily).toBe("general_news")
     expect(brief.actionBucket).toBe("noise")
     expect(brief.tradableNow).toBe("no")
+    expect(brief).not.toHaveProperty("causalStatus")
+    expect(detail.causalStatus).toBe("not_generated")
+    expect(detail.causalHypotheses).toEqual([])
   })
 
   it("keeps only the earliest initial detection in timeline summary", () => {

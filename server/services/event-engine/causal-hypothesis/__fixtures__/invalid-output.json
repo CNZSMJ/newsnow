@@ -1,0 +1,47 @@
+{
+  "status": "available",
+  "confidence": 1.2,
+  "hypotheses": [
+    {
+      "statement": "原因一",
+      "causeType": "policy_or_regulation",
+      "basis": "stated",
+      "confidence": 0.6,
+      "rationale": "有引用。",
+      "evidenceIds": ["ev_policy"],
+      "factIds": [],
+      "evidenceSpans": []
+    },
+    {
+      "statement": "原因二",
+      "causeType": "unknown_cause",
+      "basis": "rumored",
+      "confidence": 0.4,
+      "rationale": "枚举非法。",
+      "evidenceIds": ["ev_policy"],
+      "factIds": [],
+      "evidenceSpans": []
+    },
+    {
+      "statement": "原因三",
+      "causeType": "company_action",
+      "basis": "inferred",
+      "confidence": -0.1,
+      "rationale": "置信度非法。",
+      "evidenceIds": ["missing_evidence"],
+      "factIds": ["missing_fact"],
+      "evidenceSpans": []
+    },
+    {
+      "statement": "原因四",
+      "causeType": "external_event",
+      "basis": "inferred",
+      "confidence": 0.5,
+      "rationale": "超过数量上限。",
+      "evidenceIds": [],
+      "factIds": [],
+      "evidenceSpans": []
+    }
+  ],
+  "unknownReason": null
+}

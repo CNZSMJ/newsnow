@@ -4,6 +4,8 @@ import type { DirectionalView } from "@shared/event-profile"
 import { industries } from "@shared/industry"
 import type {
   InvestmentActionBucket,
+  InvestmentCausalHypothesis,
+  InvestmentEvidenceSpan,
   InvestmentEventBrief,
   InvestmentEventDetail,
   InvestmentEventEvidence,
@@ -178,6 +180,10 @@ function EventDetailPage() {
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-6">
+          <InfoCard title="原因假设" count={item.causalHypotheses.length}>
+            <CausalHypothesisPanel item={item} />
+          </InfoCard>
+
           <InfoCard title="结构化事实" count={item.keyFacts.length}>
             {!item.keyFacts.length && <EmptyText text="当前事件暂无高价值结构化事实。" />}
             <div className="space-y-3">
@@ -332,6 +338,113 @@ function FactCard({ fact }: { fact: InvestmentEventFact }) {
       {showConfidenceHint && <p className="mt-2 text-xs text-amber-500/90">这条事实仍偏线索型，使用时需要更多证据确认。</p>}
     </div>
   )
+}
+
+function CausalHypothesisPanel({ item }: { item: InvestmentEventDetail }) {
+  if (item.causalStatus !== "available" || !item.causalHypotheses.length) {
+    return <EmptyText text={getCausalStatusText(item.causalStatus)} />
+  }
+
+  return (
+    <div className="space-y-3">
+      {item.causalHypotheses.map(hypothesis => (
+        <CausalHypothesisCard
+          key={hypothesis.hypothesisId}
+          hypothesis={hypothesis}
+          evidence={item.evidence}
+          facts={item.keyFacts}
+        />
+      ))}
+    </div>
+  )
+}
+
+function CausalHypothesisCard({
+  hypothesis,
+  evidence,
+  facts,
+}: {
+  hypothesis: InvestmentCausalHypothesis
+  evidence: InvestmentEventEvidence[]
+  facts: InvestmentEventFact[]
+}) {
+  const referencedEvidence = evidence.filter(item => hypothesis.evidenceIds.includes(item.evidenceId))
+  const referencedFacts = facts.filter(fact => hypothesis.factIds.includes(fact.factId))
+  const snippets = hypothesis.evidenceSpans.filter(span => span.snippet?.trim()).slice(0, 3)
+
+  return (
+    <div className="rounded-2xl bg-neutral-400/5 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge>{hypothesis.causeTypeLabel}</Badge>
+        <Badge tone={hypothesis.basis === "stated" ? "positive" : "neutral"}>{hypothesis.basisLabel}</Badge>
+        <Badge tone="subtle">{formatConfidence(hypothesis.confidence)} 置信度</Badge>
+      </div>
+      <p className="mt-3 text-sm font-medium leading-6">{hypothesis.statement}</p>
+      <p className="mt-2 text-sm leading-6 text-neutral-500">{hypothesis.rationale}</p>
+
+      {!!referencedEvidence.length && (
+        <ReferenceList
+          title="依据来源"
+          items={referencedEvidence.map(item => `${item.sourceName}：${item.title}`)}
+        />
+      )}
+
+      {!!referencedFacts.length && (
+        <ReferenceList
+          title="关联事实"
+          items={referencedFacts.map(fact => fact.summary ? `${fact.label}：${fact.summary}` : fact.label)}
+        />
+      )}
+
+      {!!snippets.length && (
+        <ReferenceList
+          title="依据定位"
+          items={snippets.map(formatEvidenceSpan)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ReferenceList({ title, items }: { title: string, items: string[] }) {
+  return (
+    <div className="mt-3 space-y-1 text-xs leading-5 text-neutral-500">
+      <p className="font-medium text-neutral-400">{title}</p>
+      {items.map((line, index) => (
+        <p key={`${title}-${index}`}>{line}</p>
+      ))}
+    </div>
+  )
+}
+
+function formatEvidenceSpan(span: InvestmentEvidenceSpan) {
+  return `${getEvidenceSpanFieldLabel(span.field)}：${span.snippet}`
+}
+
+function getEvidenceSpanFieldLabel(field: InvestmentEvidenceSpan["field"]) {
+  switch (field) {
+    case "title":
+      return "标题"
+    case "summary":
+      return "摘要"
+    default:
+      return "结构化材料"
+  }
+}
+
+function getCausalStatusText(status: InvestmentEventDetail["causalStatus"]) {
+  switch (status) {
+    case "unknown":
+      return "现有材料不足以形成可审计原因假设。"
+    case "pending":
+      return "原因假设尚未完成，当前先查看事实与证据。"
+    case "not_generated":
+      return "这类事件当前不自动形成原因假设。"
+    case "failed":
+      return "原因假设暂不可用，事实与证据仍可查看。"
+    default:
+      return "当前事件暂无原因假设。"
+  }
 }
 
 function EvidenceCard({ evidence }: { evidence: InvestmentEventEvidence }) {
@@ -538,4 +651,8 @@ function formatEntityMarket(value: string) {
 function formatScore(value?: number, band?: string) {
   if (value === undefined) return "--"
   return band ? `${value}（${band}）` : `${value}`
+}
+
+function formatConfidence(value: number) {
+  return `${Math.round(value * 100)}%`
 }

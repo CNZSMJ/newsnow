@@ -88,6 +88,8 @@ function detail(input = brief()): InvestmentEventDetail {
     evidence: [],
     timelineSummary: [],
     watchTargetCandidates: [],
+    causalStatus: "pending",
+    causalHypotheses: [],
   }
 }
 
@@ -276,6 +278,126 @@ describe("eventProjectionTable", () => {
       { eventId: "evt_current" },
       { eventId: "evt_future_publish" },
     ])
+  })
+
+  it("uses query-index rank order for indexed investment scans", async () => {
+    const preparedSql: string[] = []
+    const db = {
+      prepare(sql: string) {
+        preparedSql.push(sql)
+        return {
+          all: () => [],
+        }
+      },
+    }
+    const table = new EventProjectionTable(db as never)
+
+    await expect(table.listProjections({
+      indexName: "latest",
+      indexValue: "all",
+      sortBy: "investment",
+      limit: 40,
+    })).resolves.toEqual([])
+
+    expect(preparedSql[0]).toContain("FROM event_query_indexes i INDEXED BY idx_event_query_indexes_rank_lookup")
+    expect(preparedSql[0]).toContain("ORDER BY i.rank_score DESC, i.sort_time DESC")
+    expect(preparedSql[0]).not.toContain("materiality_score")
+  })
+
+  it("uses query-index candidate windows for unfiltered latest scans", async () => {
+    const preparedSql: string[] = []
+    const db = {
+      prepare(sql: string) {
+        preparedSql.push(sql)
+        return {
+          all: () => [],
+        }
+      },
+    }
+    const table = new EventProjectionTable(db as never)
+
+    await expect(table.listProjections({
+      indexName: "latest",
+      indexValue: "all",
+      sortBy: "latest",
+      limit: 40,
+    })).resolves.toEqual([])
+
+    expect(preparedSql[0]).toContain("WITH indexed_candidates")
+    expect(preparedSql[0]).toContain("INDEXED BY idx_event_query_indexes_lookup")
+    expect(preparedSql[0]).toContain("ORDER BY i.sort_time DESC, i.rank_score DESC")
+  })
+
+  it("uses the trigram search index for text search scans", async () => {
+    const preparedSql: string[] = []
+    const db = {
+      prepare(sql: string) {
+        preparedSql.push(sql)
+        return {
+          all: () => [],
+        }
+      },
+    }
+    const table = new EventProjectionTable(db as never)
+
+    await expect(table.listProjections({
+      indexName: "latest",
+      indexValue: "all",
+      q: "公告",
+      sortBy: "latest",
+      limit: 50,
+    })).resolves.toEqual([])
+
+    expect(preparedSql[0]).toContain("FROM event_projection_search_fts f")
+    expect(preparedSql[0]).toContain("f.search_text LIKE ?")
+    expect(preparedSql[0]).not.toContain("p.search_text LIKE ?")
+    expect(preparedSql[0]).not.toContain("event_query_indexes")
+  })
+
+  it("counts text search matches from the trigram search index", async () => {
+    const preparedSql: string[] = []
+    const db = {
+      prepare(sql: string) {
+        preparedSql.push(sql)
+        return {
+          get: () => ({ total_count: 42 }),
+        }
+      },
+    }
+    const table = new EventProjectionTable(db as never)
+
+    await expect(table.countProjections({
+      indexName: "latest",
+      indexValue: "all",
+      q: "公告",
+    })).resolves.toBe(42)
+
+    expect(preparedSql[0]).toContain("FROM event_projection_search_fts f")
+    expect(preparedSql[0]).toContain("COUNT(DISTINCT f.event_id)")
+    expect(preparedSql[0]).toContain("f.search_text LIKE ?")
+    expect(preparedSql[0]).not.toContain("p.search_text LIKE ?")
+    expect(preparedSql[0]).not.toContain("event_query_indexes")
+  })
+
+  it("counts unfiltered indexed scans from the query index", async () => {
+    const preparedSql: string[] = []
+    const db = {
+      prepare(sql: string) {
+        preparedSql.push(sql)
+        return {
+          get: () => ({ total_count: 42 }),
+        }
+      },
+    }
+    const table = new EventProjectionTable(db as never)
+
+    await expect(table.countProjections({
+      indexName: "latest",
+      indexValue: "all",
+    })).resolves.toBe(42)
+
+    expect(preparedSql[0]).toContain("FROM event_query_indexes")
+    expect(preparedSql[0]).not.toContain("event_projection")
   })
 
   it("filters projection rows by materialized action buckets", async () => {

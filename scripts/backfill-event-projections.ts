@@ -5,6 +5,7 @@ import { consola } from "consola"
 import { createDatabase } from "db0"
 import sqliteConnector from "db0/connectors/better-sqlite3"
 import { projectDir } from "../shared/dir"
+import { CausalHypothesisTable } from "../server/database/causal-hypotheses"
 import { EventProjectionTable } from "../server/database/event-projections"
 import { EventTable } from "../server/database/events"
 import { backfillInvestmentProjections } from "../server/services/event-engine/projection-pipeline"
@@ -82,13 +83,16 @@ async function main() {
   }))
   const eventTable = new EventTable(db)
   const projectionTable = new EventProjectionTable(db)
+  const causalProjectionTable = new CausalHypothesisTable(db)
   await eventTable.init()
   await projectionTable.init()
+  await causalProjectionTable.init()
 
   const result = await backfillInvestmentProjections(eventTable, projectionTable, {
     limit: options.limit,
     scanLimit: options.scanLimit,
     sortBy: options.sortBy,
+    causalProjectionStore: causalProjectionTable,
   })
 
   console.log(JSON.stringify({

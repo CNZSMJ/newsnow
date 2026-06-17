@@ -23,6 +23,7 @@ export interface InvestmentListQueryOptions {
   seriesKey?: string
   periodKey?: string
   sortBy: "changed" | "latest" | "investment"
+  includeTotalCount: boolean
 }
 
 export interface InvestmentListQueryResult {
@@ -74,6 +75,7 @@ export function parseInvestmentListQuery(query: Record<string, unknown>): Invest
     seriesKey: typeof query.series_key === "string" ? query.series_key.trim() || undefined : undefined,
     periodKey: typeof query.period_key === "string" ? query.period_key.trim() || undefined : undefined,
     sortBy: parseInvestmentSort(query),
+    includeTotalCount: query.include_total_count === "true" || query.count === "true",
   }
 }
 

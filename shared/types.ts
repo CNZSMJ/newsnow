@@ -329,6 +329,7 @@ export interface InvestmentWatchTargetCandidate {
 }
 
 export interface InvestmentEventFact {
+  factId: string
   factType: string
   label: string
   metricName?: string
@@ -362,6 +363,42 @@ export interface InvestmentEventEvidence {
   publishedAt?: number
   extractionStatus: "ready" | "degraded" | "legacy" | "failed"
   extractionStatusLabel: string
+}
+
+export type InvestmentCausalStatus = "not_generated" | "pending" | "unknown" | "available" | "failed"
+
+export type InvestmentCausalHypothesisCauseType =
+  | "policy_or_regulation"
+  | "macro_or_liquidity"
+  | "industry_supply_demand"
+  | "company_action"
+  | "market_flow_or_sentiment"
+  | "external_event"
+
+export type InvestmentCausalHypothesisBasis = "stated" | "inferred"
+
+export type InvestmentEvidenceSpanField = "title" | "summary" | "payload"
+
+export interface InvestmentEvidenceSpan {
+  evidenceId: string
+  field: InvestmentEvidenceSpanField
+  snippet?: string
+  offset?: number
+}
+
+export interface InvestmentCausalHypothesis {
+  hypothesisId: string
+  statement: string
+  causeType: InvestmentCausalHypothesisCauseType
+  causeTypeLabel: string
+  basis: InvestmentCausalHypothesisBasis
+  basisLabel: string
+  confidence: number
+  rationale: string
+  evidenceIds: string[]
+  factIds: string[]
+  evidenceSpans: InvestmentEvidenceSpan[]
+  generatedAt: number
 }
 
 export interface InvestmentTimelineEntry {
@@ -437,6 +474,8 @@ export interface InvestmentEventDetail extends InvestmentEventBrief {
   evidence: InvestmentEventEvidence[]
   timelineSummary: InvestmentTimelineEntry[]
   watchTargetCandidates: InvestmentWatchTargetCandidate[]
+  causalStatus: InvestmentCausalStatus
+  causalHypotheses: InvestmentCausalHypothesis[]
   relatedEvents?: InvestmentRelatedEventsSection[]
 }
 

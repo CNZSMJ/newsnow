@@ -855,6 +855,197 @@ export const originSources = {
       },
     },
   },
+  "openai": {
+    name: "OpenAI",
+    color: "green",
+    column: "industry",
+    home: "https://openai.com/news/",
+    sub: {
+      news: {
+        title: "News",
+        interval: Time.Fast,
+        tags: ["ai-computing"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "anthropic": {
+    name: "Anthropic",
+    disable: true,
+    color: "slate",
+    column: "industry",
+    home: "https://www.anthropic.com/news",
+    sub: {
+      news: {
+        title: "Newsroom",
+        disable: true,
+        desc: "Deferred: live source smoke timed out on 2026-06-11; needs RSS/API replacement or source-specific adapter.",
+        interval: Time.Fast,
+        tags: ["ai-computing"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "google-ai": {
+    name: "Google AI",
+    color: "blue",
+    column: "industry",
+    home: "https://blog.google/innovation-and-ai/technology/ai/",
+    sub: {
+      news: {
+        title: "AI updates",
+        interval: Time.Fast,
+        tags: ["ai-computing"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "google-deepmind": {
+    name: "Google DeepMind",
+    color: "cyan",
+    column: "industry",
+    home: "https://deepmind.google/blog/",
+    sub: {
+      news: {
+        title: "News",
+        interval: Time.Fast,
+        tags: ["ai-computing"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "meta-ai": {
+    name: "Meta AI",
+    disable: true,
+    color: "indigo",
+    column: "industry",
+    home: "https://ai.meta.com/blog/",
+    sub: {
+      news: {
+        title: "Blog",
+        disable: true,
+        desc: "Deferred: live source smoke timed out on 2026-06-11 and page extraction included navigation labels; needs RSS/API replacement or source-specific adapter.",
+        interval: Time.Fast,
+        tags: ["ai-computing"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "microsoft-ai": {
+    name: "Microsoft AI",
+    color: "sky",
+    column: "industry",
+    home: "https://news.microsoft.com/source/topics/ai/",
+    sub: {
+      news: {
+        title: "AI",
+        interval: Time.Fast,
+        tags: ["ai-computing"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "aws-ai": {
+    name: "AWS AI",
+    color: "orange",
+    column: "industry",
+    home: "https://aws.amazon.com/blogs/machine-learning/",
+    sub: {
+      news: {
+        title: "Machine Learning Blog",
+        interval: Time.Fast,
+        tags: ["ai-computing", "cloud-infrastructure"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "nvidia": {
+    name: "NVIDIA",
+    color: "green",
+    column: "industry",
+    home: "https://nvidianews.nvidia.com/rss",
+    sub: {
+      "ai-news": {
+        title: "AI Newsroom",
+        interval: Time.Fast,
+        tags: ["semiconductor", "ai-computing", "cloud-infrastructure"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "amd": {
+    name: "AMD",
+    color: "red",
+    column: "industry",
+    home: "https://ir.amd.com/news-events/press-releases",
+    sub: {
+      "ai-press": {
+        title: "AI Press Releases",
+        interval: Time.Fast,
+        tags: ["semiconductor", "ai-computing", "cloud-infrastructure"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "intel": {
+    name: "Intel",
+    color: "blue",
+    column: "industry",
+    home: "https://www.intc.com/news-events/press-releases",
+    sub: {
+      "ai-press": {
+        title: "AI Press Releases",
+        interval: Time.Fast,
+        tags: ["semiconductor", "ai-computing", "cloud-infrastructure"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "broadcom": {
+    name: "Broadcom",
+    color: "orange",
+    column: "industry",
+    home: "https://news.broadcom.com/releases",
+    sub: {
+      "ai-news": {
+        title: "AI News",
+        interval: Time.Fast,
+        tags: ["semiconductor", "ai-computing", "cloud-infrastructure"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "tsmc": {
+    name: "TSMC",
+    disable: true,
+    color: "emerald",
+    column: "industry",
+    home: "https://pr.tsmc.com/english/latest-news",
+    sub: {
+      latest: {
+        title: "Latest News",
+        disable: true,
+        desc: "Deferred: live source smoke returned Cloudflare/403 on 2026-06-11; needs alternate RSS/API or source-specific adapter.",
+        interval: Time.Fast,
+        tags: ["semiconductor"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
+  "asml": {
+    name: "ASML",
+    color: "cyan",
+    column: "industry",
+    home: "https://www.asml.com/news/press-releases",
+    sub: {
+      press: {
+        title: "Press Releases",
+        interval: Time.Fast,
+        tags: ["semiconductor"],
+        eventProfile: profile.industryNewsFeed,
+      },
+    },
+  },
   "techinsights": {
     name: "TechInsights",
     disable: true,

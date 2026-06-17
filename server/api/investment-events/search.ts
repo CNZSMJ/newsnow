@@ -31,6 +31,7 @@ export default defineEventHandler(async (event): Promise<InvestmentProviderEvent
       seriesKey: listQuery.seriesKey,
       periodKey: listQuery.periodKey,
       sortBy: listQuery.sortBy,
+      includeTotalCount: listQuery.includeTotalCount,
     })
     : { updatedAt: Date.now(), items: [], totalCount: 0 }
 

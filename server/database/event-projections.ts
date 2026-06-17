@@ -1,7 +1,7 @@
 import process from "node:process"
 import type { Database } from "db0"
 import type { AffectedMarket, DirectionalView, EventSourceKind } from "@shared/event-profile"
-import { DEFERRED_PUBLISH_GAP_MS } from "@shared/investment-event-time"
+import { DEFERRED_PUBLISH_GAP_MS, getPrimaryEventTimestamp } from "@shared/investment-event-time"
 import type { EventSubType, EventType, InvestmentActionBucket, InvestmentEventBrief, InvestmentEventDetail, InvestmentEventFamily, SourceID } from "@shared/types"
 import { declareSqlAccess } from "#/database/sql-ownership"
 
@@ -23,19 +23,19 @@ export const EVENT_PROJECTION_SQL_DECLARATIONS = [
   declareSqlAccess({
     name: "event_projection_schema",
     owner: "investment-event",
-    tables: ["event_projection", "event_query_indexes"],
+    tables: ["event_projection", "event_projection_search_fts", "event_query_indexes"],
     decisionRefs: ["TD-3", "TD-10", "TD-11"],
   }),
   declareSqlAccess({
     name: "event_projection_write",
     owner: "investment-event",
-    tables: ["event_projection", "event_query_indexes"],
+    tables: ["event_projection", "event_projection_search_fts", "event_query_indexes"],
     decisionRefs: ["TD-3", "TD-10", "TD-11"],
   }),
   declareSqlAccess({
     name: "event_projection_read",
     owner: "investment-event",
-    tables: ["event_projection", "event_query_indexes"],
+    tables: ["event_projection", "event_projection_search_fts", "event_query_indexes"],
     decisionRefs: ["TD-3", "TD-10", "TD-11"],
   }),
 ] as const
@@ -204,11 +204,37 @@ function buildSearchText(brief: InvestmentEventBrief) {
 }
 
 function getSortTime(brief: InvestmentEventBrief) {
-  return brief.latestLifecycleAt ?? brief.publishedAt ?? brief.ingestedAt ?? 0
+  return getPrimaryEventTimestamp({
+    eventType: brief.eventType,
+    sourceKind: brief.sourceKind,
+    publishedAt: brief.publishedAt,
+    latestLifecycleAt: brief.latestLifecycleAt,
+    ingestedAt: brief.ingestedAt,
+  })
 }
 
 function getRankScore(brief: InvestmentEventBrief) {
   return (brief.materialityScore * 0.4) + (brief.tradabilityScore * 0.35) + (brief.authorityScore * 0.25)
+}
+
+function getProjectionRankScore(row: ProjectionRowInput) {
+  return (row.materialityScore * 0.4) + (row.tradabilityScore * 0.35) + (row.authorityScore * 0.25)
+}
+
+function getProjectionLatestSortTime(row: ProjectionRowInput, now = Date.now()) {
+  if (
+    row.publishedAt !== null
+    && row.publishedAt > now
+    && row.publishedAt - (row.latestLifecycleAt ?? row.ingestedAt ?? 0) >= DEFERRED_PUBLISH_GAP_MS
+  ) {
+    return row.latestLifecycleAt ?? row.ingestedAt ?? 0
+  }
+
+  return row.publishedAt ?? row.latestLifecycleAt ?? row.ingestedAt ?? 0
+}
+
+function getProjectionLifecycleSortTime(row: ProjectionRowInput) {
+  return row.latestLifecycleAt ?? row.ingestedAt ?? 0
 }
 
 function buildProjectionRowInput(input: EventProjectionInput, projectionUpdatedAt: number): ProjectionRowInput {
@@ -310,13 +336,24 @@ function buildEventQueryIndexEntries(input: EventProjectionInput): EventQueryInd
   ]
 }
 
-function buildProjectionQueryParts(options: EventProjectionQueryOptions) {
+function buildProjectionQueryParts(
+  options: EventProjectionQueryOptions,
+  queryRoot: "projection" | "index" = "projection",
+  searchRoot: "projection" | "fts" = "projection",
+) {
   const joins: string[] = []
-  const clauses = ["p.repair_status = 'ok'"]
+  const clauses = queryRoot === "index"
+    ? ["i.index_name = ?", "i.index_value = ?", "p.repair_status = 'ok'"]
+    : ["p.repair_status = 'ok'"]
   const params: Array<string | number> = []
   const lifecycleAfter = options.lifecycleAfter ?? options.changedSince
 
-  if (options.indexName && options.indexValue) {
+  if (queryRoot === "index") {
+    if (!options.indexName || !options.indexValue) {
+      throw new Error("indexed projection query requires indexName and indexValue")
+    }
+    params.push(options.indexName, options.indexValue)
+  } else if (options.indexName && options.indexValue) {
     joins.push(`
       INNER JOIN event_query_indexes i
         ON i.event_id = p.event_id
@@ -326,7 +363,7 @@ function buildProjectionQueryParts(options: EventProjectionQueryOptions) {
     params.push(options.indexName, options.indexValue)
   }
   if (options.q) {
-    clauses.push("p.search_text LIKE ?")
+    clauses.push(searchRoot === "fts" ? "f.search_text LIKE ?" : "p.search_text LIKE ?")
     params.push(`%${options.q.toLowerCase()}%`)
   }
   if (options.eventFamily) {
@@ -393,6 +430,37 @@ function buildProjectionQueryParts(options: EventProjectionQueryOptions) {
   }
 }
 
+function canUseIndexedInvestmentOrder(options: EventProjectionQueryOptions) {
+  return Boolean(options.indexName && options.indexValue && (options.sortBy ?? "investment") === "investment")
+}
+
+function canUseIndexOnlyCount(options: EventProjectionQueryOptions) {
+  return Boolean(
+    options.indexName
+    && options.indexValue
+    && !options.q
+    && !options.eventFamily
+    && !options.actionBuckets?.length
+    && !options.eventType
+    && !options.eventSubType
+    && !options.sourceId
+    && !options.sourceIds?.length
+    && !options.topic
+    && !options.market
+    && !options.directionalView
+    && options.minMaterialityScore === undefined
+    && options.minAuthorityScore === undefined
+    && options.changedSince === undefined
+    && options.lifecycleAfter === undefined
+    && !options.seriesKey
+    && !options.periodKey,
+  )
+}
+
+function canUseIndexedLatestOrder(options: EventProjectionQueryOptions) {
+  return options.sortBy === "latest" && canUseIndexOnlyCount(options)
+}
+
 function buildProjectionOrderBy(sortBy: EventProjectionQueryOptions["sortBy"]) {
   if (sortBy === "changed") {
     return {
@@ -427,6 +495,24 @@ function buildProjectionOrderBy(sortBy: EventProjectionQueryOptions["sortBy"]) {
     `,
     params: [] as Array<string | number>,
   }
+}
+
+function buildSearchProjectionOrderBy(sortBy: EventProjectionQueryOptions["sortBy"], alias: "f" | "c") {
+  if (sortBy === "changed") {
+    return `ORDER BY ${alias}.lifecycle_sort_time DESC, ${alias}.latest_sort_time DESC, ${alias}.ingested_at DESC`
+  }
+  if (sortBy === "latest") {
+    return `ORDER BY ${alias}.latest_sort_time DESC, ${alias}.lifecycle_sort_time DESC, ${alias}.ingested_at DESC`
+  }
+  return `ORDER BY ${alias}.rank_score DESC, ${alias}.latest_sort_time DESC`
+}
+
+function normalizeSearchIndexOptions(options: EventProjectionQueryOptions): EventProjectionQueryOptions {
+  if (options.indexName === "latest" && options.indexValue === "all") {
+    const { indexName, indexValue, ...rest } = options
+    return rest
+  }
+  return options
 }
 
 function toRecord(row: EventProjectionRow): EventProjectionRecord {
@@ -536,9 +622,25 @@ export class EventProjectionTable {
       ON event_query_indexes(index_name, index_value, sort_time DESC, rank_score DESC);
     `).run()
     await this.db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_event_query_indexes_rank_lookup
+      ON event_query_indexes(index_name, index_value, rank_score DESC, sort_time DESC);
+    `).run()
+    await this.db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_event_query_indexes_event
       ON event_query_indexes(event_id, index_name);
     `).run()
+    await this.db.prepare(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS event_projection_search_fts USING fts5(
+        event_id UNINDEXED,
+        search_text,
+        latest_sort_time UNINDEXED,
+        lifecycle_sort_time UNINDEXED,
+        ingested_at UNINDEXED,
+        rank_score UNINDEXED,
+        tokenize='trigram'
+      );
+    `).run()
+    await this.backfillSearchIndex()
   }
 
   async upsertProjection(input: EventProjectionInput) {
@@ -613,6 +715,7 @@ export class EventProjectionTable {
          OR (index_name = 'related' AND index_value = ?)
     `).run(input.eventId, input.eventId)
     await this.insertIndexEntries(input, sortTime, rankScore)
+    await this.syncSearchIndex(rowInput)
   }
 
   async getProjection(eventId: string): Promise<EventProjectionRecord | undefined> {
@@ -636,6 +739,88 @@ export class EventProjectionTable {
   }
 
   async listProjections(options: EventProjectionQueryOptions): Promise<EventProjectionRecord[]> {
+    if (options.q) {
+      const query = buildProjectionQueryParts(normalizeSearchIndexOptions(options), "projection", "fts")
+      const rows = unwrapRows(await this.db.prepare(`
+        WITH matched AS (
+          SELECT f.event_id,
+                 f.latest_sort_time,
+                 f.lifecycle_sort_time,
+                 f.ingested_at,
+                 f.rank_score
+          FROM event_projection_search_fts f
+          INNER JOIN event_projection p
+            ON p.event_id = f.event_id
+          ${query.joins}
+          ${query.where}
+          ${buildSearchProjectionOrderBy(options.sortBy, "f")}
+          LIMIT ?
+        )
+        SELECT p.*
+        FROM matched c
+        INNER JOIN event_projection p
+          ON p.event_id = c.event_id
+        ${buildSearchProjectionOrderBy(options.sortBy, "c")}
+      `).all(...query.params, options.limit ?? 20) as EventProjectionRow[] | { results?: EventProjectionRow[] })
+      return rows.map(toRecord)
+    }
+
+    if (canUseIndexedInvestmentOrder(options)) {
+      const query = buildProjectionQueryParts(options, "index")
+      const rows = unwrapRows(await this.db.prepare(`
+        SELECT p.*
+        FROM event_query_indexes i INDEXED BY idx_event_query_indexes_rank_lookup
+        INNER JOIN event_projection p
+          ON p.event_id = i.event_id
+        ${query.where}
+        ORDER BY i.rank_score DESC, i.sort_time DESC
+        LIMIT ?
+      `).all(...query.params, options.limit ?? 20) as EventProjectionRow[] | { results?: EventProjectionRow[] })
+      return rows.map(toRecord)
+    }
+
+    if (canUseIndexedLatestOrder(options)) {
+      const query = buildProjectionQueryParts(options, "index")
+      const limit = options.limit ?? 20
+      const candidateLimit = Math.max(limit, Math.min(Math.max(limit * 50, 1000), 5000))
+      const rows = unwrapRows(await this.db.prepare(`
+        WITH indexed_candidates AS (
+          SELECT p.event_id,
+                 p.latest_lifecycle_at,
+                 p.ingested_at,
+                 CASE
+                   WHEN p.published_at IS NOT NULL
+                     AND p.published_at > ?
+                     AND p.published_at - COALESCE(p.latest_lifecycle_at, p.ingested_at) >= ?
+                   THEN COALESCE(p.latest_lifecycle_at, p.ingested_at)
+                   ELSE COALESCE(p.published_at, p.latest_lifecycle_at, p.ingested_at, 0)
+                 END AS latest_sort_time
+          FROM event_query_indexes i INDEXED BY idx_event_query_indexes_lookup
+          INNER JOIN event_projection p
+            ON p.event_id = i.event_id
+          ${query.where}
+          ORDER BY i.sort_time DESC, i.rank_score DESC
+          LIMIT ?
+        ),
+        ranked_candidates AS (
+          SELECT event_id, latest_sort_time, latest_lifecycle_at, ingested_at
+          FROM indexed_candidates
+          ORDER BY latest_sort_time DESC,
+                   COALESCE(latest_lifecycle_at, ingested_at, 0) DESC,
+                   ingested_at DESC
+          LIMIT ?
+        )
+        SELECT p.*
+        FROM ranked_candidates c
+        INNER JOIN event_projection p
+          ON p.event_id = c.event_id
+        ORDER BY c.latest_sort_time DESC,
+                 COALESCE(c.latest_lifecycle_at, c.ingested_at, 0) DESC,
+                 c.ingested_at DESC
+      `).all(Date.now(), DEFERRED_PUBLISH_GAP_MS, ...query.params, candidateLimit, limit) as EventProjectionRow[] | { results?: EventProjectionRow[] })
+      return rows.map(toRecord)
+    }
+
     const query = buildProjectionQueryParts(options)
     const order = buildProjectionOrderBy(options.sortBy)
     const rows = unwrapRows(await this.db.prepare(`
@@ -650,6 +835,29 @@ export class EventProjectionTable {
   }
 
   async countProjections(options: EventProjectionQueryOptions): Promise<number> {
+    if (options.q) {
+      const query = buildProjectionQueryParts(normalizeSearchIndexOptions(options), "projection", "fts")
+      const row = await this.db.prepare(`
+        SELECT COUNT(DISTINCT f.event_id) AS total_count
+        FROM event_projection_search_fts f
+        INNER JOIN event_projection p
+          ON p.event_id = f.event_id
+        ${query.joins}
+        ${query.where}
+      `).get(...query.params) as { total_count?: number } | undefined
+      return Number(row?.total_count) || 0
+    }
+
+    if (canUseIndexOnlyCount(options)) {
+      const row = await this.db.prepare(`
+        SELECT COUNT(*) AS total_count
+        FROM event_query_indexes
+        WHERE index_name = ?
+          AND index_value = ?
+      `).get(options.indexName, options.indexValue) as { total_count?: number } | undefined
+      return Number(row?.total_count) || 0
+    }
+
     const query = buildProjectionQueryParts(options)
     const row = await this.db.prepare(`
       SELECT COUNT(DISTINCT p.event_id) AS total_count
@@ -678,6 +886,67 @@ export class EventProjectionTable {
         JSON.stringify(entry.metadata ?? {}),
       )
     }
+  }
+
+  private async syncSearchIndex(row: ProjectionRowInput) {
+    await this.db.prepare(`
+      DELETE FROM event_projection_search_fts
+      WHERE event_id = ?
+    `).run(row.eventId)
+    await this.db.prepare(`
+      INSERT INTO event_projection_search_fts (
+        event_id,
+        search_text,
+        latest_sort_time,
+        lifecycle_sort_time,
+        ingested_at,
+        rank_score
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      row.eventId,
+      row.searchText,
+      getProjectionLatestSortTime(row),
+      getProjectionLifecycleSortTime(row),
+      row.ingestedAt ?? 0,
+      getProjectionRankScore(row),
+    )
+  }
+
+  private async backfillSearchIndex() {
+    const existing = await this.db.prepare(`
+      SELECT 1 AS has_search_index
+      FROM event_projection_search_fts
+      LIMIT 1
+    `).get() as { has_search_index?: number } | undefined
+    if (existing?.has_search_index) return
+
+    await this.db.prepare(`
+      INSERT INTO event_projection_search_fts (
+        event_id,
+        search_text,
+        latest_sort_time,
+        lifecycle_sort_time,
+        ingested_at,
+        rank_score
+      )
+      SELECT p.event_id,
+             p.search_text,
+             CASE
+               WHEN p.published_at IS NOT NULL
+                 AND p.published_at > (CAST(strftime('%s', 'now') AS INTEGER) * 1000)
+                 AND p.published_at - COALESCE(p.latest_lifecycle_at, p.ingested_at, 0) >= ?
+               THEN COALESCE(p.latest_lifecycle_at, p.ingested_at, 0)
+               ELSE COALESCE(p.published_at, p.latest_lifecycle_at, p.ingested_at, 0)
+             END,
+             COALESCE(p.latest_lifecycle_at, p.ingested_at, 0),
+             COALESCE(p.ingested_at, 0),
+             ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25))
+      FROM event_projection p
+      LEFT JOIN event_projection_search_fts f
+        ON f.event_id = p.event_id
+      WHERE p.repair_status = 'ok'
+        AND f.event_id IS NULL
+    `).run(DEFERRED_PUBLISH_GAP_MS)
   }
 
   private async ensureColumn(table: string, column: string, definition: string) {

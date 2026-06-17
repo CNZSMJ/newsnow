@@ -7,6 +7,7 @@ import type {
   EventRecord,
   EventTimelineEntry,
   InvestmentActionBucket,
+  InvestmentCausalStatus,
   InvestmentEntityRef,
   InvestmentEventBrief,
   InvestmentEventDetail,
@@ -464,6 +465,10 @@ export function getTradableNowLabel(value: InvestmentEventBrief["tradableNow"]) 
   }
 }
 
+function getDefaultCausalStatus(actionBucket: InvestmentActionBucket): InvestmentCausalStatus {
+  return actionBucket === "noise" ? "not_generated" : "pending"
+}
+
 function deriveActionReason(_event: EventRecord, eventFamily: InvestmentEventFamily, actionBucket: InvestmentActionBucket, whatToWatchNext: string[]) {
   if (actionBucket === "actionable") {
     if (eventFamily === "rates_liquidity")
@@ -760,6 +765,7 @@ function toInvestmentFact(fact: EventFact, entities: Map<string, InvestmentEntit
   const normalizedFactEntityId = normalizeSecurityCode(fact.entityId)
   const metricName = formatFactMetricName(fact)
   return {
+    factId: fact.factId,
     factType: fact.factType,
     label: formatFactLabel(fact),
     metricName: fact.factType === "media_fast_signal" ? undefined : metricName,
@@ -1546,6 +1552,8 @@ export function projectInvestmentEventDetail(detail: EventDetail): InvestmentEve
       })),
     ),
     watchTargetCandidates,
+    causalStatus: getDefaultCausalStatus(brief.actionBucket),
+    causalHypotheses: [],
     relatedTopics: detail.topicTags,
   }
 }

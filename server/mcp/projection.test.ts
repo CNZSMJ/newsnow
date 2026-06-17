@@ -74,6 +74,7 @@ function makeInvestmentDetail(): InvestmentEventDetail {
     publishedAt: Date.UTC(2026, 3, 12, 11, 30, 0),
     thesis: "利率下行改善短端资金价格预期。",
     keyFacts: [{
+      factId: "fact_1",
       factType: "macro_rate",
       label: "FDR007 利率",
       metricName: "FDR007",
@@ -112,6 +113,25 @@ function makeInvestmentDetail(): InvestmentEventDetail {
       sourceName: "中国货币网",
     }],
     watchTargetCandidates: [],
+    causalStatus: "available",
+    causalHypotheses: [{
+      hypothesisId: "hyp_1",
+      statement: "资金面改善来自短端利率下行。",
+      causeType: "macro_or_liquidity",
+      causeTypeLabel: "宏观或流动性",
+      basis: "stated",
+      basisLabel: "明示原因",
+      confidence: 0.86,
+      rationale: "FDR007 较前值下行。",
+      evidenceIds: ["raw_1"],
+      factIds: ["fact_1"],
+      evidenceSpans: [{
+        evidenceId: "raw_1",
+        field: "summary",
+        snippet: "较前值下行 5bp",
+      }],
+      generatedAt: Date.UTC(2026, 3, 12, 11, 32, 0),
+    }],
   }
 }
 
@@ -134,6 +154,15 @@ describe("mcp investment projection", () => {
     expect(detail.evidence[0]?.debug).toBeUndefined()
     expect(detail.timelineSummary[0]?.debug).toBeUndefined()
     expect(detail.sourceSummary.debug).toBeUndefined()
+    expect(detail.causalStatus).toBe("available")
+    expect(detail.causalHypotheses[0]).toMatchObject({
+      causeType: "macro_or_liquidity",
+      basis: "stated",
+      evidenceIds: ["raw_1"],
+      factIds: ["fact_1"],
+    })
+    expect(detail.causalHypotheses[0]).not.toHaveProperty("generationRunId")
+    expect(detail.causalHypotheses[0]).not.toHaveProperty("inputChecksum")
   })
 
   it("includes debug internals only when debug mode is enabled", () => {

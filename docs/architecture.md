@@ -1,7 +1,7 @@
 # 投资事件系统架构
 
 状态：使用中
-最后更新：2026-05-02
+最后更新：2026-05-25
 范围：`newsnow` 事件系统当前代码实现的抽象层级、模块边界与现状
 文档角色：当前生效的总体架构设计与约束
 更新时机：系统分层、关键模块边界、核心存储结构或对外语义边界发生变化时
@@ -25,7 +25,7 @@
 
 - source collection 与标准化
 - event classification、fact extraction、merge、timeline
-- evidence、entity linkage、investment semantics
+- evidence、entity linkage、causal hypothesis、investment semantics
 - provider-facing investment projection
 
 frontend、watchlist、MCP 和 agent-facing surface 都只消费这套 backend truth。
@@ -108,7 +108,7 @@ flowchart LR
 当前现状：
 
 - 第一层“发生了什么事”的主干已经闭环
-- 第二层 relation graph / causal hypothesis 还没有形成正式 persisted layer
+- 第二层 `CausalHypothesis` 已形成 persisted layer v1；更通用的 relation graph 尚未形成正式层
 - 第三层 impact 目前已有 `directionalView`、`materialityScore`、`affectedMarkets`、`impactSummary`，但还不是完整的 `ImpactPathway / ImpactAssessment` 层
 - 第四层已有 `watchTargetCandidates` v1，但它仍是局部能力，不是完整投资映射层
 
@@ -129,18 +129,20 @@ flowchart LR
 - 当前主要服务两个 bounded 场景：
   - subject role extraction
   - watch target candidate extraction
+  - causal hypothesis generation
 
 当前现状：
 
 - LLM 已接入主链路，但只做 bounded assistive work
 - canonical truth 仍由 registry / backend arbiter 决定
-- LLM 不是任何一层的最终真相源
+- 原因假设使用独立 LLM profile、持久 run 记录和结构化质量门禁；LLM 不是任何一层的最终真相源
 
 ### 4.5 持久化层
 
 当前代码：
 
 - [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/database/events.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/database/events.ts)
+- [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/database/causal-hypotheses.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/database/causal-hypotheses.ts)
 - [`/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/database/watchlists.ts`](/Users/huangjiahao/workspace/industry-investment-suite/repos/newsnow/server/database/watchlists.ts)
 
 核心对象与表：
@@ -154,11 +156,14 @@ flowchart LR
 - `event_timeline`
 - `entity_links`
 - `event_metrics`
+- `event_causal_hypotheses`
+- `event_causal_hypothesis_runs`
 
 职责：
 
 - 保存 canonical event record
 - 保存 evidence、facts、timeline、entity links
+- 保存 active 原因假设和 generation run 审计/队列记录
 - 支持 repair、merge、correction、count/list/detail 查询
 
 当前现状：
@@ -166,6 +171,7 @@ flowchart LR
 - canonical event store 已经存在
 - timeline、repair、merge conflict / correction guard 已经接入
 - watch target candidates 已经持久化在 `events.watch_target_candidates_json`
+- 原因假设已持久化在独立表中，run 表同时作为持久队列和审计记录
 
 ### 4.6 查询与投影层
 
@@ -181,6 +187,7 @@ flowchart LR
 职责：
 
 - 从 canonical event detail 构建 provider / investor-facing investment projection
+- 读取已保存的原因假设 projection，并把 `causalStatus` / `causalHypotheses` 投到 detail
 - 将 `InvestmentEventBrief` / `InvestmentEventDetail` 写入 `event_projection`
 - 维护 `event_query_indexes`，覆盖 latest、entity、topic、source、market、watchlist、related 等在线读取入口
 - 通过 `InvestmentQueryService` 为 provider HTTP、watchlist event-read、frontend 和本地 MCP 提供统一读取 Interface
@@ -190,6 +197,7 @@ flowchart LR
 当前现状：
 
 - `InvestmentEventBrief` / `InvestmentEventDetail` 已经是稳定的 provider-facing projection
+- `InvestmentEventDetail` 包含原因假设字段；`InvestmentEventBrief` 不包含原因假设字段
 - provider 主查询 `/api/investment-events/latest`、`search`、`entity` 已经通过 `InvestmentQueryService` 消费 `event_projection`
 - provider detail `/api/investment-events/:id` 已经读取 `event_projection.detail_json`
 - watchlist event-read 已经通过 `InvestmentQueryService` 消费 projection records，不再由 watchlist metadata Module 读取 event table
@@ -269,11 +277,11 @@ frontend、MCP、API formatter 只能消费 backend truth，不能各自再做�
 
 ### 5.4 LLM 只能做 bounded assistive work
 
-当前已上线的 subject role 和 watch target candidate 都属于这个边界内的能力。
+当前已上线的 subject role、watch target candidate 和 causal hypothesis 都属于这个边界内的能力。
 
 ## 6. 当前最重要的架构缺口
 
-1. 第二层 relation / causal hypothesis 还没有成为正式 persisted layer
+1. 第二层已有 `CausalHypothesis` persisted layer v1，但完整 relation graph 尚未形成正式层
 2. 第三层 impact pathway / impact assessment 还没有成为正式 persisted layer
 3. 第四层 investment mapping 目前只有 `watchTargetCandidates` 这一支 v1，尚未形成完整层
 4. 第五层 action layer 尚未正式启动

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import type { EventDetail, InvestmentEventBrief, InvestmentEventDetail } from "@shared/types"
+import type { CausalHypothesisProjection } from "#/database/causal-hypotheses"
 import type { EventProjectionInput, EventProjectionRecord } from "#/database/event-projections"
 import { projectInvestmentEventDetail } from "#/services/event-engine/investment-view"
 
@@ -26,6 +27,12 @@ export interface CanonicalEventListStore extends CanonicalEventDetailStore {
 export interface InvestmentProjectionBuildOptions {
   relatedEventIds?: string[]
   watchlistKeys?: string[]
+  causalProjection?: CausalHypothesisProjection
+  causalProjectionStore?: CausalProjectionStore
+}
+
+export interface CausalProjectionStore {
+  readCausalProjection(eventId: string): Promise<CausalHypothesisProjection>
 }
 
 export interface ProjectionConsistencyResult {
@@ -83,6 +90,8 @@ function toInvestmentBrief(detail: InvestmentEventDetail): InvestmentEventBrief 
     evidence: _evidence,
     timelineSummary: _timelineSummary,
     watchTargetCandidates: _watchTargetCandidates,
+    causalStatus: _causalStatus,
+    causalHypotheses: _causalHypotheses,
     relatedEvents: _relatedEvents,
     ...brief
   } = detail
@@ -93,7 +102,7 @@ function sortByStableJson<T>(items: T[]) {
   return [...items].sort((a, b) => JSON.stringify(stableValue(a)).localeCompare(JSON.stringify(stableValue(b))))
 }
 
-function canonicalChecksumPayload(detail: EventDetail) {
+function canonicalChecksumPayload(detail: EventDetail, options: InvestmentProjectionBuildOptions = {}) {
   return {
     event: {
       eventId: detail.eventId,
@@ -132,12 +141,18 @@ function canonicalChecksumPayload(detail: EventDetail) {
     entities: sortByStableJson(detail.entities),
     facts: sortByStableJson(detail.facts),
     timeline: sortByStableJson(detail.timeline),
+    causalProjection: options.causalProjection
+      ? stableValue(options.causalProjection)
+      : undefined,
   }
 }
 
-export function computeInvestmentProjectionChecksum(detail: EventDetail) {
+export function computeInvestmentProjectionChecksum(
+  detail: EventDetail,
+  options: InvestmentProjectionBuildOptions = {},
+) {
   return createHash("sha256")
-    .update(JSON.stringify(stableValue(canonicalChecksumPayload(detail))))
+    .update(JSON.stringify(stableValue(canonicalChecksumPayload(detail, options))))
     .digest("hex")
 }
 
@@ -157,7 +172,14 @@ export function buildInvestmentProjectionInput(
   detail: EventDetail,
   options: InvestmentProjectionBuildOptions = {},
 ): EventProjectionInput {
-  const projectedDetail = projectInvestmentEventDetail(detail)
+  const baseProjectedDetail = projectInvestmentEventDetail(detail)
+  const projectedDetail = options.causalProjection
+    ? {
+        ...baseProjectedDetail,
+        causalStatus: options.causalProjection.causalStatus,
+        causalHypotheses: options.causalProjection.causalHypotheses,
+      }
+    : baseProjectedDetail
   const indexedEntities = uniqueValues([
     detail.primaryEntityName,
     ...detail.entities.flatMap(entity => [entity.entityName, entity.code, entity.fullCode]),
@@ -169,7 +191,7 @@ export function buildInvestmentProjectionInput(
   return {
     eventId: detail.eventId,
     canonicalUpdatedAt: getInvestmentProjectionCanonicalUpdatedAt(detail),
-    canonicalChecksum: computeInvestmentProjectionChecksum(detail),
+    canonicalChecksum: computeInvestmentProjectionChecksum(detail, options),
     brief: toInvestmentBrief(projectedDetail),
     detail: projectedDetail,
     eventType: detail.eventType,
@@ -197,8 +219,9 @@ export async function writeInvestmentProjection(
 export async function checkInvestmentProjectionConsistency(
   detail: EventDetail,
   store: Pick<InvestmentProjectionStore, "getProjection">,
+  options: InvestmentProjectionBuildOptions = {},
 ): Promise<ProjectionConsistencyResult> {
-  const expectedChecksum = computeInvestmentProjectionChecksum(detail)
+  const expectedChecksum = computeInvestmentProjectionChecksum(detail, options)
   const canonicalUpdatedAt = getInvestmentProjectionCanonicalUpdatedAt(detail)
   const projection = await store.getProjection(detail.eventId)
   if (!projection) {
@@ -243,8 +266,14 @@ export async function refreshInvestmentProjectionForEvent(
     }
   }
 
-  await writeInvestmentProjection(detail, projectionStore, options)
-  return checkInvestmentProjectionConsistency(detail, projectionStore)
+  const causalProjection = options.causalProjection
+    ?? await options.causalProjectionStore?.readCausalProjection(eventId)
+  const projectionOptions = {
+    ...options,
+    causalProjection,
+  }
+  await writeInvestmentProjection(detail, projectionStore, projectionOptions)
+  return checkInvestmentProjectionConsistency(detail, projectionStore, projectionOptions)
 }
 
 export async function backfillInvestmentProjections(
@@ -254,6 +283,7 @@ export async function backfillInvestmentProjections(
     limit?: number
     scanLimit?: number
     sortBy?: "latest" | "investment" | "changed"
+    causalProjectionStore?: CausalProjectionStore
   } = {},
 ): Promise<ProjectionBackfillResult> {
   const limit = Math.min(Math.max(Math.floor(options.limit ?? 400), 1), 2000)
@@ -276,13 +306,15 @@ export async function backfillInvestmentProjections(
       continue
     }
 
-    const consistency = await checkInvestmentProjectionConsistency(detail, projectionStore)
+    const causalProjection = await options.causalProjectionStore?.readCausalProjection(event.eventId)
+    const projectionOptions = { causalProjection }
+    const consistency = await checkInvestmentProjectionConsistency(detail, projectionStore, projectionOptions)
     if (consistency.status === "ok") {
       result.skipped += 1
       continue
     }
 
-    await writeInvestmentProjection(detail, projectionStore)
+    await writeInvestmentProjection(detail, projectionStore, projectionOptions)
     result.written += 1
   }
 

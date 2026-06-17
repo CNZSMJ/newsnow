@@ -1,0 +1,6 @@
+{
+  "status": "unknown",
+  "confidence": 0.2,
+  "hypotheses": [],
+  "unknownReason": "输入材料只描述了价格变动，没有给出或支持可审计的原因线索。"
+}

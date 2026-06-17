@@ -43,6 +43,29 @@ const cloudInfrastructureKeywords = [
   /云|服务器|数据中心|智算|算力|液冷/,
 ]
 
+const aiPlatformKeywords = [
+  /artificial intelligence/i,
+  /\bAI\b/i,
+  /generative AI/i,
+  /frontier model/i,
+  /foundation model/i,
+  /large language model/i,
+  /\bLLM\b/i,
+  /agentic/i,
+  /agent/i,
+  /inference/i,
+  /training/i,
+  /OpenAI/i,
+  /ChatGPT/i,
+  /Claude/i,
+  /Anthropic/i,
+  /Gemini/i,
+  /Gemma/i,
+  /Llama/i,
+  /Copilot/i,
+  /人工智能|大模型|智能体|生成式AI|推理|训练/,
+]
+
 const opticalKeywords = [
   /optical/i,
   /transceiver/i,
@@ -128,7 +151,7 @@ function isUsefulTitle(title: string) {
   if (title.length < 6) return false
   if (/^>{2,}\s*more$/i.test(title)) return false
   if (/\b(?:rss feed|printfriendly|supply chain analytics platform)\b/i.test(title)) return false
-  if (/^(?:home|about|contact|subscribe|login|register|privacy|terms|more|learn more|read more|what we do|market research|research|products?|services?|solutions?|platform|events?|webinars?|spot price|pricing|linkedin|twitter|x|facebook|youtube|instagram|wechat|rss)$/i.test(title)) return false
+  if (/^(?:home|about|contact|subscribe|login|register|privacy|terms|more|learn more|read more|what we do|market research|research|ai research|featured|products?|services?|solutions?|platform|events?|webinars?|spot price|pricing|get llama|try meta ai|newsletter|linkedin|twitter|x|facebook|youtube|instagram|wechat|rss)$/i.test(title)) return false
   return true
 }
 
@@ -247,6 +270,38 @@ export default defineSource({
   }),
   "trendforce-semiconductor": createRssIndustrySource("https://www.trendforce.com/feed/Semiconductors.html", {
     keywords: [...semiconductorKeywords, ...cloudInfrastructureKeywords],
+  }),
+  "openai-news": createRssIndustrySource("https://openai.com/news/rss.xml"),
+  "anthropic-news": createGenericPageSource({
+    url: "https://www.anthropic.com/news",
+  }),
+  "google-ai-news": createRssIndustrySource("https://blog.google/innovation-and-ai/technology/ai/rss/"),
+  "google-deepmind-news": createRssIndustrySource("https://deepmind.google/blog/rss.xml"),
+  "meta-ai-news": createGenericPageSource({
+    url: "https://ai.meta.com/blog/",
+  }),
+  "microsoft-ai-news": createRssIndustrySource("https://news.microsoft.com/source/topics/ai/feed/"),
+  "aws-ai-news": createRssIndustrySource("https://aws.amazon.com/blogs/machine-learning/feed/"),
+  "nvidia-ai-news": createRssIndustrySource("https://nvidianews.nvidia.com/rss.xml", {
+    keywords: [...aiPlatformKeywords, ...semiconductorKeywords, ...cloudInfrastructureKeywords],
+  }),
+  "amd-ai-press": createRssIndustrySource("https://ir.amd.com/news-events/press-releases/rss", {
+    keywords: [...aiPlatformKeywords, ...semiconductorKeywords, ...cloudInfrastructureKeywords],
+  }),
+  "intel-ai-press": createRssIndustrySource("https://www.intc.com/news-events/press-releases/rss", {
+    keywords: [...aiPlatformKeywords, ...semiconductorKeywords, ...cloudInfrastructureKeywords],
+  }),
+  "broadcom-ai-news": createGenericPageSource({
+    url: "https://news.broadcom.com/releases",
+    keywords: [...aiPlatformKeywords, ...semiconductorKeywords, ...cloudInfrastructureKeywords, ...opticalKeywords],
+  }),
+  "tsmc-latest": createGenericPageSource({
+    url: "https://pr.tsmc.com/english/latest-news",
+    keywords: [...semiconductorKeywords, ...cloudInfrastructureKeywords],
+  }),
+  "asml-press": createGenericPageSource({
+    url: "https://www.asml.com/news/press-releases",
+    keywords: semiconductorKeywords,
   }),
   "techinsights-semiconductor": createGenericPageSource({
     url: "https://www.techinsights.com/technical-capabilities/overview/markets-served/semiconductors",

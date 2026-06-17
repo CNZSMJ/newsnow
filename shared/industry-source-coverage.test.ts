@@ -12,6 +12,20 @@ const enabledSourceGroups: Record<string, string[]> = {
   "ai server and cloud infrastructure": [
     "idc-cloud-infrastructure",
   ],
+  "global AI model and platform": [
+    "openai-news",
+    "google-ai-news",
+    "google-deepmind-news",
+    "microsoft-ai-news",
+    "aws-ai-news",
+  ],
+  "global AI compute supply chain": [
+    "nvidia-ai-news",
+    "amd-ai-press",
+    "intel-ai-press",
+    "broadcom-ai-news",
+    "asml-press",
+  ],
   "power battery": [
     "sne-research-battery",
     "evtank-battery",
@@ -40,6 +54,8 @@ const deferredCandidateSourceIds = [
   "omdia-cloud-infrastructure",
   "omdia-optical-communications",
   "techinsights-semiconductor",
+  "anthropic-news",
+  "meta-ai-news",
   "yole-semiconductor",
   "canalys-cloud-infrastructure",
   "lightcounting-newsletter",
@@ -53,15 +69,39 @@ const deferredCandidateSourceIds = [
   "mir-automation",
   "customs-manufacturing",
   "ccid-consulting",
+  "tsmc-latest",
 ] as const
 
 const expectedTagCoverage = {
   "cloud-infrastructure": [
     "idc-cloud-infrastructure",
+    "aws-ai-news",
+    "nvidia-ai-news",
+    "amd-ai-press",
+    "intel-ai-press",
+    "broadcom-ai-news",
+  ],
+  "ai-computing": [
+    "openai-news",
+    "google-ai-news",
+    "google-deepmind-news",
+    "microsoft-ai-news",
+    "aws-ai-news",
+    "nvidia-ai-news",
+    "amd-ai-press",
+    "intel-ai-press",
+    "broadcom-ai-news",
   ],
   "power-battery": [
     "sne-research-battery",
     "evtank-battery",
+  ],
+  "semiconductor": [
+    "nvidia-ai-news",
+    "amd-ai-press",
+    "intel-ai-press",
+    "broadcom-ai-news",
+    "asml-press",
   ],
   "robotics": [
     "ifr-robotics",

@@ -1,7 +1,7 @@
 # 投资事件 API 协议
 
 状态：使用中
-最后更新：2026-04-20
+最后更新：2026-05-25
 范围：`newsnow` 当前实际对外暴露的事件、watchlist、ops 与本地 MCP API
 文档角色：当前生效的对外 API 协议清单
 更新时机：新增、删除、重命名、改参、改响应或改鉴权边界时
@@ -149,6 +149,8 @@
 
 - TypeScript：`InvestmentProviderEventDetailResponse`
 - `contract.surface = "event_detail"`
+- `item.causalStatus`：事件级原因假设状态，取值为 `not_generated | pending | unknown | available | failed`
+- `item.causalHypotheses`：已保存 active 原因假设列表；只包含 provider-facing 审计字段，不包含 run snapshot、raw prompt、provider 原始 payload、trigger source、retry 链或内部错误文本
 
 当前实现：
 
@@ -319,6 +321,7 @@
 - `versions`
 - `database`
 - `llm`
+- `causalHypothesis`
 - `health`
 
 诊断响应主体：
@@ -328,6 +331,7 @@
 - `retention`
 - `operations`
 - `llm`
+- `causalHypothesis`
 - `quality`
 - `health`
 - `metrics`
@@ -457,6 +461,8 @@
 - `watchlist_get_events`
 - `watchlist_get_detail`
 
+`event_get_detail` 返回的 detail projection 包含 `causalStatus` 和 `causalHypotheses`，但不暴露原因生成 run snapshot、raw prompt、provider 原始 payload、trigger source 或 retry 链。
+
 ## 7. 当前核心响应合同
 
 核心 provider contract 类型定义位于：
@@ -469,6 +475,8 @@
 - `InvestmentEventDetail`
 - `InvestmentEventFact`
 - `InvestmentEventEvidence`
+- `InvestmentCausalStatus`
+- `InvestmentCausalHypothesis`
 - `InvestmentEntityRef`
 - `InvestmentProviderEventListResponse`
 - `InvestmentProviderEventDetailResponse`

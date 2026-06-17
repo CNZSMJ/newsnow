@@ -1,0 +1,930 @@
+# Implementation Plan
+
+状态：Completed
+最后更新：2026-05-25
+范围：`20260510-causal-hypothesis-layer` 的拟实施步骤和验证计划
+
+## 1. 执行原则
+
+- 从 `docs/README.md` 读取文档治理规则。
+- 进入实现前必须确认 `technical-design.md` 状态为“审批通过”。
+- 进入实现前必须完成本计划与 `technical-design.md` 的一致性检查。
+- 只在 `shared/`、`server/`、`src/`、`docs/` 范围内推进。
+- 不把核心投资语义移到 frontend、MCP formatter、skill 或 prompt。
+- 不在读取路径实时调用大模型。
+
+## 2. 拟实施步骤
+
+### Step 1：补 shared contract
+
+- 在 `shared/types.ts` 新增 provider-facing 原因状态和原因假设类型。
+- 保持模型输入、模型输出、run input、内部候选和数据库 row 类型在后端模块内。
+- 扩展 `InvestmentEventDetail`。
+- 保持 `InvestmentEventBrief` 不变。
+
+状态：已完成。
+
+### Step 2：新增 canonical 存储
+
+- 新增 `server/database/causal-hypotheses.ts`。
+- 在 `server/database/sql-ownership.ts` 的 `SCHEMA_OWNER_BASELINE` 增加 `event_causal_hypotheses` 和 `event_causal_hypothesis_runs`，owner 为 `investment-event`。
+- 在 `server/database/causal-hypotheses.ts` 导出 `CAUSAL_HYPOTHESIS_SQL_DECLARATIONS`，沿用 `declareSqlAccess()` 模式。
+- 新增 `event_causal_hypotheses` 表。
+- 新增 `event_causal_hypothesis_runs` 表。
+- 在 `CausalHypothesisTable.init()` 中使用 `CREATE TABLE IF NOT EXISTS`、`CREATE INDEX IF NOT EXISTS` 和私有 `ensureColumn()` 初始化/补列；第一版不新增独立 migration runner。
+- `event_causal_hypothesis_runs` 同时作为持久队列表，不新增独立 queue table。
+- `event_causal_hypotheses` 不复制输入/输出快照，只通过 `generation_run_id` 关联 run 记录。
+- run 表需要包含 `attempt_number`、`next_attempt_at`、`locked_at`、`lock_owner`、`lease_expires_at` 等队列恢复字段。
+- run 表需要包含 `created_at INTEGER NOT NULL` 和可空 `started_at`；pending run 不得要求 `started_at NOT NULL`。
+- run 表需要包含 `input_snapshot_json`，保存规范化、限量后的模型输入快照，用于审计和回放。
+- run 表需要包含 `input_builder_version`，并让该版本进入 `input_snapshot_json` 和 `input_checksum`。
+- run 表需要包含 `output_snapshot_json`，保存模型输出经系统解析和校验后的结构化、脱敏快照。
+- run 表需要包含 `trigger_source` / `trigger_reason`，用于记录生成触发来源和内部原因摘要。
+- run 表需要包含 `retry_of_run_id`，用于 retry run 追溯上一条失败 run。
+- 第一版不自动清理、压缩归档或迁移输入/输出快照，只保留后续保留期、脱敏和归档扩展点。
+- `input_snapshot_json` 序列化后最大 64KB，`output_snapshot_json` 序列化后最大 32KB；超限时保留审计骨架并记录 truncation 元数据。
+- 新增读写 helper。
+- `CausalHypothesisTable` 需要提供 run 入队、同 key 查询、pending claim、timeout 标记、due retry 查询、成功/unknown/失败关闭、active 替换、causal projection 读取、event status 读取和 ops/status 统计接口。
+- 支持 active / superseded / retracted / failed 状态。
+- 支持 pending / running / succeeded / unknown / failed run 状态。
+
+状态：已完成。
+
+### Step 3：新增生成服务
+
+- 新增 `server/services/event-engine/causal-hypothesis/*` 子模块。
+- 新增 `server/services/event-engine/prompts/causal-hypothesis-generator.ts` 并注册到 `EVENT_ENGINE_PROMPTS`。
+- 新增 `server/services/event-engine/causal-hypothesis/prompt.ts`，放 schema 常量、prompt id/version 和 bounded input builder。
+- prompt id 固定为 `causal-hypothesis-generator`，version 固定为 `causal-hypothesis-generator-v1`。
+- prompt 必须要求模型只基于输入里的 canonical event、facts、evidence、entities、markets、topics、timeline 和 source metadata 推理，并显式区分 `stated` / `inferred`。
+- prompt 不得要求模型输出 directional view、materiality、tradability、authority、what-to-watch-next 或 action recommendation。
+- 新增 `server/services/event-engine/causal-hypothesis/__fixtures__/available-output.json`、`unknown-output.json` 和 `invalid-output.json`，覆盖 valid、unknown 与 schema invalid。
+- 在 `server/services/event-engine/causal-hypothesis/input.ts` 导出独立 input builder version；输入选择、排序、截断或字段结构变化时必须提升版本。
+- 新增独立 `defineLlmProfile` 配置档，profile id 为 `event-engine-causal-hypothesis`，`envPrefix` 为 `EVENT_ENGINE_CAUSAL_HYPOTHESIS`。
+- 支持 `EVENT_ENGINE_CAUSAL_HYPOTHESIS_LLM_ENABLED`、`EVENT_ENGINE_CAUSAL_HYPOTHESIS_LLM_PROVIDER`、`EVENT_ENGINE_CAUSAL_HYPOTHESIS_LLM_BASE_URL`、`EVENT_ENGINE_CAUSAL_HYPOTHESIS_LLM_API_KEY`、`EVENT_ENGINE_CAUSAL_HYPOTHESIS_LLM_MODEL`。
+- 支持独立 `EVENT_ENGINE_CAUSAL_HYPOTHESIS_TIMEOUT_MS`，默认 45 秒，最大 45 秒。
+- 构建 bounded model input。
+- 调用 structured-output 模型。
+- 校验输出。
+- 支持 unknown / failed 降级。
+- 配置未启用或缺少必要配置时，不写入新的自动 `pending` run，不伪装成模型失败，并在 ops/status 暴露 disabled / missing config。
+- 手动 backfill / repair 的 dry-run 遇到配置缺失可以成功返回候选和配置阻塞提示。
+- 手动 backfill / repair 的 `--execute` 遇到配置缺失必须预检失败，退出码非 0，且不写入 `pending` / `failed` run。
+
+状态：已完成；其中手动 backfill / repair 的脚本级 dry-run / execute 预检语义在 Step 4 脚本接入时落地。
+
+### Step 4：接入事件管线和修复路径
+
+- 新增内部脚本，例如 `scripts/backfill-causal-hypotheses.ts`。
+- 新增本地运行记录查看脚本，例如 `scripts/inspect-causal-hypothesis-run.ts`。
+- 新增本地只读数据一致性检查脚本，例如 `scripts/check-causal-hypothesis-run-consistency.ts`。
+- 脚本默认 dry-run；真实执行必须显式 `--execute`。
+- 脚本要求 `--limit` 或精确定位参数 `--event-id` / `--run-id`，默认 limit 上限保守。
+- 运行记录查看脚本必须要求 `--run-id`，默认只输出摘要；只有显式传 `--include-snapshots` 才输出完整 `input_snapshot_json` / `output_snapshot_json`。
+- 运行记录查看脚本传 `--include-snapshots` 后输出已存储快照内容，不对快照内普通文本字段再做第二层隐藏。
+- 运行记录查看脚本即使传 `--include-snapshots`，也不得输出 provider secrets、raw prompt、provider 原始 request/response payload。
+- 运行记录查看脚本允许 `--event-id` 列出该事件下的 run 摘要和 `runId`，但 `--include-snapshots` 必须和 `--run-id` 一起使用。
+- 缺少 `--run-id` 且传入 `--include-snapshots` 时，运行记录查看脚本必须返回用法错误。
+- `--event-id` 默认按创建时间或开始时间倒序列最近 20 条 run，支持 `--limit`，最大 100。
+- `--event-id` 支持 `--status pending|running|succeeded|unknown|failed` 过滤。
+- `--event-id` 摘要字段固定为 `runId`、status、`triggerSource`、`triggerReason`、`retryOfRunId`、attempt、created/started/finished time、checksum、prompt/model/input builder 版本、`snapshotTruncated`、accepted/dropped/invalid 计数和错误摘要。
+- `--event-id` 摘要列表不输出完整快照，也不替代 diagnostics。
+- 数据一致性检查脚本检查永久 provider failed run 是否缺少进入 `permanentProviderErrorSamples[]` 所必需的持久化 `runId`、`eventId` 或 `finishedAt`。
+- 数据一致性检查脚本只读，不写数据库、不创建 run、不重试 run、不修复 run、不刷新 projection、不替换 active 原因假设。
+- 数据一致性检查脚本支持稳定 `--json`，`mode = "causal_hypothesis_run_consistency_check"`，`schemaVersion = 1`，`exitCode` 与实际退出码一致。
+- 数据一致性检查脚本的 `summary` 全量统计当前保留 run 表；`findingsLimit` 只限制 `findings[]` 返回数量。
+- 数据一致性检查脚本先对全量 findings 稳定排序，再应用 `findingsLimit`。
+- 数据一致性检查脚本 findings 排序优先级为影响 `latestPermanentProviderErrorAt` 优先、缺字段数量多优先、同一 run 记录可用持久化时间倒序、`runId` / `eventId` 升序兜底。
+- 数据一致性检查脚本的 `--findings-limit` 默认 `100`、最大 `1000`；超过上限或非法值必须按参数解析失败处理，不自动截断。
+- 数据一致性检查脚本发现一致性问题时退出 `2`，无问题退出 `0`，参数、数据库或运行时失败退出 `1`。
+- 数据一致性检查脚本非 `--json` 模式可以输出简短人读摘要，但退出码必须和 `--json` 完全一致：无 findings 退出 `0`，有 findings 退出 `2`，参数、数据库或运行时失败退出 `1`。
+- 数据一致性检查脚本第一版不提供 `--repair`、`--fix`、`--execute` 或等价变更模式；遇到这些参数必须按参数解析失败处理。
+- 数据一致性检查脚本不进入 ops/status light，不新增公开 provider API、frontend 按钮或 MCP public tool。
+- 在新事件、facts/evidence 变化、manual repair/backfill 时触发生成。
+- 复用现有 event engine worker / scheduler / backfill 体系。
+- 不新增独立 daemon 或独立服务生命周期命令。
+- 按投资优先级排队。
+- 自动触发只覆盖 backend `actionBucket = actionable | watch` 的事件。
+- `actionBucket = noise` 默认不自动生成，但允许内部脚本通过精确 `--event-id` 或显式 `--include-noise` 强制生成。
+- 批量 backfill 默认候选只包含 `actionable` / `watch`；`noise` 只有精确 `--event-id` 或显式 `--include-noise` 时进入。
+- 批量 backfill 默认复用后端投资排序：bucket、投资分数、时间、`eventId`。
+- 批量 backfill 的 `--limit` 在候选过滤和完整排序之后截断。
+- 批量 backfill 的 `--limit` 限制候选数量，不限制最终新排队 run 数量。
+- eligibility 必须从 backend canonical detail / investment projection 计算，不能由 frontend 或 MCP 重新判断。
+- 按 `eventId + inputChecksum + promptVersion + modelName` 做生成去重。
+- `trigger_source` / `trigger_reason` 不参与 `input_checksum` 或生成去重 key。
+- `retry_of_run_id` 不参与 `input_checksum` 或生成去重 key。
+- 同 key 显式重跑需要未来单独设计 `--force` 语义，第一版不能通过改变触发来源绕过去重。
+- 第一版手动 backfill / repair 不提供 `--force`，不能绕过同 key 的 `pending` / `running` / `succeeded` / `unknown` run。
+- 手动 backfill / repair 因去重跳过时不写 `skipped` run，只在脚本结果里返回 skipped count、skip reason 和 existing runId。
+- 手动 backfill / repair 全部 skipped 且 `failedCount = 0` 时退出码为 0；参数、数据库、配置、运行时异常或 `failedCount > 0` 时使用非 0。
+- 手动 backfill / repair 脚本提供稳定 `--json` 输出契约，供内部自动化消费。
+- `--json` 输出不包含完整快照、raw prompt、provider 原始 payload 或 secrets。
+- dry-run JSON 使用 `would*` 字段和 `executionBlocked` 表达预估结果，不能用真实执行字段表达预估结果。
+- 手动 backfill / repair execute 部分候选失败时退出码非 0，但不回滚已成功排队的 run。
+- 手动 backfill / repair execute 单候选失败后继续处理后续候选；全局预检失败立即停止且不写 run。
+- 生成请求先写入 `pending` run；worker 通过 lease claim pending run。
+- 同 key 存在 `pending` / `running` / `succeeded` / `unknown` 时跳过；同 key `failed` 到达退避时间后允许创建 retry run。
+- retry run 必须写入 `trigger_source = "retry"`、`retry_of_run_id` 和可读 `trigger_reason`。
+- 进程重启后依靠 `lease_expires_at` 处理超时 `running` run。
+- 失败处理只关闭当前 run 并保存 `nextAttemptAt`；可重试失败到期后由统一 retry 入队流程创建 retry run，明确终止失败不进入普通 retry。
+- 统一 retry 入队由现有原因生成 worker / scheduler 调度轮次触发，不新增独立 daemon、独立 queue table 或第二套状态机。
+- 自动调度轮次顺序固定为恢复超时 `running`、入队 due retry、再 claim pending。
+- 手动 backfill / repair 命中 due failed run 时调用同一套 retry 入队服务路径。
+- 自动调度轮次每轮最多成功创建 1 条 due retry run。
+- 自动 due retry 候选排序复用后端投资优先级；同优先级下按 `nextAttemptAt`、`createdAt`、`runId` 稳定排序。
+- 手动 backfill / repair 不继承自动调度每轮 1 条的上限。
+- 自动调度本轮创建的 due retry run 可以参与同一轮 pending claim。
+- 本轮新建 due retry run 不获得特殊优先级，仍按普通 pending claim 查询和排序处理。
+- 普通 pending claim 对初始自动 run、manual run 和 retry run 使用同一套排序：后端投资优先级、`nextAttemptAt`、`createdAt`、`runId`。
+- `trigger_source`、`trigger_reason` 和 `retry_of_run_id` 不改变 claim 排序。
+- pending claim 必须通过数据库条件更新原子完成，不能依赖默认单并发或进程内锁。
+- claim 更新影响行数为 1 才算成功；影响行数为 0 时重新查询或结束本轮 claim。
+- 模型调用不放在 claim 数据库事务里。
+- 结果写回必须用 `runId`、`status = "running"`、`lockOwner`、`leaseExpiresAt > now` 做条件更新。
+- 结果写回影响行数为 0 时，当前 worker 不得再改写该 run、不得标记 failed、不得创建 retry；只允许写脱敏本地诊断日志。
+- 第一版不支持 lease 续租；worker 不得通过心跳续租、保活字段、续租循环或续租 API 延长 `leaseExpiresAt`。
+- 模型调用达到 45 秒超时时，worker 必须主动取消或停止等待 provider 请求，并按 `causal_hypothesis_model_timeout` 处理。
+- 临时 provider 错误按 `causal_hypothesis_provider_transient_error` 写 failed，并进入统一 retry。
+- 永久 provider 错误按 `causal_hypothesis_provider_permanent_error` 写 failed，`nextAttemptAt = null`，不进入普通 retry。
+- 修复 provider 配置后，普通 retry 仍不得自动重跑永久 provider 终止失败。
+- 显式强制修复入口不进入第一版实现范围。
+- 自动 worker 默认单并发处理原因生成。
+- 手动 backfill 脚本默认 `--concurrency 1`，第一版最大允许 `--concurrency 2`。
+- 手动 backfill 脚本第一版不提供独立 `--rate-limit-ms`、`--delay-ms` 或等价限速参数；调用压力只通过 `--limit` 和 `--concurrency` 控制。
+- `--concurrency` 的 `0`、负数、小数、非数字、空字符串和超过 `2` 的值固定按参数解析失败处理。
+- 并发参数只影响 claim/执行数量，不改变去重、lease 或 active 替换语义。
+- 单次模型调用超时 45 秒。
+- run lease 120 秒。
+- 最大尝试次数 4 次，即 1 次初始生成 + 3 次 retry。
+- retry backoff 为 attempt 1 失败后 5 分钟、attempt 2 失败后 30 分钟、attempt 3 失败后 2 小时。
+- attempt 4 失败后保持 `failed`，不阻塞事件入库，不清除已有 active 原因假设，不再创建 retry run。
+- 不自动全量回填历史事件；手动 backfill 默认小批量、低并发执行。
+- 不新增公开 provider API、frontend 按钮或 MCP public tool。
+- 生成后刷新 projection。
+- 自动触发点放在 `server/services/event-engine/scheduler.ts` 的 `persistResolvedEvent()` 事务提交之后。
+- `scheduler.ts` 只调用 causal service 的小接口，不保存原因业务逻辑。
+- `causal-hypothesis/service.ts` 负责排队/去重、run 状态、模型调用、active 替换和生成完成后的 projection refresh。
+- projection repair / rebuild 只能读取已有原因结果，不能触发模型生成。
+- `scripts/backfill-causal-hypotheses.ts` 复用 service 入口，不能绕过去重、质量门禁和 run 记录。
+- `scripts/backfill-causal-hypotheses.ts` 第一版不支持 `--force`。
+- `scripts/backfill-causal-hypotheses.ts` 对去重跳过项返回 skipped count、skip reason 和 existing runId。
+- `scripts/backfill-causal-hypotheses.ts` 输出 queued / skipped / failed counts；全部 skipped 时退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts` 支持 `--include-noise`，但默认批量候选不包含 `noise`。
+- `scripts/backfill-causal-hypotheses.ts --include-noise` 不能替代批量 `--limit`。
+- `scripts/backfill-causal-hypotheses.ts` 没有 `--event-id` 或 `--run-id` 时，缺少 `--limit` 固定按参数解析失败处理。
+- `scripts/backfill-causal-hypotheses.ts` 批量候选排序为 `actionable` / `watch` / `noise`，同 bucket 内按投资分数、时间、`eventId` 排序。
+- 投资分数固定复用投影排序权重：`materialityScore * 0.4 + tradabilityScore * 0.35 + authorityScore * 0.25`。
+- 事件时间固定复用投影排序口径：`latestLifecycleAt ?? publishedAt ?? ingestedAt ?? 0`。
+- `scripts/backfill-causal-hypotheses.ts --limit` 必须是 `1..100` 的十进制整数。
+- `scripts/backfill-causal-hypotheses.ts --limit` 的 `0`、负数、小数、非数字和超过 `100` 的值固定按参数解析失败处理。
+- `scripts/backfill-causal-hypotheses.ts --limit` 不得自动修正非法值，不得静默截断超过 `100` 的值，也不得对小数取整。
+- `scripts/backfill-causal-hypotheses.ts` 当前版本已定义的每个命令行参数最多只能出现一次。
+- `scripts/backfill-causal-hypotheses.ts` 遇到重复参数时必须严格失败，不得选择第一个值、最后一个值或合并多个值。
+- `scripts/backfill-causal-hypotheses.ts` 重复参数错误必须发生在候选选择、input build、去重检查、配置预检和数据库写入之前。
+- `scripts/backfill-causal-hypotheses.ts` 默认 dry-run / preview，不传 `--execute` 时不需要显式传 `--dry-run`。
+- `scripts/backfill-causal-hypotheses.ts` 如果支持显式 `--dry-run`，该参数必须和 `--execute` 互斥。
+- `scripts/backfill-causal-hypotheses.ts` 遇到 `--execute` 和显式 `--dry-run` 同时出现时必须严格失败，不得选择优先级或隐式覆盖。
+- `scripts/backfill-causal-hypotheses.ts` 执行模式互斥错误必须发生在候选选择、input build、去重检查、配置预检和数据库写入之前。
+- `scripts/backfill-causal-hypotheses.ts --limit` 在候选过滤和完整排序之后截断。
+- `scripts/backfill-causal-hypotheses.ts --limit` 限制候选数量；去重跳过后 `queuedCount` 可以小于 `limit`。
+- 第一版不提供 `--target-queued`。
+- `scripts/backfill-causal-hypotheses.ts --json` 输出稳定基础字段：`schemaVersion`、`mode`、`exitCode`、`durationMs`、`dryRun`、`execute`、`requested`。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `schemaVersion` 第一版固定为整数 `1`。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析成功和失败时都输出 `schemaVersion = 1`。
+- `schemaVersion` 破坏性 JSON 契约变更才递增，兼容性新增字段不递增。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `mode` 固定为 `causal_hypothesis_backfill`。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析成功和失败时都输出同一个固定 `mode`。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时不得把 `mode` 设为 `null`、`dry_run`、`execute` 或 `argument_error`。
+- `scripts/backfill-causal-hypotheses.ts --json` 输出整数 `exitCode`，并与进程实际退出码一致。
+- `scripts/backfill-causal-hypotheses.ts --json` 不输出 `ok` 或 `success` 布尔字段。
+- `scripts/backfill-causal-hypotheses.ts --json` 输出非负整数 `durationMs`。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时也输出 `durationMs`。
+- `scripts/backfill-causal-hypotheses.ts --json` 第一版不输出 `startedAt` 或 `finishedAt`。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析成功时 `requested` 只保存规范化后的安全请求字段。
+- `scripts/backfill-causal-hypotheses.ts --json` 第一版允许的 `requested` 字段包括 `eventId`、`runId`、`limit`、`includeNoise`、`concurrency`、`dryRun` 和 `execute`。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `requested` 不保存原始 `argv`、环境变量、secret、raw prompt、完整模型输入、provider 原始 payload、完整模型配置或 provider 参数。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析成功时 `requested` 记录应用稳定机器契约默认值后的有效请求。
+- `scripts/backfill-causal-hypotheses.ts --json` 省略 `--include-noise` 时输出 `requested.includeNoise = false`。
+- `scripts/backfill-causal-hypotheses.ts --json` 如果 `limit` 存在稳定机器契约默认值，`requested.limit` 记录最终有效值。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `requested` 不保存内部批大小、数据库分页大小、临时并发策略等内部实现默认值。
+- `scripts/backfill-causal-hypotheses.ts --json` 当前版本已定义的 `requested` 字段保持稳定形状。
+- `scripts/backfill-causal-hypotheses.ts --json` 在 `eventId`、`runId` 或 `limit` 不适用于当前请求时输出 `null`。
+- `scripts/backfill-causal-hypotheses.ts --json` 在 `requested` 不是 `null` 时始终输出布尔字段 `includeNoise`、`dryRun` 和 `execute`，并输出整数 `concurrency`。
+- `scripts/backfill-causal-hypotheses.ts --json` 不为未知字段、未来字段或当前版本没有定义的字段输出占位 `null`。
+- `scripts/backfill-causal-hypotheses.ts --json` 在已捕获或可处理的非 0 失败时仍向 stdout 输出唯一、完整、可解析 JSON。
+- `scripts/backfill-causal-hypotheses.ts --json` 不向 stdout 输出进度、日志、人读摘要或错误文本；这些内容只能输出到 stderr。
+- `scripts/backfill-causal-hypotheses.ts --json` 只有在 Node 启动失败、模块加载失败、进程被操作系统终止或严重崩溃等脚本无法接管的进程级失败时，才允许没有 JSON。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析成功时 `requested` 输出规范化后的请求。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时仍输出 `requested = null`，不得输出半解析参数或完整原始命令行。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时用 `errorCode = "invalid_arguments"`、`phase = "argument_parse"`、`target.scope = "global"`、`retryable = false` 表达。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时 `dryRun = false`、`execute = false`，错误固定进入 `errors[]`，不得进入 `wouldErrors[]`。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时不输出 dry-run 预览字段：`candidateCount`、`wouldQueueCount`、`wouldSkipCount`、`wouldFailCount`、`wouldQueueEventIds`、`wouldSkip`、`wouldErrors`、`executionBlocked`。
+- `scripts/backfill-causal-hypotheses.ts` 遇到未知参数、拼写错误参数或当前版本不支持的未来参数时必须严格失败。
+- `scripts/backfill-causal-hypotheses.ts` 不得忽略未知参数，也不得继续执行半解析请求。
+- `scripts/backfill-causal-hypotheses.ts --json` 未知参数错误进入 `errors[]`，不得进入 `wouldErrors[]`。
+- `scripts/backfill-causal-hypotheses.ts --json` 未知参数错误输出 `requested = null`、`dryRun = false`、`execute = false`，退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --json` 未知参数错误的 `message` 可以提示未知参数名称，但不得回显完整原始命令行。
+- `scripts/backfill-causal-hypotheses.ts` 必须把 `--event-id` 和 `--run-id` 视为互斥定位模式。
+- `scripts/backfill-causal-hypotheses.ts` 遇到 `--event-id` 和 `--run-id` 同时出现时必须严格失败，不得选择优先级或隐式覆盖。
+- `scripts/backfill-causal-hypotheses.ts --json` 互斥参数错误输出 `requested = null`、`dryRun = false`、`execute = false`，退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --json` 互斥参数错误进入 `errors[]`，不得进入 `wouldErrors[]`，且不得输出 dry-run 预览字段。
+- `scripts/backfill-causal-hypotheses.ts` 互斥参数错误必须发生在候选选择、input build、去重检查、配置预检和数据库写入之前。
+- `scripts/backfill-causal-hypotheses.ts --json --include-noise` 在缺少 `--event-id`、`--run-id` 和 `--limit` 时必须严格失败。
+- `scripts/backfill-causal-hypotheses.ts --json --include-noise` 缺少批量 `--limit` 时输出 `requested = null`、`dryRun = false`、`execute = false`，退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --json --include-noise` 缺少批量 `--limit` 时错误进入 `errors[]`，不得进入 `wouldErrors[]`，且不得输出 dry-run 预览字段。
+- `scripts/backfill-causal-hypotheses.ts --json --limit <invalid>` 输出 `requested = null`、`dryRun = false`、`execute = false`，退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --json --limit <invalid>` 错误进入 `errors[]`，不得进入 `wouldErrors[]`，且不得输出 dry-run 预览字段。
+- `scripts/backfill-causal-hypotheses.ts --json` 重复参数错误输出 `requested = null`、`dryRun = false`、`execute = false`，退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --json` 重复参数错误进入 `errors[]`，不得进入 `wouldErrors[]`，且不得输出 dry-run 预览字段。
+- `scripts/backfill-causal-hypotheses.ts --json` 重复参数错误的 `message` 可以提示重复参数名称，但不得回显完整原始命令行。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --dry-run` 输出 `requested = null`、`dryRun = false`、`execute = false`，退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --dry-run` 错误进入 `errors[]`，不得进入 `wouldErrors[]`，且不得输出 dry-run 预览字段。
+- `scripts/backfill-causal-hypotheses.ts --json --execute` 输出真实执行字段：`queuedCount`、`skippedCount`、`failedCount`、`queuedRunIds`、`skipped`、`errors`。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `skipped[]` 至少包含 `eventId`、`inputChecksum`、`existingRunId`、`skipReason` 和 `status`。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 输出预估字段：`candidateCount`、`wouldQueueCount`、`wouldSkipCount`、`wouldFailCount`、`wouldQueueEventIds`、`wouldSkip`、`wouldErrors`、`executionBlocked`。
+- `scripts/backfill-causal-hypotheses.ts --run-id <pendingRunId>` 不创建新 run、不重置 lease、不重置 attempt、不刷新 projection、不调用模型生成器。
+- `scripts/backfill-causal-hypotheses.ts --run-id <runningRunId>` 不创建新 run、不重置 lease、不重置 attempt、不刷新 projection、不调用模型生成器。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <pendingRunId>` 输出 `queuedCount = 0`、`skippedCount = 1`、`failedCount = 0`、`queuedRunIds = []`，退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <runningRunId>` 输出 `queuedCount = 0`、`skippedCount = 1`、`failedCount = 0`、`queuedRunIds = []`，退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <pendingOrRunningRunId>` 在 `skipped[]` 中记录 requested `runId`、可获得的 `eventId`、`inputChecksum`、`existingRunId`、`skipReason` 和 `status`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <pendingOrRunningRunId>` dry-run 输出 `candidateCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 1`、`wouldFailCount = 0`、`wouldQueueEventIds = []`，退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <pendingOrRunningRunId>` dry-run 在 `wouldSkip[]` 中记录 requested `runId`、可获得的 `eventId`、`inputChecksum`、`existingRunId`、`skipReason` 和 `status`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <pendingOrRunningRunId>` 不写入 `errors[]` 或 `wouldErrors[]`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <pendingOrRunningRunId>` 的 `skipReason` 必须区分 `run_already_pending` 和 `run_already_running`。
+- `scripts/backfill-causal-hypotheses.ts --run-id <succeededRunId>` 不创建新 run、不重算或替换 active 原因集合、不刷新 projection、不调用模型生成器。
+- `scripts/backfill-causal-hypotheses.ts --run-id <unknownRunId>` 不创建新 run、不重算或替换 active 原因集合、不刷新 projection、不调用模型生成器。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <succeededRunId>` 输出 `queuedCount = 0`、`skippedCount = 1`、`failedCount = 0`、`queuedRunIds = []`，退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <unknownRunId>` 输出 `queuedCount = 0`、`skippedCount = 1`、`failedCount = 0`、`queuedRunIds = []`，退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <succeededOrUnknownRunId>` 在 `skipped[]` 中记录 requested `runId`、可获得的 `eventId`、`inputChecksum`、`existingRunId`、`skipReason` 和 `status`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <succeededOrUnknownRunId>` dry-run 输出 `candidateCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 1`、`wouldFailCount = 0`、`wouldQueueEventIds = []`，退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <succeededOrUnknownRunId>` dry-run 在 `wouldSkip[]` 中记录 requested `runId`、可获得的 `eventId`、`inputChecksum`、`existingRunId`、`skipReason` 和 `status`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <succeededOrUnknownRunId>` 不写入 `errors[]` 或 `wouldErrors[]`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <succeededOrUnknownRunId>` 的 `skipReason` 必须区分 `run_already_succeeded` 和 `run_already_unknown`。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 不复活原 failed run、不把原 run 改回 `pending`、不重置原 run lease、不重置原 run attempt。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 满足 retry 条件时创建新的 `pending` retry run。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 创建的新 retry run 写入 `retry_of_run_id = requested runId`、`trigger_source = "retry"` 和可读 `trigger_reason`。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 创建的新 retry run 使用同一 `eventId + inputChecksum + promptVersion + modelName` 去重 key。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 在同 key 已有新的 `pending` / `running` / `succeeded` / `unknown` run 时跳过，不创建 retry run。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 在 retry backoff 尚未到期时跳过，不创建 retry run。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 在同 key 达到最大尝试次数时跳过，不创建 retry run。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` 成功创建 retry run 时输出 `queuedCount = 1`、`skippedCount = 0`、`failedCount = 0`、`queuedRunIds = [newRunId]`，退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` dry-run 预计创建 retry run 时输出 `candidateCount = 1`、`wouldQueueCount = 1`、`wouldSkipCount = 0`、`wouldFailCount = 0`、`wouldQueueEventIds = [eventId]`，退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 因同 key 已有其他 run 跳过时，`skipReason` 使用对应 `run_already_pending`、`run_already_running`、`run_already_succeeded` 或 `run_already_unknown`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 因 retry backoff 尚未到期跳过时，`skipReason = "retry_backoff_not_due"`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 因达到最大尝试次数跳过时，`skipReason = "retry_attempts_exhausted"`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 因上述规则跳过时不写入 `errors[]` 或 `wouldErrors[]`，没有其他错误时退出码为 0。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` retry 复用原 failed run 的 `eventId`、`inputChecksum`、`inputBuilderVersion`、`promptVersion`、`modelProvider`、`modelName` 和可回放 `inputSnapshot`。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` retry 不重新加载当前 canonical event detail 构造模型输入。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` retry 不因当前 event facts / evidence 已变化而改变 `inputChecksum`。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 在原 failed run 缺少可回放 `inputSnapshot` 或输入材料不足以构造模型请求时，不创建 retry run。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` 缺少可回放输入时写入 `errors[]`、`failedCount = 1`，退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` dry-run 缺少可回放输入时写入 `wouldErrors[]`、`wouldFailCount = 1`。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` 缺少可回放输入时输出 `queuedCount = 0`、`skippedCount = 0`、`queuedRunIds = []`。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` dry-run 缺少可回放输入时输出 `candidateCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 0`、`wouldQueueEventIds = []`。
+- 缺少可回放输入使用 `errorCode = "input_build_failed"`、`phase = "input_build"`、`target.scope = "run"` 和 `retryable = false`。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 必须先加载当前 canonical event detail 并构造当前模型输入。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 必须用当前 `eventId + inputChecksum + promptVersion + modelName` 计算去重 key。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 不复用历史 failed run 的 `inputSnapshot` 来构造当前输入。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 当前 key 命中 failed 历史且满足 retry 条件时，创建 retry run 并写入 `retry_of_run_id`、`trigger_source = "retry"` 和可读 `trigger_reason`。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 当前 key 与历史 failed run 不同时，创建普通 manual run，不写 `retry_of_run_id`。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 当前 key 已有 `pending` / `running` / `succeeded` / `unknown` run 时，按既有去重规则跳过。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 当前 key 命中多条 failed run 时，选择同 key latest failed run 作为 `retry_of_run_id`。
+- latest failed run 排序为 `attemptNumber` 降序、`finishedAt` 降序、`createdAt` 降序、`runId` 降序。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 的 retry backoff 和最大尝试次数判断基于 latest failed run。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 不得选择更早 failed run 来绕过 latest failed run 的 retry backoff 或最大尝试次数。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 创建 retry run 时，`attemptNumber = requested failed run attemptNumber + 1`。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 创建 retry run 时，`attemptNumber = latest failed run attemptNumber + 1`。
+- `scripts/backfill-causal-hypotheses.ts` 创建 retry run 时不得把 `attemptNumber` 重置为 1，不得沿用 selected failed run 的 `attemptNumber`。
+- `scripts/backfill-causal-hypotheses.ts` 创建 retry run 时不得按同 key 历史 run 数量或最大历史 attempt 重新计算 `attemptNumber`。
+- `scripts/backfill-causal-hypotheses.ts --run-id <failedRunId>` 的 retry backoff 到期判断只使用 requested failed run 保存的 `nextAttemptAt`。
+- `scripts/backfill-causal-hypotheses.ts --event-id <eventId>` 的 retry backoff 到期判断只使用 latest failed run 保存的 `nextAttemptAt`。
+- `scripts/backfill-causal-hypotheses.ts` 不得用 `finishedAt + backoff` 重新计算 retry 到期时间。
+- `scripts/backfill-causal-hypotheses.ts` 不得因为 retry 策略常量变化而重新解释历史 failed run 的到期时间。
+- selected failed run 已达到最大尝试次数时，按 `retry_attempts_exhausted` 跳过，不要求存在 `nextAttemptAt`。
+- selected failed run 是明确终止失败时，按 `retry_terminal_failure` 跳过，不要求存在 `nextAttemptAt`。
+- selected failed run 未达到最大尝试次数、不是明确终止失败且 `nextAttemptAt > now` 时，按 `retry_backoff_not_due` 跳过。
+- selected failed run 未达到最大尝试次数、不是明确终止失败且 `nextAttemptAt <= now` 时，backoff 允许 retry 继续，后续仍受同 key 去重、输入可回放、配置、数据库和排队规则约束。
+- selected failed run 未达到最大尝试次数、不是明确终止失败但缺少 `nextAttemptAt` 时，不创建 retry run，按候选级失败处理。
+- 缺少 `nextAttemptAt` 使用 `errorCode = "unexpected_candidate_error"`、`phase = "candidate_processing"`、`target.scope = "run"` 和 `retryable = false`。
+- `scripts/backfill-causal-hypotheses.ts --json --execute` 遇到缺少 `nextAttemptAt` 时输出 `failedCount = 1`、`queuedCount = 0`、`skippedCount = 0`、`queuedRunIds = []`，写入 `errors[]`，退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 遇到缺少 `nextAttemptAt` 时输出 `candidateCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 0`、`wouldFailCount = 1`、`wouldQueueEventIds = []`，写入 `wouldErrors[]`。
+- 新建 `pending` retry run 的 `nextAttemptAt` 写入本次 run 创建时间。
+- 新建 retry run 的创建时间和 `nextAttemptAt` 必须使用同一个时钟源。
+- 新建 retry run 的 `nextAttemptAt` 不继承 selected failed run 的旧 `nextAttemptAt`。
+- 新建 retry run 的 `nextAttemptAt` 不写未来退避时间，不预先计算本次 retry 失败后的下一次退避时间。
+- 新建 retry run 插入后必须立即满足 `pending` claim 条件中的 `nextAttemptAt <= now`。
+- 新建 retry run 后续失败时，再由失败处理流程基于本次失败时间和 attempt 计算并保存下一次 `nextAttemptAt`。
+- 最大尝试次数判断使用 `selectedFailedRun.attemptNumber >= 4`。
+- attempt 1 失败后保存 `nextAttemptAt = failedAt + 5 分钟`。
+- attempt 2 失败后保存 `nextAttemptAt = failedAt + 30 分钟`。
+- attempt 3 失败后保存 `nextAttemptAt = failedAt + 2 小时`。
+- attempt 4 失败后保持 `failed`，不再创建 retry run。
+- attempt 4 失败后的终止失败 run 写入 `nextAttemptAt = null`。
+- 终止失败 run 的 exhausted 判断依赖 `status = "failed"` 和 `attemptNumber >= 4`，不依赖 `nextAttemptAt`。
+- 终止失败 run 不得保留进入执行前的旧 `nextAttemptAt`，不得写未来退避时间，也不得写 `failedAt` 或当前时间。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 或 `--event-id <eventId>` 遇到 `selectedFailedRun.attemptNumber >= 4` 时按 `retry_attempts_exhausted` 跳过。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 或 `--event-id <eventId>` 选中终止失败 run 时不要求 `nextAttemptAt` 存在。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 或 `--event-id <eventId>` 选中永久 provider 错误 run 时按 `retry_terminal_failure` 跳过。
+- retry backoff 的 `failedAt` 是失败实际生效时间，不是后台任务发现失败的时间。
+- 普通模型失败、provider 错误、模型调用超时、schema invalid、引用全 invalid 或快照过大等当场判定的失败，写入 `finishedAt = failedAt = 失败落库时间`。
+- worker lease 超时恢复时，写入 `finishedAt = failedAt = leaseExpiresAt`。
+- worker lease 超时恢复不得用扫描发现超时的时间、修复脚本运行时间或当前时间作为 `failedAt`。
+- 可重试的 `attemptNumber < 4` 失败 run 必须按 `failedAt + backoff` 计算 `nextAttemptAt`。
+- 明确终止失败可以在 `attemptNumber < 4` 时写 `nextAttemptAt = null`。
+- failure handler 不得在 `attemptNumber < 4` 的 run 失败时立即插入新的 retry run。
+- failure handler 不得创建带未来 `nextAttemptAt` 的 `pending` run。
+- 统一 retry 入队流程只处理 `attemptNumber < 4`、`nextAttemptAt <= now`、不是明确终止失败、同 key 没有 `pending` / `running` / `succeeded` / `unknown` 且通过输入材料和配置 gate 的 failed run。
+- 统一 retry 入队流程创建的新 retry run 写入 `trigger_source = "retry"`、`retry_of_run_id` 和可读 `trigger_reason`。
+- worker lease 超时被晚发现且 `leaseExpiresAt + backoff <= now` 时，统一 retry 入队流程创建出的 retry run 可以立即进入可 claim 状态。
+- 同一次 scheduler tick 或安全事务中同时处理超时恢复和 due retry 入队时，必须先持久化旧 run 的失败事实，再执行 due retry 入队检查。
+- 自动调度轮次不得在 claim pending 之后才恢复超时 run。
+- 自动调度轮次不得在 claim pending 之后才入队 due retry run。
+- 手动 backfill / repair 不得复制独立 retry 判断，必须复用统一 retry 入队服务路径。
+- 自动调度轮次每轮最多成功创建 1 条 due retry run。
+- 自动 due retry 候选排序复用后端投资优先级；同优先级下依次按 `nextAttemptAt`、`createdAt`、`runId` 排序。
+- 手动 backfill / repair 不得套用自动调度每轮 1 条上限。
+- 自动调度不得强制本轮新建 due retry run 等到下一轮才可 claim。
+- 自动调度不得给本轮新建 due retry run 特殊 claim 优先级。
+- 本轮没有 claim 容量或新建 due retry run 未被普通 pending 排序选中时，该 run 保持 `pending`。
+- claim 查询只从 `status = "pending"` 且 `nextAttemptAt <= now` 的 run 中取任务。
+- 普通 pending claim 必须先按后端投资优先级排序，再按 `nextAttemptAt`、`createdAt`、`runId` 排序。
+- manual run 不得因为 `trigger_source` 获得 claim 插队权。
+- retry run 不得因为 `trigger_source` 或 `retry_of_run_id` 获得 claim 插队权。
+- claim 必须通过带 `runId`、`status = "pending"`、`nextAttemptAt <= now` 条件的数据库更新完成。
+- claim 成功时写入 `status = "running"`、`lockedAt`、`lockOwner` 和 `leaseExpiresAt`。
+- `lockedAt` 和 `leaseExpiresAt` 必须基于同一次 claim 时间计算。
+- claim 更新影响行数为 0 时，不得把它记为 run 技术失败。
+- claim 更新影响行数为 0 时，worker 可以重新查询下一条候选或结束本轮 claim。
+- claim 事务提交后才构造模型请求和调用模型。
+- 模型调用和输出校验不得持有 claim 数据库事务。
+- 写入 `succeeded`、`unknown` 或 `failed` 结果时，必须用 run 所有权和 lease 条件更新保护。
+- 结果写回影响行数为 0 时，不得覆盖后续状态，也不得替换 active 原因假设。
+- 结果写回影响行数为 0 时，不得写 `finishedAt`、`nextAttemptAt`、错误码或输出快照。
+- 结果写回影响行数为 0 时，不得创建 retry run 或触发 retry 入队。
+- lease 过期导致的过期写回由 scheduler 超时恢复流程按 `leaseExpiresAt` 写失败事实和 `nextAttemptAt`。
+- claim 成功后不得在模型调用、输出校验或结果写回前续租或延长 `leaseExpiresAt`。
+- 第一版不得实现心跳续租、保活字段、续租循环或独立续租 API。
+- provider SDK 支持 `AbortSignal` 或等价取消能力时，45 秒超时必须主动取消 provider 请求。
+- provider SDK 不支持取消时，worker 仍必须在 45 秒超时后停止等待并按本地模型调用超时处理。
+- 模型调用超时的 run 内部错误码为 `causal_hypothesis_model_timeout`。
+- 模型调用超时写回仍必须使用 run 所有权和未过期 lease 条件更新。
+- provider 在本地超时后返回的成功、unknown 或错误结果必须丢弃，不得写 run、替换 active 或刷新 projection。
+- provider promise 后续 resolve / reject 必须被消费，不能形成未处理异常。
+- 网络连接失败、DNS / TLS / socket 等传输层失败、HTTP 429、HTTP 500-599、provider 临时不可用、过载和限流按临时 provider 错误处理。
+- 临时 provider 错误的 run 内部错误码为 `causal_hypothesis_provider_transient_error`。
+- 临时 provider 错误写回仍必须使用 run 所有权和未过期 lease 条件更新。
+- 临时 provider 错误写回成功时写 `finishedAt = failedAt = 失败落库时间` 和 `nextAttemptAt = failedAt + backoff`，attempt 4 写 `nextAttemptAt = null`。
+- 临时 provider 错误只写脱敏 provider 诊断，不得保存 provider 原始 request / response payload。
+- 临时 provider 错误不得替换 active、刷新 projection 或阻塞 canonical event 入库。
+- 临时 provider 错误不得立即创建 retry run；后续由统一 retry 入队流程处理。
+- 配置错误、鉴权错误、模型不存在和请求非法不按临时 provider 错误处理。
+- 鉴权失败、权限不足、模型不存在、无效模型、请求非法、不支持的参数 / 格式 / 模型能力和必须修改凭证、配置或请求后才可能成功的 provider 响应按永久 provider 错误处理。
+- 永久 provider 错误的 run 内部错误码为 `causal_hypothesis_provider_permanent_error`。
+- 永久 provider 错误写回仍必须使用 run 所有权和未过期 lease 条件更新。
+- 永久 provider 错误写回成功时写 `finishedAt = failedAt = 失败落库时间` 和 `nextAttemptAt = null`，即使 `attemptNumber < 4`。
+- 永久 provider 错误只写脱敏 provider 诊断，不得保存 provider 原始 request / response payload。
+- 永久 provider 错误不得替换 active、刷新 projection 或阻塞 canonical event 入库。
+- 永久 provider 错误不得立即创建 retry run，也不得由统一 retry 入队流程自动创建 retry run。
+- 普通 retry 选中 `causal_hypothesis_provider_permanent_error` failed run 时，按 `retry_terminal_failure` 跳过，不写 `errors[]` 或 `wouldErrors[]`。
+- 修复凭证、权限、模型配置或请求结构后，普通 `--run-id` / `--event-id` retry 仍按 `retry_terminal_failure` 跳过永久 provider 终止失败。
+- 自动 due retry 入队流程不得因为当前 provider 配置已修复而重新纳入永久 provider 终止失败 run。
+- 手动批量 backfill / repair 不得因为当前 provider 配置已修复而自动重新排队永久 provider 终止失败 run。
+- 第一版不得实现检测配置已修复后重开终止失败的后台逻辑。
+- 第一版不得通过比较 provider 配置版本、凭证状态或模型 id 变化来自动重启终止失败 run。
+- 修复后重跑同一 key 必须未来单独设计显式强制修复入口，不得复用普通 retry 语义。
+- 第一版不得新增 `--force-terminal-failure` 或等价命令行参数。
+- 第一版不得新增专门用于重跑永久 provider 终止失败的脚本入口、公开 provider API、frontend 按钮、MCP public tool 或后台自动修复任务。
+- 第一版不得为永久 provider 终止失败新增 `force_reason`、operator 或审批字段。
+- 缺少原因生成器本地配置仍按配置预检处理，不复用 `causal_hypothesis_provider_permanent_error`。
+- attempt 4 失败时仍写 `finishedAt = failedAt`，但 `nextAttemptAt = null`。
+- 发现超时的时间可以进入 diagnostics 或 metadata，但不得参与 retry backoff 计算。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 缺配置时在 `wouldErrors` 或等价结构化字段中表达配置阻塞。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 发现真实 `--execute` 会被全局预检阻断时设置 `executionBlocked = true`。
+- `executionBlocked = true` 时 `wouldErrors[]` 必须包含 `target.scope = "global"` 的错误。
+- `executionBlocked = true` 时 `wouldQueueCount`、`wouldSkipCount`、`wouldFailCount`、`wouldQueueEventIds`、`wouldSkip` 和候选级 `wouldErrors[]` 仍表示全局阻断被修复后的候选级预览。
+- `executionBlocked = true` 时自动化不得把 `wouldQueueCount > 0` 当成当前可真实执行；当前真实 `--execute` 仍会写入 0 个 run。
+- `wouldFailCount` 只统计候选级预计失败，不统计 global 阻断。
+- `executionBlocked = true` 且存在候选级预计失败时，`wouldFailCount` 可以大于 0。
+- dry-run 完整候选级预览时，`wouldQueueCount + wouldSkipCount + wouldFailCount` 等于过滤、排序、`--limit` 截断后的最终候选数量。
+- dry-run 完整候选级预览时，`candidateCount = wouldQueueCount + wouldSkipCount + wouldFailCount`。
+- `candidateCount` 表示过滤、排序、`--limit` 截断后的最终候选数量，不是数据库原始候选总量或新排队目标数量。
+- dry-run 无法产出最终候选列表时，不要求 `would*` 计数守恒，但必须非 0 并返回 global `wouldErrors[]`。
+- dry-run 无法产出最终候选列表时，仍必须输出 `candidateCount = null`，且 `executionBlocked = true`。
+- dry-run 不得省略 `candidateCount`，也不得用 `candidateCount = 0` 表示候选列表不可用。
+- `candidateCount = null` 时，`wouldQueueCount`、`wouldSkipCount`、`wouldFailCount` 固定输出 `0`。
+- `candidateCount = null` 时，`wouldQueueEventIds` 和 `wouldSkip` 固定输出空数组，不输出候选级 `wouldErrors[]`。
+- `candidateCount = null` 时，`wouldErrors[]` 必须至少包含一个 global error。
+- `scripts/backfill-causal-hypotheses.ts --execute` 在配置预检失败时不写 run、不刷新 projection，并以配置错误非 0 退出。
+- `scripts/backfill-causal-hypotheses.ts --execute` 在 `failedCount > 0` 时退出码非 0。
+- `scripts/backfill-causal-hypotheses.ts --execute` 部分候选失败时不回滚已写入的 `pending` run。
+- `scripts/backfill-causal-hypotheses.ts --execute` 单候选失败时记录 `errors[]` 并继续处理后续候选。
+- `scripts/backfill-causal-hypotheses.ts --execute` 全局预检失败时立即停止，且不写入任何 run。
+- `scripts/backfill-causal-hypotheses.ts --execute` 全局预检失败时输出 `queuedCount = 0`、`skippedCount = 0`、`failedCount = 0`。
+- `scripts/backfill-causal-hypotheses.ts --execute` 全局预检失败时在 `errors[]` 中写入 `target.scope = "global"` 的错误，并以非 0 退出。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `errors[]` 和 `wouldErrors[]` 包含固定 `target` 对象、固定 `errorCode`、固定 `phase`、`retryable` 和 `message`。
+- `scripts/backfill-causal-hypotheses.ts --json` 的第一版 `errorCode` 枚举为 `invalid_arguments`、`generator_config_missing`、`database_unavailable`、`event_not_found`、`candidate_ineligible`、`input_build_failed`、`dedupe_check_failed`、`enqueue_failed`、`unexpected_candidate_error`、`unexpected_runtime_error`。
+- `scripts/backfill-causal-hypotheses.ts --json` 的第一版 `phase` 枚举为 `argument_parse`、`config_preflight`、`database_preflight`、`candidate_selection`、`input_build`、`dedupe_check`、`enqueue`、`candidate_processing`、`runtime`。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `errors[]` 和 `wouldErrors[]` 每项包含 `retryable` 布尔字段，由固定 `errorCode` 和 `phase` 计算。
+- `retryable` 第一版映射为 `database_unavailable`、`enqueue_failed`、`unexpected_runtime_error` 可重试；其他第一版 `errorCode` 不可自动重试。
+- `scripts/backfill-causal-hypotheses.ts --json` 的机器判断只能依赖 `errorCode`、`phase`、`target` 和 `retryable`，不能依赖 `message` 文案。
+- `scripts/backfill-causal-hypotheses.ts --json` 的第一版错误对象只输出 `message`，不输出 `summary`。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `message` 必须由脚本生成并脱敏。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `message` 不得包含 raw exception、SQL、数据库驱动原始错误、堆栈信息、provider 原始报错、provider 原始 request / response payload、raw prompt、完整模型输入、完整模型输出、完整原文、secret、token、credential 或完整配置。
+- `scripts/backfill-causal-hypotheses.ts` 默认 stderr / 本地日志必须脱敏。
+- `scripts/backfill-causal-hypotheses.ts` 默认 stderr / 本地日志应输出 `errorCode`、`phase`、`target`、run / event 定位信息或 correlation id。
+- `scripts/backfill-causal-hypotheses.ts` 默认 stderr / 本地日志不得输出 raw prompt、完整模型输入、完整模型输出、完整原文、provider 原始 request / response payload、secret、token、credential、完整配置、带参数值的完整 SQL 或完整堆栈。
+- `scripts/backfill-causal-hypotheses.ts` 显式本地 debug 模式可以输出更详细 raw exception 和堆栈。
+- `scripts/backfill-causal-hypotheses.ts` 显式本地 debug 模式仍不得输出 raw prompt、完整模型输入、完整模型输出、完整原文、provider 原始 request / response payload、secret、token、credential 或完整配置。
+- `scripts/backfill-causal-hypotheses.ts` 显式本地 debug 模式只能通过 `--debug` 开启。
+- `scripts/backfill-causal-hypotheses.ts` 不支持通过环境变量开启 debug 模式。
+- `scripts/backfill-causal-hypotheses.ts --debug` 只影响 stderr / 本地日志，不影响 stdout JSON。
+- `scripts/backfill-causal-hypotheses.ts --debug` 不进入 `requested`。
+- `scripts/backfill-causal-hypotheses.ts --debug` 不改变候选选择、dry-run 预览、真实 execute 行为、去重行为、退出码或数据库写入。
+- `scripts/backfill-causal-hypotheses.ts --json` 的 `errors[]` 和 `wouldErrors[]` 每项包含固定 `target` 对象。
+- `target.scope` 第一版枚举为 `global`、`event`、`run`；可选定位字段为 `eventId`、`runId`、`candidateIndex` 和 `inputChecksum`。
+- `target.candidateIndex` 使用过滤、排序、`--limit` 截断后的最终候选列表 0-based 位置。
+- 带 `candidateIndex` 的 `target` 在可获得时必须同时带 `eventId`。
+- 去重跳过的 `skipped` 不是错误，不能进入 `errors[]`。
+- dry-run 不创建 run、不写数据库、不刷新 projection。
+
+状态：已完成；已落地 service 入队/去重/claim/process/retry、scheduler 自动入队与每轮处理、backfill/inspect/consistency 三个内部脚本。backfill 脚本支持 `--concurrency 1..2` 和显式 `--debug`，默认保持脱敏输出。
+
+### Step 5：接入 projection / provider API / MCP
+
+- `InvestmentEventDetail` 投影包含 `causalStatus` 和 `causalHypotheses`。
+- `buildInvestmentProjectionInput()` 组装 projection detail 时读取 `readCausalProjection(eventId)`，把已保存原因投进 provider-facing detail。
+- active 原因或 `causalStatus` 变化必须进入 projection checksum；run diagnostics、snapshot、trigger source、retry 链和 provider 原始错误不得进入 projection checksum。
+- projection repair / rebuild 可以同步重建原因展示字段，但不得创建 run、claim run 或调用模型。
+- `GET /api/investment-events/:id` 继续只返回 `InvestmentProviderEventDetailResponse`，不新增原因生成端点。
+- provider detail API 返回原因假设，但不返回 run input/output snapshot、raw prompt、provider 原始 payload、trigger source、retry 链或内部错误文本。
+- 本地 MCP 详情工具从 provider detail 投影原因字段；debug 模式最多暴露原因自身 id、evidence/fact 引用和状态，不暴露 run 级内部字段。
+
+状态：已完成；projection checksum 已纳入保存后的 active 原因集合和派生 `causalStatus`，provider detail 与 MCP detail 只读暴露 provider-facing 原因字段，projection repair / rebuild 只消费已有原因结果、不触发生成。
+
+### Step 6：接入前端详情页
+
+- 详情页展示“为什么会发生”区域。
+- 区分“证据显示 / 推断原因 / 原因待确认”。
+- 展示依据说明、置信度和证据引用。
+- `causalStatus = available` 时展示 active 原因；`unknown` 展示材料不足说明；`pending`、`not_generated`、`failed` 展示降级文案。
+- 不提供“立即生成原因”、强制重跑、查看 run 或查看 snapshot 的按钮。
+- frontend 不重新计算 `causalStatus`、原因排序、eligibility、投资优先级或失败分类。
+
+状态：已完成；事件详情页新增原因假设区块，按 `causalStatus` 做展示降级，不提供生成、强制重跑、查看 run 或查看 snapshot 的入口。
+
+### Step 7：验证
+
+拟验证命令：
+
+- `pnpm test`
+- `pnpm typecheck`
+- `pnpm docs:check`
+- `pnpm build`
+- `git diff --check`
+
+需要补充的测试：
+
+- 原因假设存储读写测试。
+- 生成服务结构校验测试。
+- `input_snapshot_json` 保存受控输入快照，且不包含 raw prompt、完整原文、完整 provider payload 或 secrets 的测试。
+- `input_builder_version` 写入 run、进入 input snapshot、参与 input checksum，且 builder version 变化会产生新 checksum 的测试。
+- `output_snapshot_json` 保存受控输出快照，记录 accepted / dropped / invalid 结果，且不包含 provider 原始 payload、raw prompt、完整模型输入或 secrets 的测试。
+- schema invalid 时写入最小 `output_snapshot_json`，且不保存原始输出文本或 provider 原始 payload 的测试。
+- `output_snapshot_json` 不参与 input checksum 或生成去重 key 的测试。
+- `event_causal_hypotheses` 不复制 `input_snapshot_json` / `output_snapshot_json`，只保存 `generation_run_id` 的测试。
+- 第一版没有自动删除、压缩归档或迁移输入/输出快照行为的测试。
+- 输入快照超过 64KB、输出快照超过 32KB 时，记录 `truncated` / size / fields 元数据，并保留审计骨架、丢弃低优先级摘要字段的测试。
+- 快照截断不改变 `succeeded` / `unknown` run 状态，并在 metadata / diagnostics 记录 `snapshotTruncated` 的测试。
+- 连最小审计骨架都无法保存时，run 为 `failed` 且 `errorCode = causal_hypothesis_snapshot_too_large` 的测试。
+- projection checksum / repair 测试。
+- active 原因集合变化会改变 projection checksum 并触发 stale repair 的测试。
+- `causalStatus` 在 `pending` / `available` / `unknown` / `failed` / `not_generated` 之间变化会改变 projection checksum 的测试。
+- `superseded` / `retracted` 原因、run diagnostics、input/output snapshot、trigger source、retry 链、provider 原始错误和 truncation metadata 不影响 projection checksum 的测试。
+- projection repair 可以同步重建 provider-facing 原因字段，但不创建 run、不 claim run、不调用模型的测试。
+- 快照截断、`snapshotTruncated` 或 truncation metadata 变化不影响 projection checksum、不触发 projection stale 的测试。
+- ops/status light 和 diagnostics 都不返回完整 `input_snapshot_json` / `output_snapshot_json` 的测试。
+- `scripts/inspect-causal-hypothesis-run.ts` 默认只输出摘要，且必须显式 `--include-snapshots` 才输出完整输入/输出快照的测试。
+- `scripts/inspect-causal-hypothesis-run.ts --include-snapshots` 输出已存储快照内容，不对快照内普通文本字段二次隐藏的测试。
+- 本地运行记录查看脚本即使传 `--include-snapshots` 也不输出 provider secrets、raw prompt、provider 原始 request/response payload 的测试。
+- `scripts/inspect-causal-hypothesis-run.ts --event-id <eventId>` 只列出 run 摘要和 `runId`，不输出完整快照的测试。
+- `scripts/inspect-causal-hypothesis-run.ts --event-id <eventId> --include-snapshots` 因缺少 `--run-id` 返回用法错误的测试。
+- `scripts/inspect-causal-hypothesis-run.ts --event-id <eventId>` 默认倒序列最近 20 条 run，且 `--limit` 最大 100 的测试。
+- `scripts/inspect-causal-hypothesis-run.ts --event-id <eventId> --status failed` 按状态过滤 run 摘要的测试。
+- `--event-id` 摘要字段只包含固定定位字段，不包含完整输入/输出快照的测试。
+- run 创建时写入 `trigger_source` / `trigger_reason` 的测试，覆盖 `auto_event_ingest`、`facts_updated`、`manual_backfill`、`manual_repair` 和 `retry`。
+- `trigger_source` / `trigger_reason` 不参与 `input_checksum` 或生成去重 key 的测试。
+- 同一 `eventId + inputChecksum + promptVersion + modelName` 下，`manual_backfill` 不能绕过已有 `succeeded` / `unknown` / `pending` / `running` run 重复排队的测试。
+- 第一版 `scripts/backfill-causal-hypotheses.ts` 不接受 `--force` 的测试。
+- `manual_repair` 同样不能绕过已有 `succeeded` / `unknown` / `pending` / `running` run 重复排队的测试。
+- manual backfill / repair 因去重跳过时不写 `skipped` run、不新增 `skipped` status 的测试。
+- manual backfill / repair 脚本结果返回 skipped count、skip reason 和 existing runId 的测试。
+- manual backfill / repair 全部 skipped 时退出码为 0 的测试。
+- manual backfill / repair 部分候选失败时退出码非 0，且不回滚已排队 run 的测试。
+- manual backfill / repair 部分候选失败时 JSON 同时返回 `queuedRunIds`、`skipped[]` 和 `errors[]` 的测试。
+- manual backfill / repair 单候选失败后继续处理后续候选的测试。
+- manual backfill / repair 全局预检失败立即停止且不写入任何 run 的测试。
+- manual backfill / repair 全局预检失败时 `queuedCount = 0`、`skippedCount = 0`、`failedCount = 0` 的测试。
+- manual backfill / repair 全局预检失败时 `errors[]` 包含 `target.scope = "global"` 且退出码非 0 的测试。
+- manual backfill / repair 的 `errors[]` 和 `wouldErrors[]` 使用固定 `errorCode` 和固定 `phase` 的测试。
+- manual backfill / repair 的 `errors[]` 和 `wouldErrors[]` 不接受第一版枚举之外 `errorCode` / `phase` 的测试。
+- manual backfill / repair 的机器判断不依赖 `message` 文案的测试。
+- manual backfill / repair 的第一版错误对象包含 `message` 且不包含 `summary` 的测试。
+- manual backfill / repair 的 `message` 不包含 raw exception、SQL、堆栈、provider 原始报错、prompt、payload、secret 或完整配置的测试。
+- manual backfill / repair 默认 stderr / 本地日志脱敏且包含结构化定位信息的测试。
+- manual backfill / repair 默认 stderr / 本地日志不包含 raw prompt、完整模型输入、完整模型输出、完整原文、provider 原始 request / response payload、secret、完整配置、带参数值完整 SQL 或完整堆栈的测试。
+- manual backfill / repair 显式本地 debug 模式可输出 raw exception / 堆栈但仍不输出 prompt、完整模型材料、provider 原始 request / response payload、secret 或完整配置的测试。
+- manual backfill / repair 只有显式 `--debug` 开启 debug 模式、环境变量不能开启 debug 模式的测试。
+- manual backfill / repair `--debug` 不进入 `requested` 且不改变 stdout JSON 结构的测试。
+- manual backfill / repair `--debug` 不改变候选选择、执行行为、去重行为、退出码或数据库写入的测试。
+- manual backfill / repair 的 `errors[]` 和 `wouldErrors[]` 包含 `retryable` 的测试。
+- manual backfill / repair 的 `retryable` 映射不依赖 `message` 文案的测试。
+- manual backfill / repair 的 `errors[]` 和 `wouldErrors[]` 使用固定 `target` 对象的测试。
+- manual backfill / repair 不允许自由文本 `target` 的测试。
+- manual backfill / repair 的 `target.candidateIndex` 对齐最终候选列表 0-based 位置的测试。
+- manual backfill / repair 带 `candidateIndex` 时同时带 `eventId` 的测试。
+- manual backfill / repair 的 `skipped` 不进入 `errors[]` 的测试。
+- 参数错误、数据库错误、配置错误、运行时异常或 `failedCount > 0` 时退出码非 0 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 输出稳定 schema 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数错误、配置错误、数据库错误或已捕获运行时异常导致非 0 退出时 stdout 仍是唯一可解析 JSON 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` execute 部分候选失败导致非 0 退出时 stdout 仍是唯一可解析 JSON 且失败进入 `errors[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 非 0 退出时 stdout 仍是唯一可解析 JSON 且失败进入 `wouldErrors[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 日志、进度和人读错误不进入 stdout 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时 `requested = null` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时不把半解析参数或完整原始命令行写入 `requested` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时使用 global `invalid_arguments` / `argument_parse` / `retryable = false` 错误的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时错误进入 `errors[]` 而不是 `wouldErrors[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时 `dryRun = false`、`execute = false` 且不输出 dry-run 预览字段的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --foo` 严格失败、退出码非 0、`requested = null`、`dryRun = false`、`execute = false` 且错误进入 `errors[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 拼写错误参数不得被忽略的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 未知参数错误不得进入 `wouldErrors[]` 且不得输出 dry-run 预览字段的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 未知参数错误不得回显完整原始命令行的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --event-id <id> --run-id <id>` 严格失败、退出码非 0、`requested = null`、`dryRun = false`、`execute = false` 且错误进入 `errors[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --event-id <id> --run-id <id>` 不输出 dry-run 预览字段、不进入 `wouldErrors[]`、不触发候选选择或数据库写入的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --event-id <id> --run-id <id>` 不选择优先级、不隐式丢弃任一定位参数的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --include-noise` 缺少 `--event-id`、`--run-id` 和 `--limit` 时严格失败、退出码非 0、`requested = null`、`dryRun = false`、`execute = false` 且错误进入 `errors[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --include-noise` 缺少批量 `--limit` 时不输出 dry-run 预览字段、不进入 `wouldErrors[]`、不触发候选选择或数据库写入的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit <n> --include-noise` 允许进入批量 dry-run 且 `requested.includeNoise = true` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit 0` 严格失败的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit -1` 严格失败的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit 1.5` 严格失败且不得取整的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit abc` 严格失败的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit 101` 严格失败且不得静默截断为 `100` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --concurrency 0` 严格失败的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --concurrency -1` 严格失败的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --concurrency 1.5` 严格失败且不得取整的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --concurrency abc` 严格失败的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --concurrency 3` 严格失败且不得静默截断为 `2` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --rate-limit-ms 100` 严格失败的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --delay-ms 100` 严格失败的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit <invalid>` 不输出 dry-run 预览字段、不进入 `wouldErrors[]`、不触发候选选择或数据库写入的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit 10 --limit 20` 严格失败且不得选择最后一个值的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --limit 10 --limit 10` 严格失败且不得去重后继续执行的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --event-id A --event-id B` 严格失败且不得选择任一事件的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --include-noise --include-noise --limit 10` 严格失败且不得把重复布尔开关当幂等的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 重复参数错误不输出 dry-run 预览字段、不进入 `wouldErrors[]`、不触发候选选择或数据库写入的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --dry-run` 严格失败、退出码非 0、`requested = null`、`dryRun = false`、`execute = false` 且错误进入 `errors[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --dry-run` 不输出 dry-run 预览字段、不进入 `wouldErrors[]`、不触发候选选择或数据库写入的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --dry-run` 不得选择执行模式优先级或让其中一个参数覆盖另一个的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析成功和失败时 `mode` 都等于 `causal_hypothesis_backfill` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时不把 `mode` 改成 `null`、`dry_run`、`execute` 或 `argument_error` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析成功和失败时 `schemaVersion` 都等于 `1` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 输出 `schemaVersion` 为整数而不是 semver 字符串的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 输出 `exitCode` 为整数且等于进程实际退出码的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run `executionBlocked = true` 且进程退出 0 时 `exitCode = 0` 但不被解释为真实 execute 可执行的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 非 0 且有 JSON 时 `exitCode` 为非 0 并可从 `errors[]` 或 `wouldErrors[]` 读取结构化原因的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 不输出 `ok` 或 `success` 布尔字段的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 输出 `durationMs` 为非负整数的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析失败时仍输出 `durationMs` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 第一版不输出 `startedAt` 或 `finishedAt` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 参数解析成功时 `requested` 只包含规范化安全请求字段的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` `requested` 不包含原始 `argv`、环境变量、secret、raw prompt、完整模型输入、provider 原始 payload、完整模型配置或 provider 参数的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 省略 `--include-noise` 时 `requested.includeNoise = false` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 存在稳定默认 limit 时 `requested.limit` 等于最终有效值的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` `requested` 不包含内部批大小、数据库分页大小、临时并发策略等内部实现默认值的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 精确单事件或单 run 模式下 `requested.limit = null` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 批量模式下不适用的 `eventId` / `runId` 为 `null` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` `requested` 不是 `null` 时始终包含布尔字段 `includeNoise`、`dryRun` 和 `execute` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 不为未知字段或未来字段输出占位 `null` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` 不输出完整快照、raw prompt、provider 原始 payload 或 secrets 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 输出 `would*` / `executionBlocked` 预估字段且不输出真实执行字段的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 缺原因生成配置时 `executionBlocked = true` 且 `wouldErrors[]` 包含 global error 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run `executionBlocked = true` 且 `wouldQueueCount > 0` 时不被视为当前可执行的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run `executionBlocked = true` 且存在候选级预计失败时 `wouldFailCount > 0` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run global 阻断本身不计入 `wouldFailCount` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 完整候选级预览时 `wouldQueueCount + wouldSkipCount + wouldFailCount` 等于最终候选数量的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run `executionBlocked = true` 且候选级预览完整时仍满足 `would*` 计数守恒的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 完整候选级预览时 `candidateCount` 等于三类 `would*Count` 之和的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run `candidateCount` 使用过滤、排序、`--limit` 截断后的最终候选数量的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 无法产出最终候选列表时不要求 `would*` 计数守恒但返回 global error 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 无法产出最终候选列表时 `candidateCount = null`、`executionBlocked = true` 且返回 global error 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 不用 `candidateCount = 0` 表示候选列表不可用的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run `candidateCount = null` 时三类 `would*Count` 固定为 `0` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run `candidateCount = null` 时 `wouldQueueEventIds` 和 `wouldSkip` 为空数组且不存在候选级 `wouldErrors[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 只有候选级预计失败时 `executionBlocked = false` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json` dry-run 不创建 run、不写数据库、不刷新 projection 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <pendingRunId>` 不重复排队、退出码 0、`queuedCount = 0`、`skippedCount = 1`、`failedCount = 0` 且 `queuedRunIds = []` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <runningRunId>` 不重复排队、退出码 0、`queuedCount = 0`、`skippedCount = 1`、`failedCount = 0` 且 `queuedRunIds = []` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <pendingOrRunningRunId>` 不写入 `errors[]`、不重置 lease、不重置 attempt、不刷新 projection、不调用模型生成器的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <pendingRunId>` dry-run 输出 `candidateCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 1`、`wouldFailCount = 0` 且 `wouldQueueEventIds = []` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <runningRunId>` dry-run 输出 `candidateCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 1`、`wouldFailCount = 0` 且 `wouldQueueEventIds = []` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <pendingOrRunningRunId>` dry-run 不写入 `wouldErrors[]`，并在 `wouldSkip[]` 中记录 requested `runId`、`inputChecksum`、`existingRunId`、`status` 和 `skipReason` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <pendingOrRunningRunId>` 的 `skipReason` 区分 `run_already_pending` 和 `run_already_running` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <succeededRunId>` 不重复排队、退出码 0、`queuedCount = 0`、`skippedCount = 1`、`failedCount = 0` 且 `queuedRunIds = []` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <unknownRunId>` 不重复排队、退出码 0、`queuedCount = 0`、`skippedCount = 1`、`failedCount = 0` 且 `queuedRunIds = []` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <succeededOrUnknownRunId>` 不写入 `errors[]`、不重算或替换 active 原因集合、不刷新 projection、不调用模型生成器的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <succeededRunId>` dry-run 输出 `candidateCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 1`、`wouldFailCount = 0` 且 `wouldQueueEventIds = []` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <unknownRunId>` dry-run 输出 `candidateCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 1`、`wouldFailCount = 0` 且 `wouldQueueEventIds = []` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <succeededOrUnknownRunId>` dry-run 不写入 `wouldErrors[]`，并在 `wouldSkip[]` 中记录 requested `runId`、`inputChecksum`、`existingRunId`、`status` 和 `skipReason` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <succeededOrUnknownRunId>` 的 `skipReason` 区分 `run_already_succeeded` 和 `run_already_unknown` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` 不复活原 failed run、不重置原 run lease、不重置原 run attempt 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` 满足 retry 条件时创建新 `pending` retry run，且写入 `retry_of_run_id`、`trigger_source = "retry"` 和可读 `trigger_reason` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` 成功创建 retry run 时输出 `queuedCount = 1`、`skippedCount = 0`、`failedCount = 0`、`queuedRunIds = [newRunId]` 且退出码为 0 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` dry-run 预计创建 retry run 时输出 `candidateCount = 1`、`wouldQueueCount = 1`、`wouldSkipCount = 0`、`wouldFailCount = 0`、`wouldQueueEventIds = [eventId]` 且退出码为 0 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 同 key 已有新的 `pending` / `running` / `succeeded` / `unknown` run 时跳过、不写入错误数组的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` retry backoff 尚未到期时使用 `retry_backoff_not_due` 跳过、不写入错误数组的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 达到最大尝试次数时使用 `retry_attempts_exhausted` 跳过、不写入错误数组的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` retry 复用原 failed run 的 `inputChecksum`、`inputBuilderVersion`、`promptVersion`、`modelProvider`、`modelName` 和可回放 `inputSnapshot` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` retry 不重新读取当前 canonical event detail 构造模型输入的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` 当前 event facts / evidence 变化不改变 retry run `inputChecksum` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` 原 failed run 缺少可回放输入时不创建 retry run、写入 `input_build_failed` / `input_build` / `target.scope = "run"` 错误且退出码非 0 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` dry-run 原 failed run 缺少可回放输入时写入 `wouldErrors[]`、`wouldFailCount = 1`、`wouldQueueCount = 0`、`wouldSkipCount = 0` 且不写入 `wouldSkip[]` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --event-id <eventId>` 先按当前 canonical event detail 构造输入和计算 key 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --event-id <eventId>` 不复用历史 failed run `inputSnapshot` 构造当前输入的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --event-id <eventId>` 当前 key 命中 failed 历史且满足 retry 条件时创建 retry run，并写入 `retry_of_run_id`、`trigger_source = "retry"` 和可读 `trigger_reason` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --event-id <eventId>` 当前 key 与历史 failed run 不同时创建普通 manual run，且不写 `retry_of_run_id` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --event-id <eventId>` 当前 key 已有 `pending` / `running` / `succeeded` / `unknown` run 时按既有去重规则跳过的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --event-id <eventId>` 当前 key 命中多条 failed run 时按 `attemptNumber`、`finishedAt`、`createdAt`、`runId` 选择 latest failed run 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --event-id <eventId>` 多条 failed run 命中时 `retry_of_run_id` 指向 latest failed run 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --event-id <eventId>` latest failed run retry backoff 未到期时跳过，且不选择更早 failed run 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --event-id <eventId>` latest failed run 达到最大尝试次数时跳过，且不选择更早 failed run 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --run-id <failedRunId>` retry run 的 `attemptNumber = requested failed run attemptNumber + 1` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute --event-id <eventId>` retry run 的 `attemptNumber = latest failed run attemptNumber + 1` 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --execute` retry run 不重置 attempt、不沿用 selected failed run attempt、不按历史数量重新统计 attempt 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --run-id <failedRunId>` 使用 requested failed run 的 `nextAttemptAt` 判断 retry backoff 的测试。
+- `scripts/backfill-causal-hypotheses.ts --json --event-id <eventId>` 使用 latest failed run 的 `nextAttemptAt` 判断 retry backoff 的测试。
+- selected failed run 的 `nextAttemptAt > now` 时按 `retry_backoff_not_due` 跳过的测试。
+- selected failed run 的 `nextAttemptAt <= now` 且其他条件满足时创建 retry run 的测试。
+- selected failed run 未耗尽最大尝试次数、不是明确终止失败但缺少 `nextAttemptAt` 时 execute 写入 `errors[]`、dry-run 写入 `wouldErrors[]` 的测试。
+- selected failed run 已达到最大尝试次数时不要求存在 `nextAttemptAt`，并按 `retry_attempts_exhausted` 跳过的测试。
+- selected failed run 是永久 provider 错误且 `nextAttemptAt = null` 时按 `retry_terminal_failure` 跳过、不写错误数组的测试。
+- 改变 retry 策略常量不会改变历史 failed run backoff 到期判断的测试。
+- 新建 `pending` retry run 的 `nextAttemptAt` 等于本次 run 创建时间的测试。
+- 新建 retry run 的创建时间和 `nextAttemptAt` 使用同一个时钟值的测试。
+- 新建 retry run 不继承 selected failed run 旧 `nextAttemptAt` 的测试。
+- 新建 retry run 不把下一次失败后的未来退避时间预写到 `nextAttemptAt` 的测试。
+- 新建 retry run 插入后可被 `pending` claim 查询立即选中的测试。
+- 最大尝试次数为 4，覆盖 attempt 1 初始生成和 attempt 2/3/4 三次 retry 的测试。
+- attempt 1 失败后保存 5 分钟 backoff 的测试。
+- attempt 2 失败后保存 30 分钟 backoff 的测试。
+- attempt 3 失败后保存 2 小时 backoff 的测试。
+- attempt 4 失败后保持 `failed` 且不再创建 retry run 的测试。
+- `selectedFailedRun.attemptNumber >= 4` 时使用 `retry_attempts_exhausted` 跳过的测试。
+- attempt 4 失败后的终止失败 run 写入 `nextAttemptAt = null` 的测试。
+- 终止失败 run 不保留旧 `nextAttemptAt`、不写未来时间、不写 `failedAt` 或当前时间的测试。
+- 终止失败 run 的 exhausted 判断不依赖 `nextAttemptAt` 的测试。
+- `selectedFailedRun.attemptNumber >= 4` 且 `nextAttemptAt = null` 时按 `retry_attempts_exhausted` 跳过、不写错误数组的测试。
+- `attemptNumber < 4`、不是明确终止失败且缺少 `nextAttemptAt` 时仍按候选级数据不完整失败处理的测试。
+- 普通模型失败、provider 错误、模型调用超时、schema invalid、引用全 invalid 或快照过大时 `finishedAt` 等于失败落库时间的测试。
+- 普通失败的 `nextAttemptAt` 按失败落库时间加 backoff 计算的测试。
+- worker lease 超时恢复时 `finishedAt = leaseExpiresAt` 的测试。
+- worker lease 超时恢复不用扫描发现时间、修复脚本运行时间或当前时间计算 `nextAttemptAt` 的测试。
+- failure handler 处理 attempt 1/2/3 失败时只关闭当前 run，不立即插入 retry run 的测试。
+- failure handler 不创建带未来 `nextAttemptAt` 的 `pending` run 的测试。
+- 统一 retry 入队流程只选择 `nextAttemptAt <= now` 的 failed run 的测试。
+- 统一 retry 入队流程创建的 retry run 继续满足 TD-123 的 `nextAttemptAt <= now` claim 条件的测试。
+- worker lease 超时晚发现且 `leaseExpiresAt + backoff <= now` 时，先持久化 failed run，再由统一 retry 入队流程创建可立即 claim retry run 的测试。
+- 自动调度轮次按恢复超时 `running`、入队 due retry、claim pending 顺序执行的测试。
+- 手动 `--run-id` due failed run 和自动 due retry 使用同一 retry 入队服务路径的测试。
+- 手动 `--event-id` 命中 due failed 历史时使用同一 retry 入队服务路径的测试。
+- 自动调度轮次多条 due failed run 时最多成功创建 1 条 retry run 的测试。
+- 自动 due retry 候选按投资优先级、`nextAttemptAt`、`createdAt`、`runId` 排序的测试。
+- 手动 backfill / repair 不受自动调度每轮 1 条上限影响的测试。
+- 自动调度本轮创建的 due retry run 可在同一轮 pending claim 中被选中的测试。
+- 本轮新建 due retry run 不绕过普通 pending claim 排序的测试。
+- 本轮没有 claim 容量时新建 due retry run 保持 `pending` 的测试。
+- 普通 pending claim 只选择 `status = "pending"` 且 `nextAttemptAt <= now` 的 run 的测试。
+- 普通 pending claim 按后端投资优先级、`nextAttemptAt`、`createdAt`、`runId` 排序的测试。
+- 初始自动 run、manual run 和 retry run 使用同一 claim 排序的测试。
+- manual run 和 retry run 不因触发来源插队的测试。
+- pending claim 使用数据库条件更新从 `pending` 原子改为 `running` 的测试。
+- 并发 claim 同一 run 时只有一个 worker 更新影响行数为 1 的测试。
+- claim 更新影响行数为 0 时不写 run 错误并重新查询或结束本轮的测试。
+- claim 成功时写入 `lockedAt`、`lockOwner`、`leaseExpiresAt` 的测试。
+- 模型调用不在 claim 数据库事务内执行的测试。
+- 结果写回必须匹配 `runId`、`status = "running"`、`lockOwner` 和未过期 `leaseExpiresAt` 的测试。
+- 结果写回影响行数为 0 时不覆盖后续状态、不替换 active 原因假设的测试。
+- 结果写回影响行数为 0 时不标记当前 run 为 failed、不写 `finishedAt` / `nextAttemptAt` / 错误码 / 输出快照的测试。
+- 过期写回不创建 retry run、不触发 retry 入队的测试。
+- lease 过期后过期写回被丢弃，并由后续超时恢复按 `leaseExpiresAt` 写 `failedAt` / `finishedAt` 的测试。
+- claim 成功后模型调用期间不会更新或延长 `leaseExpiresAt` 的测试。
+- 模型调用、输出校验或结果写回超过 lease 时，不能通过续租重新获得所有权的测试。
+- 第一版不存在心跳续租、保活字段、续租循环或独立续租 API 的实现检查。
+- provider 支持取消能力时，45 秒模型调用超时会触发取消信号的测试。
+- provider 不支持取消能力时，worker 在 45 秒超时后停止等待并写 `causal_hypothesis_model_timeout` 的测试。
+- 模型调用超时写回必须匹配 run 所有权和未过期 lease 的测试。
+- 模型调用超时但 lease 已过期时按过期写回丢弃，不写 failed、不创建 retry 的测试。
+- provider 本地超时后迟到返回成功或 unknown 时，不写 run、不替换 active、不刷新 projection 的测试。
+- provider 本地超时后迟到 reject 被消费且不形成未处理异常的测试。
+- 网络连接失败、HTTP 429、HTTP 500-599、provider 临时不可用、过载和限流写 `causal_hypothesis_provider_transient_error` 的测试。
+- 临时 provider 错误写回必须匹配 run 所有权和未过期 lease 的测试。
+- 临时 provider 错误写回成功时写 `finishedAt = failedAt = 失败落库时间` 和按 backoff 计算的 `nextAttemptAt` 的测试。
+- 临时 provider 错误不替换 active、不刷新 projection、不阻塞 canonical event 入库的测试。
+- 临时 provider 错误不立即创建 retry run，而是等待统一 retry 入队流程的测试。
+- 临时 provider 错误诊断不包含 raw prompt、完整模型输入、完整模型输出、完整原文、provider 原始 request / response payload、secret、token、credential 或完整配置的测试。
+- 鉴权失败、权限不足、模型不存在、无效模型、请求非法和不支持的参数 / 格式 / 模型能力写 `causal_hypothesis_provider_permanent_error` 的测试。
+- 永久 provider 错误写回必须匹配 run 所有权和未过期 lease 的测试。
+- 永久 provider 错误写回成功时写 `finishedAt = failedAt = 失败落库时间` 和 `nextAttemptAt = null` 的测试。
+- 永久 provider 错误不替换 active、不刷新 projection、不阻塞 canonical event 入库的测试。
+- 永久 provider 错误不立即创建 retry run，也不由统一 retry 入队流程自动创建 retry run 的测试。
+- 永久 provider 错误诊断不包含 raw prompt、完整模型输入、完整模型输出、完整原文、provider 原始 request / response payload、secret、token、credential 或完整配置的测试。
+- ops/status light 统计 `causal_hypothesis_provider_permanent_error` failed run 为 `permanentProviderErrorCount` 的测试。
+- `permanentProviderErrorCount` 统计所有当前保留 run 表中 `status = "failed"` 且 `errorCode = "causal_hypothesis_provider_permanent_error"` 的 run 的测试。
+- 永久 provider failed run 缺少 samples 所需的 `runId`、`eventId`、`finishedAt`、`provider`、`model`、`httpStatus`、`requestId` 或 `errorSummary` 时仍计入 `permanentProviderErrorCount` 的测试。
+- `permanentProviderErrorSamples = []` 时 `permanentProviderErrorCount` 仍可大于 0 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts` 是本地只读脚本、不写数据库、不创建 run、不重试 run、不修复 run、不刷新 projection、不替换 active 原因假设的测试或实现检查。
+- `scripts/check-causal-hypothesis-run-consistency.ts` 检测永久 provider failed run 缺少持久化 `runId`、`eventId` 或 `finishedAt` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts` 不把缺失 `provider`、`model`、`httpStatus`、`requestId` 或 `errorSummary` 作为 samples 排除问题报告的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 输出 `mode = causal_hypothesis_run_consistency_check`、`schemaVersion = 1`、`exitCode`、`durationMs`、`requested`、`summary`、`findings` 和 `errors` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的 `summary` 包含 `checkedCount`、`permanentProviderErrorCount`、`sampleIneligibleCount`、`missingRunIdCount`、`missingEventIdCount`、`missingFinishedAtCount`、`findingsReturned` 和 `findingsTruncated` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的 `findings[]` 每项包含固定 `target`、`missingFields`、`affects` 和 `recommendedAction = repair_run_record_consistency` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的 `errors[]` 每项包含固定 `target`、`errorCode`、`phase`、`retryable` 和 `message` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的 `errors[]` 第一版只允许 `target.scope = "global"` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的第一版 `errorCode` 只允许 `invalid_arguments`、`database_unavailable` 和 `unexpected_runtime_error` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的第一版 `phase` 只允许 `argument_parse`、`database_scan` 和 `runtime` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 发现 findings 时 `exitCode = 2` 且 `errors = []` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 参数、数据库或运行时失败时 `findings = []` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 不输出 `wouldErrors[]`、不输出 backfill 专属错误码的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的机器判断不依赖 `message` 文案的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的 `message` 不包含 raw exception、SQL、堆栈、provider 原始报错、prompt、payload、secret 或完整配置的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的 `findingsLimit` 只限制 `findings[]` 返回数量、不限制 `summary` 全量统计的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 先对全量 findings 稳定排序、再应用 `findingsLimit` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的 findings 排序覆盖影响 `latestPermanentProviderErrorAt` 优先、缺字段数量多优先、同一 run 记录可用持久化时间倒序、`runId` / `eventId` 升序兜底的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 的 findings 排序不得使用 provider 时间、查询时间、脚本扫描时间、本地日志时间或当前时间的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 省略 `--findings-limit` 时 `requested.findingsLimit = 100` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json --findings-limit 1000` 合法的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json --findings-limit 1001` 严格失败且不得静默截断为 `1000` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json --findings-limit 0`、负数、小数和非数字值严格失败的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 无 findings 时退出码为 `0`，有 findings 时退出码为 `2`，参数、数据库或运行时失败时退出码为 `1`，且 `exitCode` 等于进程实际退出码的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts` 非 `--json` 模式无 findings 时退出码为 `0`，有 findings 时退出码为 `2`，参数、数据库或运行时失败时退出码为 `1` 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts` 非 `--json` 模式的人读摘要、stderr 和本地日志不输出 provider 原始 payload、raw prompt、完整模型输入、完整模型输出、完整原文、secret、token、credential、完整配置、SQL 或 stack trace 的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts` 不接受 `--repair`、`--fix`、`--execute` 或等价变更参数的测试。
+- `recommendedAction = repair_run_record_consistency` 不触发任何写入或修复行为的测试。
+- `scripts/check-causal-hypothesis-run-consistency.ts --json` 不输出 provider 原始 payload、raw prompt、完整模型输入、完整模型输出、完整原文、secret、token、credential、完整配置、SQL 或 stack trace 的测试。
+- ops/status light 的 `latestPermanentProviderErrorAt` 使用永久 provider 错误 failed run 最新 `finishedAt` 的测试。
+- `permanentProviderErrorCount > 0` 但没有任何匹配 run 有持久化 `finishedAt` 时，`latestPermanentProviderErrorAt = null` 的测试。
+- ops/status light 的 `latestPermanentProviderErrorAt` 不得使用 provider 返回时间、查询时间、脚本扫描时间、scheduler 发现失败时间、本地日志时间或重新推导出的时间的测试。
+- 永久 provider failed run 缺少持久化 `finishedAt` 时，不得为 `latestPermanentProviderErrorAt` 合成替代时间的测试。
+- 没有永久 provider 错误时，ops/status light 仍返回 `permanentProviderErrorCount = 0` 和 `latestPermanentProviderErrorAt = null` 的测试。
+- ops/status light 不得因为没有永久 provider 错误而省略 `permanentProviderErrorCount` 或 `latestPermanentProviderErrorAt` 的测试。
+- ops/status light 不得用空字符串、`undefined`、`false` 或 `0` 代替 `latestPermanentProviderErrorAt = null` 的测试。
+- ops/status diagnostics 始终返回 `permanentProviderErrorSamples` 数组的测试。
+- ops/status diagnostics 没有永久 provider 错误样例时返回 `permanentProviderErrorSamples = []` 的测试。
+- ops/status diagnostics 不得用 `null`、空对象、`undefined` 或 `false` 代替 `permanentProviderErrorSamples = []` 的测试。
+- ops/status light 不返回 `permanentProviderErrorSamples` 的测试。
+- `permanentProviderErrorSamples[]` 只包含脱敏 run 级字段，且不包含 provider 原始报错、原始 request / response payload、raw prompt、完整模型输入、完整模型输出、完整原文、secret、token、credential 或完整配置的测试。
+- `permanentProviderErrorSamples[]` 样例对象固定包含 `runId`、`eventId`、`finishedAt`、`provider`、`model`、`httpStatus`、`errorType`、`requestId` 和 `errorSummary` 的测试。
+- `permanentProviderErrorSamples[]` 的 `runId`、`eventId`、`finishedAt` 和 `errorType` 必须存在的测试。
+- `permanentProviderErrorSamples[]` 的 `runId` 只能来自样例对应 failed run 自身持久化主键的测试。
+- `permanentProviderErrorSamples[]` 不得从本地日志行、provider request id、provider correlation id、provider payload、provider message、provider 原始报错、provider 原始 response payload、`errorSummary`、stack trace 或异常字符串中解析 `runId` 的测试。
+- `permanentProviderErrorSamples[]` 不得使用 `retry_of_run_id`、被重试 run、触发 retry 的 run、阻止 retry 的 `existingRunId`、其他关联 run 或新建 retry run 的 id 替代样例 failed run 自身主键的测试。
+- 缺少自身持久化 `runId` 的永久 provider failed run 不进入 `permanentProviderErrorSamples[]` 的测试。
+- `permanentProviderErrorSamples[]` 的 `eventId` 只能来自同一 run 记录保存的 canonical event 绑定的测试。
+- `permanentProviderErrorSamples[]` 不得从 provider payload、provider message、provider 原始报错、provider 原始 response payload、`errorSummary`、stack trace、本地日志行或异常字符串中解析 `eventId` 的测试。
+- `permanentProviderErrorSamples[]` 不得用当前 canonical event lookup、当前 projection lookup、`retry_of_run_id` 链或其他历史 run 替代缺失的 run 记录事件绑定的测试。
+- 缺少持久化 `eventId` 的永久 provider failed run 不进入 `permanentProviderErrorSamples[]` 的测试。
+- `permanentProviderErrorSamples[]` 的 `finishedAt` 只能来自同一 run 记录持久化完成时间的测试。
+- `permanentProviderErrorSamples[]` 不得使用 provider 返回时间、provider error timestamp、模型输出时间、ops/status 查询时间、脚本扫描时间、scheduler 发现失败时间、本地日志时间或重新推导出的时间作为 `finishedAt` 的测试。
+- 缺少持久化 `finishedAt` 的永久 provider failed run 不进入 `permanentProviderErrorSamples[]` 的测试。
+- `permanentProviderErrorSamples[]` 缺失 `provider`、`model`、`httpStatus`、`requestId` 或 `errorSummary` 时返回 `null` 而不是省略字段的测试。
+- `permanentProviderErrorSamples[]` 的 `provider` / `model` 只能来自本系统发起 run 时已知的调用上下文或配置元数据的测试。
+- run 记录、输入身份和调用上下文都无法确认 provider / model 时，`provider = null` / `model = null` 的测试。
+- 不得从 provider message、provider 原始报错文本、`errorSummary`、provider 原始 response payload、stack trace、本地日志行或异常字符串中解析 `provider` / `model` 的测试。
+- 不得从 `requestId`、`httpStatus`、`errorType`、provider 原始错误码或本地错误码映射出 `provider` / `model` 的测试。
+- 不得为了填充字段而猜测、生成、拼接或伪造 `provider` / `model` 的测试。
+- `permanentProviderErrorSamples[]` 的 `provider` 和 `model` 各自最多 128 个 Unicode code point 的测试。
+- `permanentProviderErrorSamples[]` 的 `provider` / `model` 为 128 个 Unicode code point 时合法、129 个 Unicode code point 时输出 `null` 的测试。
+- `permanentProviderErrorSamples[]` 的 `provider` / `model` 长度不得按 UTF-8 字节数或 JavaScript UTF-16 code unit 计算的测试。
+- `permanentProviderErrorSamples[]` 的 `provider` / `model` 最终长度判定不得使用 JavaScript `string.length` 的实现检查。
+- 含有非 BMP 字符的 `provider` / `model` 仍按 Unicode code point 计数的测试。
+- `provider` / `model` 超过 128 个 Unicode code point 时，不得裁剪、复制前 128 个字符、追加省略号、保留不完整片段、哈希、重编码或压缩，必须输出 `null` 的测试。
+- `permanentProviderErrorSamples[]` 的 `errorType` 必须是 `authentication_failed`、`permission_denied`、`model_not_found`、`provider_config_invalid`、`invalid_request`、`unsupported_request` 或 `unknown_permanent_provider_error` 的测试。
+- `permanentProviderErrorSamples[]` 的 `errorType` 不得为 `null`、空字符串、provider 原始错误码、provider 原始错误文本、HTTP status 文本或 provider-specific 自由字符串的测试。
+- 鉴权失败、凭证无效、凭证过期或缺少 provider 鉴权材料映射为 `authentication_failed` 的测试。
+- provider 账号、project、organization、region 或模型访问权限不足映射为 `permission_denied` 的测试。
+- provider 明确表示模型不存在时映射为 `model_not_found` 的测试。
+- provider profile、model id、provider/model 组合或 provider 侧配置指向无效目标时映射为 `provider_config_invalid` 的测试。
+- provider 明确表示请求结构、必填字段、参数值或 payload 非法时映射为 `invalid_request` 的测试。
+- provider 明确表示参数、格式、工具能力、输出格式或模型能力不支持时映射为 `unsupported_request` 的测试。
+- 已经确定是永久 provider 错误但无法安全归类时映射为 `unknown_permanent_provider_error` 的测试。
+- 缺少原因生成器本地配置不进入 `permanentProviderErrorSamples[]`，也不映射为 `provider_config_invalid` 的测试。
+- `permanentProviderErrorSamples[]` 必须始终包含 `httpStatus` 字段的测试。
+- `permanentProviderErrorSamples[]` 的 `httpStatus = 100` 和 `httpStatus = 599` 合法的测试。
+- `permanentProviderErrorSamples[]` 的 `httpStatus` 遇到 `99`、`600`、`0`、负数、小数或字符串状态码时输出 `null` 的测试。
+- SDK 自定义状态、provider 自定义错误码、网络错误码、系统错误码、DNS / TLS / socket 错误码不得进入 `httpStatus`，必须输出 `null` 的测试。
+- provider 没有返回可确认 HTTP response status，或 SDK status / code 无法确认为真实 HTTP response status 时，`httpStatus = null` 的测试。
+- 不得从 provider error message 解析或猜测 `httpStatus` 的测试。
+- `httpStatus` 不替代 `errorType`、固定错误码或 retry 语义的测试。
+- `permanentProviderErrorSamples[]` 必须始终包含 `requestId` 字段的测试。
+- provider SDK / response metadata / response header 明确提供 request id 或 correlation id 时，`requestId` 使用该 opaque string 的测试。
+- provider 没有明确提供 request id 或 correlation id 元数据时，`requestId = null` 的测试。
+- 不得从 provider message、provider 原始报错文本、`errorSummary`、stack trace、本地日志行或异常字符串中解析 `requestId` 的测试。
+- 不得把 `runId`、`eventId`、`inputChecksum`、`httpStatus`、`errorType`、provider 原始错误码或本地错误码映射成 `requestId` 的测试。
+- 不得为了填充字段而生成、拼接或伪造 provider `requestId` 的测试。
+- `permanentProviderErrorSamples[]` 的 `requestId` 最多 128 个 Unicode code point 的测试。
+- `permanentProviderErrorSamples[]` 的 `requestId` 为 128 个 Unicode code point 时合法、129 个 Unicode code point 时输出 `null` 的测试。
+- `permanentProviderErrorSamples[]` 的 `requestId` 长度不得按 UTF-8 字节数或 JavaScript UTF-16 code unit 计算的测试。
+- `permanentProviderErrorSamples[]` 的 `requestId` 最终长度判定不得使用 JavaScript `string.length` 的实现检查。
+- 含有非 BMP 字符的 `requestId` 仍按 Unicode code point 计数的测试。
+- provider request id 超过 128 个 Unicode code point 时，不得裁剪、复制前 128 个字符、追加省略号、保留不完整片段、哈希、重编码或压缩，必须输出 `null` 的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 只能是脱敏短摘要或 `null` 的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 由系统根据归一化错误类型、HTTP status、provider / model 标识和安全定位信息生成的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 不得直接复制、截断、翻译、同义改写或轻度摘要 provider message 的测试。
+- 只能从 provider message 获得错误信息且无法安全映射时，`permanentProviderErrorSamples[]` 的 `errorSummary = null` 的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 最多 200 个字符的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 超过 200 个字符时改用更短系统模板或返回 `null` 的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 长度按 Unicode code point 计数的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 为 200 个 Unicode code point 时合法、201 个 Unicode code point 时超限的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 长度不得按 UTF-8 字节数或 JavaScript UTF-16 code unit 计算的测试。
+- `permanentProviderErrorSamples[]` 的 `errorSummary` 最终长度判定不得使用 JavaScript `string.length` 的实现检查。
+- 含有非 BMP 字符的 `errorSummary` 仍按 Unicode code point 计数的测试。
+- `permanentProviderErrorSamples[]` 不得通过截断 provider message、复制 provider message 前 200 个字符、追加省略号或保留不完整 provider 原始错误片段来满足长度上限的测试。
+- 自动化不能依赖 `errorSummary` 做机器判断，必须依赖 `errorType`、`httpStatus`、`requestId`、`runId`、`eventId` 和固定错误码的实现检查。
+- `permanentProviderErrorSamples[]` 不包含 stack trace、SQL 或未定义 provider-specific payload 字段的测试。
+- ops/status diagnostics 的 `permanentProviderErrorSamples` 最多返回 10 条的测试。
+- ops/status diagnostics 的 `permanentProviderErrorSamples` 按同一 run 记录持久化 `finishedAt` 倒序排序的测试。
+- ops/status diagnostics 的 `permanentProviderErrorSamples` 在 `finishedAt` 相同时按 `runId` 升序稳定兜底的测试。
+- ops/status diagnostics 的 `permanentProviderErrorSamples` 在排序后再截断到 10 条的测试。
+- ops/status diagnostics 第一版不提供 `permanentProviderErrorSamples` 分页、offset、cursor 或按事件筛选的实现检查。
+- `permanentProviderErrorCount` 和 `latestPermanentProviderErrorAt` 基于当前保留 run 表全量可见历史统计，不使用 24 小时、7 天或其他 rolling window 的测试。
+- diagnostics 样例 limit 不影响 `permanentProviderErrorCount` 和 `latestPermanentProviderErrorAt` 的测试。
+- 第一版不存在永久 provider 错误统计窗口配置项的实现检查。
+- ops/status light 不暴露 provider 原始报错、原始 request / response payload、raw prompt、完整模型输入、完整模型输出、完整原文、secret、token、credential、完整配置、runId、eventId、inputChecksum 或 request id 列表的测试。
+- ops/status diagnostics 可返回少量永久 provider 错误 run 脱敏样例的测试。
+- `permanentProviderErrorCount` 不进入 pending count、`notGeneratedCount`、`blockedByGeneratorConfigCount`，也不替代 failure rate 的测试。
+- 修复 provider 配置后，普通 `--run-id` / `--event-id` retry 仍按 `retry_terminal_failure` 跳过永久 provider 终止失败的测试。
+- 自动 due retry 入队流程不因 provider 配置已修复而重新纳入永久 provider 终止失败 run 的测试。
+- 手动批量 backfill / repair 不因 provider 配置已修复而自动重新排队永久 provider 终止失败 run 的测试。
+- 第一版不存在检测配置已修复后重开终止失败后台逻辑的实现检查。
+- 第一版不存在按 provider 配置版本、凭证状态或模型 id 变化自动重启终止失败 run 的实现检查。
+- 第一版不接受 `--force-terminal-failure` 或等价命令行参数的测试。
+- 第一版不存在专门用于重跑永久 provider 终止失败的脚本入口、公开 provider API、frontend 按钮、MCP public tool 或后台自动修复任务的实现检查。
+- 第一版不为永久 provider 终止失败新增 `force_reason`、operator 或审批字段的实现检查。
+- 缺少原因生成器本地配置不写 run，且不复用 `causal_hypothesis_provider_permanent_error` 的测试。
+- 缺少原因生成器本地配置不增加 `permanentProviderErrorCount` 的测试。
+- attempt 4 普通失败和 attempt 4 lease 超时失败都写 `finishedAt = failedAt` 且 `nextAttemptAt = null` 的测试。
+- 批量 backfill 默认不包含 `actionBucket = noise` 的测试。
+- 精确 `--event-id` 可以包含 `actionBucket = noise` 的测试。
+- 显式 `--include-noise` 可以让批量 backfill 包含 `noise`，但不绕过去重、`--limit`、`--concurrency` 或质量门禁的测试。
+- 批量 backfill 默认排序复用后端投资排序的测试：bucket、投资分数、时间、`eventId`。
+- 批量 backfill `--limit` 在候选过滤和完整排序之后截断的测试。
+- dry-run JSON 的 `wouldQueueEventIds` / `wouldSkip` 反映排序后截断候选顺序的测试。
+- `--limit` 限制候选数量而不是新排队数量的测试：候选大量去重跳过时不继续向后扫描。
+- 第一版不接受 `--target-queued` 的测试。
+- retry run 写入 `trigger_source = "retry"`、`retry_of_run_id` 和可读 `trigger_reason` 的测试。
+- `retry_of_run_id` 不参与 `input_checksum` 或生成去重 key 的测试。
+- diagnostics 和本地运行记录查看脚本摘要暴露 `retryOfRunId`，但 provider-facing contract、frontend 默认展示和 MCP public contract 不暴露的测试。
+- diagnostics 和本地运行记录查看脚本摘要暴露 `triggerSource` / `triggerReason`，但 provider-facing contract、frontend 默认展示和 MCP public contract 不暴露的测试。
+- provider detail contract 测试，覆盖 `GET /api/investment-events/:id` 返回 `InvestmentProviderEventDetailResponse` 且只读原因结果、不触发生成。
+- MCP detail contract 测试，覆盖 `toMcpEventDetail()` 从 provider-facing detail 投影原因字段，debug 模式不暴露 run snapshot、raw prompt、provider 原始 payload、trigger source 或 retry 链。
+- 前端展示降级测试，覆盖 `available`、`unknown`、`pending`、`not_generated`、`failed`，且不出现生成、强制重跑、查看 run 或查看 snapshot 的入口。
+- ops/status light 与 diagnostics 字段测试，覆盖固定 `causalHypothesis` 对象、永久 provider 错误聚合摘要、无错误时固定字段返回、light 不暴露定位样例、`permanentProviderErrorSamples` 固定数组字段、固定样例对象字段形状、`errorType` 归一化枚举、`errorSummary` 系统生成边界、200 Unicode code point 上限、样例上限与排序、全量当前保留历史统计口径和脱敏边界。
+- ops/status `eligibleCoverage` / `notGeneratedCount` / failure rate / pending count / `blockedByGeneratorConfigCount` / `permanentProviderErrorCount` 统计口径测试。
+- `causal-hypothesis` 结构型质量门禁测试。
+- `causalStatus = not_generated` 的 eligibility / projection / provider contract 测试。
+- 原因假设独立大模型配置档、缺配置不排队、ops/status 暴露 disabled / missing config 的测试。
+- 缺少原因生成配置时，eligible event 的 provider-facing `causalStatus` 仍为 `pending`，且不写入自动 `pending` run 的测试。
+- 缺少原因生成配置时，eligible event 进入 `blockedByGeneratorConfigCount`，且不进入 pending count、failure rate 或 `notGeneratedCount` 的测试。
+- 手动 backfill / repair dry-run 缺配置时成功返回候选和配置阻塞提示的测试。
+- 手动 backfill / repair `--execute` 缺配置时预检失败、退出码非 0、不写 `pending` / `failed` run、不刷新 projection 的测试。
+- 手动 backfill / repair 配置错误输出不包含 secrets 的测试。
+- 手动 backfill / repair 的 `skipped` 不计入 `failedCount` 的测试。
+
+状态：已完成；最终验证记录见 `delivery-status.md`。
+
+## 3. 一致性检查
+
+已完成初步代码接入点核对：
+
+- `server/services/event-engine/scheduler.ts#persistResolvedEvent()` 是自动触发点。
+- `server/services/event-engine/projection-pipeline.ts` 是 projection checksum / rebuild 接入点。
+- `server/database/events.ts#getEventDetail()` 是 canonical detail 组装点，但原因 SQL 归 `server/database/causal-hypotheses.ts`。
+- `scripts/backfill-event-projections.ts` 提供了内部脚本模式参考。
+- `server/api/ops/events/status.ts` 是 ops/status light 与 diagnostics 接入点。
+- run 表作为持久队列，避免新增独立队列表或纯内存事实源。
+- lease、timeout、provider 请求取消、临时 provider 错误、永久 provider 错误、永久 provider 错误 ops/status 聚合摘要及 diagnostics 样例字段形状、`errorType` 归一化枚举、`errorSummary` 系统生成边界和 200 Unicode code point 上限、全量当前保留历史统计口径、修复后普通 retry 仍跳过永久 provider 终止失败、显式强制修复入口不进第一版、backoff、最大尝试次数、失败处理 / retry 入队边界、调度轮次顺序、自动 due retry 每轮上限、本轮 claim 语义、普通 pending claim 排序、数据库原子 claim、事务外模型调用、过期写回处理和不支持 lease 续租已确定，后续实现要进入配置常量和测试断言。
+- 原因假设生成使用独立大模型配置档，不复用 subject-role 或 watch-target 配置。
+- 数据库迁移方式已按当前 `EventTable` / `EventProjectionTable` 的 init + ensureColumn 模式收敛，第一版不新增独立 migration runner。
+- run 表时间字段已收敛为 `created_at NOT NULL` + 可空 `started_at`，pending claim 排序不得依赖 `started_at`。
+- provider API / MCP / frontend 接入边界已按现有 `InvestmentQueryService`、`toMcpEventDetail()` 和 `events.$eventId.tsx` 模式收敛，全部只读 projection，不触发生成。
+- 手动 backfill / repair 的压力控制已收敛为 `--limit` + `--concurrency`，第一版不提供独立 `--rate-limit-ms` / `--delay-ms`。
+
+一致性检查已完成：
+
+- 本计划与 `technical-design.md` 的字段、状态、流程一致。
+- 本计划与 `product-spec.md` 的用户行为一致。
+- 本计划与 AGENTS.md backend truth 规则一致。
+
+仍需完成：
+
+- 代码实现与验证。

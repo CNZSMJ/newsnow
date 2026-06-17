@@ -267,6 +267,8 @@ function detail(input = brief()): InvestmentEventDetail {
     evidence: [],
     timelineSummary: [],
     watchTargetCandidates: [],
+    causalStatus: "pending",
+    causalHypotheses: [],
   }
 }
 
@@ -388,6 +390,8 @@ describe("investmentQueryService", () => {
     })
 
     expect(store.listCalls[0]).toMatchObject({
+      indexName: "latest",
+      indexValue: "all",
       q: "ai 政策",
       limit: 5,
     })
@@ -470,12 +474,28 @@ describe("investmentQueryService", () => {
     expect(store.upserts).toEqual(["evt_laser"])
   })
 
-  it("repairs missing search projections even when the projected result page is full", async () => {
+  it("does not block a full projected search page on canonical repair", async () => {
     const store = new MemoryProjectionQueryStore([
       projection(brief({
         eventId: "evt_projected",
         title: "帝尔激光 已投影事件",
-        subjectSummary: "帝尔激光",
+        affectedEntities: [{
+          entityId: "sz300776",
+          label: "帝尔激光",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+          code: "300776",
+          market: "A",
+        }],
+        primarySubject: {
+          entityId: "sz300776",
+          label: "帝尔激光",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+          code: "300776",
+          market: "A",
+        },
+        subjectSummary: "核心主体：帝尔激光",
       })),
     ])
     const canonicalStore = new MemoryCanonicalEventStore([
@@ -495,10 +515,55 @@ describe("investmentQueryService", () => {
       limit: 1,
     })).resolves.toMatchObject({
       items: [expect.objectContaining({ eventId: "evt_projected" })],
-      totalCount: 2,
+      totalCount: 1,
     })
-    expect(canonicalStore.getCalls).toEqual(["evt_missing"])
-    expect(store.upserts).toEqual(["evt_missing"])
+    expect(canonicalStore.listCalls).toEqual([])
+    expect(canonicalStore.getCalls).toEqual([])
+    expect(store.upserts).toEqual([])
+  })
+
+  it("does not block a full projected entity page on canonical repair", async () => {
+    const store = new MemoryProjectionQueryStore([
+      projection(brief({
+        eventId: "evt_projected",
+        title: "帝尔激光 已投影事件",
+        affectedEntities: [{
+          entityId: "sz300776",
+          label: "帝尔激光",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+          code: "300776",
+          market: "A",
+        }],
+        primarySubject: {
+          entityId: "sz300776",
+          label: "帝尔激光",
+          entityType: "security",
+          entityTypeLabel: "交易标的",
+          code: "300776",
+          market: "A",
+        },
+        subjectSummary: "核心主体：帝尔激光",
+      })),
+    ])
+    const canonicalStore = new MemoryCanonicalEventStore([
+      canonicalDetail({
+        eventId: "evt_missing",
+        title: "帝尔激光 新增事件",
+      }),
+    ])
+    const service = new InvestmentQueryService(store, canonicalStore)
+
+    await expect(service.getEntityEvents({
+      entity: "帝尔激光",
+      limit: 1,
+    })).resolves.toMatchObject({
+      items: [expect.objectContaining({ eventId: "evt_projected" })],
+      totalCount: 1,
+    })
+    expect(canonicalStore.listCalls).toEqual([])
+    expect(canonicalStore.getCalls).toEqual([])
+    expect(store.upserts).toEqual([])
   })
 
   it("keeps projected search results available when one canonical repair fails", async () => {
@@ -571,6 +636,28 @@ describe("investmentQueryService", () => {
     })
     expect(canonicalStore.getCalls).toEqual(["evt_laser"])
     expect(store.upserts).toEqual(["evt_laser"])
+  })
+
+  it("repairs legacy detail projections that do not match the current detail contract", async () => {
+    const currentDetail = detail()
+    const { causalStatus: _causalStatus, causalHypotheses: _causalHypotheses, ...legacyDetail } = currentDetail
+    const legacyProjection = {
+      ...projection(),
+      detail: legacyDetail as InvestmentEventDetail,
+    }
+    const store = new MemoryProjectionQueryStore([legacyProjection])
+    const canonicalStore = new MemoryCanonicalEventStore([canonicalDetail({ eventId: "evt_1" })])
+    const service = new InvestmentQueryService(store, canonicalStore)
+
+    await expect(service.getEventDetail("evt_1", {
+      includeRelatedEvents: false,
+    })).resolves.toMatchObject({
+      eventId: "evt_1",
+      causalStatus: "pending",
+      causalHypotheses: [],
+    })
+    expect(canonicalStore.getCalls).toEqual(["evt_1"])
+    expect(store.upserts).toEqual(["evt_1"])
   })
 
   it("reads detail and related sections from projection records", async () => {

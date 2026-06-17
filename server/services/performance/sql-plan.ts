@@ -38,14 +38,13 @@ export function buildSurfaceQueryPlanStatements(): SurfaceQueryPlanStatement[] {
       decisionRefs: ["PD-4", "TD-3", "TD-10", "TD-11"],
       sql: `
         SELECT p.event_id
-        FROM event_projection p
-        INNER JOIN event_query_indexes i
+        FROM event_query_indexes i INDEXED BY idx_event_query_indexes_rank_lookup
+        INNER JOIN event_projection p
           ON i.event_id = p.event_id
-         AND i.index_name = ?
-         AND i.index_value = ?
-        WHERE p.repair_status = 'ok'
-        ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
-                 COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
+        WHERE i.index_name = ?
+          AND i.index_value = ?
+          AND p.repair_status = 'ok'
+        ORDER BY i.rank_score DESC, i.sort_time DESC
         LIMIT ?
       `,
       params: ["latest", "all", 20],
@@ -54,18 +53,21 @@ export function buildSurfaceQueryPlanStatements(): SurfaceQueryPlanStatement[] {
       name: "investment_search_events",
       surface: "investment_user",
       owner: "investment-event",
-      tables: ["event_projection"],
+      tables: ["event_projection", "event_query_indexes"],
       decisionRefs: ["PD-4", "TD-3", "TD-10", "TD-11"],
       sql: `
         SELECT p.event_id
-        FROM event_projection p
-        WHERE p.repair_status = 'ok'
+        FROM event_query_indexes i INDEXED BY idx_event_query_indexes_rank_lookup
+        INNER JOIN event_projection p
+          ON i.event_id = p.event_id
+        WHERE i.index_name = ?
+          AND i.index_value = ?
+          AND p.repair_status = 'ok'
           AND p.search_text LIKE ?
-        ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
-                 COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
+        ORDER BY i.rank_score DESC, i.sort_time DESC
         LIMIT ?
       `,
-      params: ["%政策%", 20],
+      params: ["latest", "all", "%政策%", 20],
     },
     {
       name: "investment_entity_lookup",
@@ -128,15 +130,14 @@ export function buildSurfaceQueryPlanStatements(): SurfaceQueryPlanStatement[] {
       decisionRefs: ["PD-4", "TD-3", "TD-9", "TD-11"],
       sql: `
         SELECT p.event_id, p.brief_json, p.event_type, p.event_subtype, p.source_ids_json
-        FROM event_projection p
-        INNER JOIN event_query_indexes i
+        FROM event_query_indexes i INDEXED BY idx_event_query_indexes_rank_lookup
+        INNER JOIN event_projection p
           ON i.event_id = p.event_id
-         AND i.index_name = ?
-         AND i.index_value = ?
-        WHERE p.repair_status = 'ok'
+        WHERE i.index_name = ?
+          AND i.index_value = ?
+          AND p.repair_status = 'ok'
           AND p.topic_tags_json LIKE ?
-        ORDER BY ((p.materiality_score * 0.4) + (p.tradability_score * 0.35) + (p.authority_score * 0.25)) DESC,
-                 COALESCE(p.latest_lifecycle_at, p.published_at, p.ingested_at, 0) DESC
+        ORDER BY i.rank_score DESC, i.sort_time DESC
         LIMIT ?
       `,
       params: ["entity", "贵州茅台", "%\"ai-computing\"%", 120],

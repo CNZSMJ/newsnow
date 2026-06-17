@@ -1,7 +1,7 @@
 # 投资事件路线图
 
 状态：使用中
-最后更新：2026-04-20
+最后更新：2026-05-25
 范围：`newsnow` 事件系统的长期演进路径与当前阶段判断
 文档角色：当前生效的高层 roadmap
 更新时机：长期阶段划分、主线优先级或系统终态发生变化时
@@ -65,7 +65,7 @@ frontend 和 agent 不是新的语义源，而是围绕同一套 backend truth �
 当前主方向：
 
 - 第一层 steady-state 守护与精度提升
-- 第二层 relation / causal hypothesis 起步
+- 第二层 `CausalHypothesis` v1 已起步，完整 relation graph 待形成正式层
 - 第三层 impact pathway 抽象成正式对象
 - 第四层 investment mapping 从 v1 子能力扩成正式层
 

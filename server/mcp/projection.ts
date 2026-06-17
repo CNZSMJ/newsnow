@@ -9,6 +9,7 @@ import type {
   InvestmentWatchlistDetail,
   InvestmentRelatedEventsSection,
   InvestmentTimelineEntry,
+  InvestmentCausalHypothesis,
   WatchlistDetail,
 } from "@shared/types"
 import { projectInvestmentEventBrief } from "#/services/event-engine/investment-view"
@@ -17,6 +18,7 @@ export interface McpInvestmentEntityRef extends InvestmentEntityRef {}
 export interface McpInvestmentWatchTargetCandidate extends InvestmentWatchTargetCandidate {}
 
 export interface McpInvestmentEventFact {
+  factId: string
   label: string
   metricName?: string
   value?: string | number | boolean | null
@@ -124,12 +126,16 @@ export interface McpInvestmentRelatedEventsSection {
   items: McpInvestmentEventBrief[]
 }
 
+export interface McpInvestmentCausalHypothesis extends InvestmentCausalHypothesis {}
+
 export interface McpInvestmentEventDetail extends McpInvestmentEventBrief {
   thesis: string
   keyFacts: McpInvestmentEventFact[]
   evidence: McpInvestmentEventEvidence[]
   timelineSummary: McpInvestmentTimelineEntry[]
   watchTargetCandidates: McpInvestmentWatchTargetCandidate[]
+  causalStatus: InvestmentEventDetail["causalStatus"]
+  causalHypotheses: McpInvestmentCausalHypothesis[]
   relatedEvents?: McpInvestmentRelatedEventsSection[]
 }
 
@@ -143,6 +149,7 @@ export interface McpWatchlistDetail {
 
 function toMcpFact(fact: InvestmentEventFact, debug = false): McpInvestmentEventFact {
   return {
+    factId: fact.factId,
     label: fact.label,
     metricName: fact.metricName,
     value: fact.value,
@@ -296,6 +303,8 @@ export function toMcpEventDetail(item: InvestmentEventDetail, debug = false): Mc
     evidence: item.evidence.map(evidence => toMcpEvidence(evidence, debug)),
     timelineSummary: item.timelineSummary.map(entry => toMcpTimeline(entry, debug)),
     watchTargetCandidates: item.watchTargetCandidates,
+    causalStatus: item.causalStatus,
+    causalHypotheses: item.causalHypotheses,
     relatedEvents: item.relatedEvents?.map(section => toMcpRelatedSection(section, debug)),
   }
 }

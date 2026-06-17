@@ -172,6 +172,41 @@ describe("investment projection pipeline", () => {
     expect(store.upserts).toHaveLength(1)
   })
 
+  it("projects saved causal hypotheses into detail while keeping briefs causal-free", async () => {
+    const detail = canonicalEvent()
+    const store = new MemoryProjectionStore()
+    const causalProjection = {
+      causalStatus: "available" as const,
+      causalHypotheses: [{
+        hypothesisId: "hyp_1",
+        statement: "政策文件直接改善产业预期。",
+        causeType: "policy_or_regulation" as const,
+        causeTypeLabel: "政策或监管",
+        basis: "stated" as const,
+        basisLabel: "明示原因",
+        confidence: 0.86,
+        rationale: "证据摘要直接描述政策发布。",
+        evidenceIds: ["raw_1"],
+        factIds: ["fact_1"],
+        evidenceSpans: [{
+          evidenceId: "raw_1",
+          field: "summary" as const,
+          snippet: "政策发布",
+        }],
+        generatedAt: 1700000020000,
+      }],
+    }
+
+    const input = await writeInvestmentProjection(detail, store, { causalProjection })
+
+    expect(input.detail!.causalStatus).toBe("available")
+    expect(input.detail!.causalHypotheses).toEqual(causalProjection.causalHypotheses)
+    expect(input.brief).not.toHaveProperty("causalStatus")
+    expect(input.brief).not.toHaveProperty("causalHypotheses")
+    expect(input.canonicalChecksum).toBe(computeInvestmentProjectionChecksum(detail, { causalProjection }))
+    expect(input.canonicalChecksum).not.toBe(computeInvestmentProjectionChecksum(detail))
+  })
+
   it("detects missing and stale projections by deterministic canonical checksum", async () => {
     const detail = canonicalEvent()
     const store = new MemoryProjectionStore()

@@ -2238,6 +2238,574 @@
     "interval": 1800000,
     "title": "Semiconductors"
   },
+  "openai": {
+    "redirect": "openai-news",
+    "name": "OpenAI",
+    "column": "industry",
+    "home": "https://openai.com/news/",
+    "tags": [
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "green",
+    "interval": 300000,
+    "title": "News"
+  },
+  "openai-news": {
+    "name": "OpenAI",
+    "column": "industry",
+    "home": "https://openai.com/news/",
+    "tags": [
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "green",
+    "interval": 300000,
+    "title": "News"
+  },
+  "google-ai": {
+    "redirect": "google-ai-news",
+    "name": "Google AI",
+    "column": "industry",
+    "home": "https://blog.google/innovation-and-ai/technology/ai/",
+    "tags": [
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 300000,
+    "title": "AI updates"
+  },
+  "google-ai-news": {
+    "name": "Google AI",
+    "column": "industry",
+    "home": "https://blog.google/innovation-and-ai/technology/ai/",
+    "tags": [
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 300000,
+    "title": "AI updates"
+  },
+  "google-deepmind": {
+    "redirect": "google-deepmind-news",
+    "name": "Google DeepMind",
+    "column": "industry",
+    "home": "https://deepmind.google/blog/",
+    "tags": [
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "cyan",
+    "interval": 300000,
+    "title": "News"
+  },
+  "google-deepmind-news": {
+    "name": "Google DeepMind",
+    "column": "industry",
+    "home": "https://deepmind.google/blog/",
+    "tags": [
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "cyan",
+    "interval": 300000,
+    "title": "News"
+  },
+  "microsoft-ai": {
+    "redirect": "microsoft-ai-news",
+    "name": "Microsoft AI",
+    "column": "industry",
+    "home": "https://news.microsoft.com/source/topics/ai/",
+    "tags": [
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 300000,
+    "title": "AI"
+  },
+  "microsoft-ai-news": {
+    "name": "Microsoft AI",
+    "column": "industry",
+    "home": "https://news.microsoft.com/source/topics/ai/",
+    "tags": [
+      "ai-computing"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "sky",
+    "interval": 300000,
+    "title": "AI"
+  },
+  "aws-ai": {
+    "redirect": "aws-ai-news",
+    "name": "AWS AI",
+    "column": "industry",
+    "home": "https://aws.amazon.com/blogs/machine-learning/",
+    "tags": [
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "orange",
+    "interval": 300000,
+    "title": "Machine Learning Blog"
+  },
+  "aws-ai-news": {
+    "name": "AWS AI",
+    "column": "industry",
+    "home": "https://aws.amazon.com/blogs/machine-learning/",
+    "tags": [
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "orange",
+    "interval": 300000,
+    "title": "Machine Learning Blog"
+  },
+  "nvidia": {
+    "redirect": "nvidia-ai-news",
+    "name": "NVIDIA",
+    "column": "industry",
+    "home": "https://nvidianews.nvidia.com/rss",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "green",
+    "interval": 300000,
+    "title": "AI Newsroom"
+  },
+  "nvidia-ai-news": {
+    "name": "NVIDIA",
+    "column": "industry",
+    "home": "https://nvidianews.nvidia.com/rss",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "green",
+    "interval": 300000,
+    "title": "AI Newsroom"
+  },
+  "amd": {
+    "redirect": "amd-ai-press",
+    "name": "AMD",
+    "column": "industry",
+    "home": "https://ir.amd.com/news-events/press-releases",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "red",
+    "interval": 300000,
+    "title": "AI Press Releases"
+  },
+  "amd-ai-press": {
+    "name": "AMD",
+    "column": "industry",
+    "home": "https://ir.amd.com/news-events/press-releases",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "red",
+    "interval": 300000,
+    "title": "AI Press Releases"
+  },
+  "intel": {
+    "redirect": "intel-ai-press",
+    "name": "Intel",
+    "column": "industry",
+    "home": "https://www.intc.com/news-events/press-releases",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 300000,
+    "title": "AI Press Releases"
+  },
+  "intel-ai-press": {
+    "name": "Intel",
+    "column": "industry",
+    "home": "https://www.intc.com/news-events/press-releases",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "blue",
+    "interval": 300000,
+    "title": "AI Press Releases"
+  },
+  "broadcom": {
+    "redirect": "broadcom-ai-news",
+    "name": "Broadcom",
+    "column": "industry",
+    "home": "https://news.broadcom.com/releases",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "orange",
+    "interval": 300000,
+    "title": "AI News"
+  },
+  "broadcom-ai-news": {
+    "name": "Broadcom",
+    "column": "industry",
+    "home": "https://news.broadcom.com/releases",
+    "tags": [
+      "semiconductor",
+      "ai-computing",
+      "cloud-infrastructure"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "orange",
+    "interval": 300000,
+    "title": "AI News"
+  },
+  "asml": {
+    "redirect": "asml-press",
+    "name": "ASML",
+    "column": "industry",
+    "home": "https://www.asml.com/news/press-releases",
+    "tags": [
+      "semiconductor"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "cyan",
+    "interval": 300000,
+    "title": "Press Releases"
+  },
+  "asml-press": {
+    "name": "ASML",
+    "column": "industry",
+    "home": "https://www.asml.com/news/press-releases",
+    "tags": [
+      "semiconductor"
+    ],
+    "eventProfile": {
+      "sourceKind": "industry_news_feed",
+      "defaultEventType": "industry",
+      "defaultEventSubType": "industry_news",
+      "authorityLevel": "association",
+      "parserFamily": "industry_news",
+      "assetClasses": [
+        "equity",
+        "commodity"
+      ],
+      "markets": [
+        "A",
+        "HK",
+        "CN_macro"
+      ]
+    },
+    "color": "cyan",
+    "interval": 300000,
+    "title": "Press Releases"
+  },
   "wsts": {
     "redirect": "wsts-press",
     "name": "WSTS",

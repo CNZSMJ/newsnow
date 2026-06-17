@@ -23,7 +23,10 @@ export const SCHEMA_OWNER_BASELINE: Record<string, SchemaOwner> = {
   watchlists: "investment-event",
   source_fetch_runs: "shared-source",
   event_projection: "investment-event",
+  event_projection_search_fts: "investment-event",
   event_query_indexes: "investment-event",
+  event_causal_hypotheses: "investment-event",
+  event_causal_hypothesis_runs: "investment-event",
   watchlist_event_matches: "investment-event",
   related_event_edges: "investment-event",
 } as const
